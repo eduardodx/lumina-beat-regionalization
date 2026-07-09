@@ -93,7 +93,12 @@ def main() -> int:
     adapter = FineTuneBeatV11Adapter(args.checkpoint, device)
     model = adapter.backbone
     model.eval()
-    ok &= _check("d_full == 320", adapter.d_model == 320, f"got {adapter.d_model}")
+    cfg = adapter.backbone.cfg
+    d_full = int(getattr(adapter.backbone, "full_hidden_dim", None) or cfg.d_full)
+    d_model, d_pure = int(cfg.d_model), int(cfg.d_pure)
+    print(f"    arch dims: d_full={d_full} (d_model={d_model} + d_pure={d_pure})")
+    ok &= _check("adapter.d_model == checkpoint d_full", adapter.d_model == d_full, f"{adapter.d_model} vs {d_full}")
+    ok &= _check("d_full == d_model + d_pure", d_full == d_model + d_pure, f"{d_full} vs {d_model}+{d_pure}")
 
     seq = _random_dna(args.seq_len)
     batch = adapter.tokenize([seq])
@@ -107,8 +112,8 @@ def main() -> int:
     mid = out["mid_hidden_state"]
     mlm = out["mlm_logits"]
     afp = out["gnomad_af_pred"]
-    ok &= _check("last_hidden_state[..., 320]", lhs.shape[-1] == 320, str(tuple(lhs.shape)))
-    ok &= _check("mid_hidden_state[..., 256]", mid.shape[-1] == 256, str(tuple(mid.shape)))
+    ok &= _check("last_hidden_state[..., d_full]", lhs.shape[-1] == d_full, str(tuple(lhs.shape)))
+    ok &= _check("mid_hidden_state[..., d_model]", mid.shape[-1] == d_model, str(tuple(mid.shape)))
     ok &= _check(f"mlm_logits[..., {len(SNV_BASES)}]", mlm.shape[-1] == len(SNV_BASES), str(tuple(mlm.shape)))
     ok &= _check("gnomad_af_pred[..., 4]", afp.shape[-1] == len(SNV_BASES), str(tuple(afp.shape)))
     ok &= _check("mid length == L/4", mid.shape[1] == lhs.shape[1] // 4, f"{mid.shape[1]} vs {lhs.shape[1]}//4")
@@ -117,7 +122,7 @@ def main() -> int:
     print("[2/3] adapter forward_hidden_states")
     with torch.no_grad():
         hidden = adapter.forward_hidden_states(batch)
-    ok &= _check("forward_hidden_states -> [..., 320]", hidden.shape[-1] == 320, str(tuple(hidden.shape)))
+    ok &= _check("forward_hidden_states -> [..., d_full]", hidden.shape[-1] == d_full, str(tuple(hidden.shape)))
 
     # ---- 3) LoRA coupling -------------------------------------------------------------------
     print("[3/3] apply_lora coupling")
@@ -148,8 +153,8 @@ def main() -> int:
     # wrapped model must still forward
     with torch.no_grad():
         out2 = model(input_ids=input_ids)
-    ok &= _check("LoRA'd model still forwards -> [..., 320]",
-                 out2["last_hidden_state"].shape[-1] == 320,
+    ok &= _check("LoRA'd model still forwards -> [..., d_full]",
+                 out2["last_hidden_state"].shape[-1] == d_full,
                  str(tuple(out2["last_hidden_state"].shape)))
 
     print("\nRESULT:", "ALL PASS" if ok else "FAILURES ABOVE")
