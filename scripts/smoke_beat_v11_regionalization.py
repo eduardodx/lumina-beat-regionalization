@@ -29,6 +29,15 @@ if not isinstance(_sys.modules.get("tilelang"), _types.ModuleType):
     _sys.modules["tilelang"] = None
 # --------------------------------------------------------------------------------------------
 
+# Make the repo root importable (lumina_beat_v11/, eval/, src/ live there). Running
+# `python scripts/x.py` otherwise puts only scripts/ on sys.path; matches the REPO_ROOT
+# bootstrap used by the other scripts in this repo.
+from pathlib import Path as _Path
+
+_REPO_ROOT = _Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in _sys.path:
+    _sys.path.insert(0, str(_REPO_ROOT))
+
 import argparse
 import logging
 import random
