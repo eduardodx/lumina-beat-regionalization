@@ -1,0 +1,9 @@
+label,run_id,overall,best_step,differential
+Linear repro,beat-v7-official-hidden-repro-seed0,0.4604545546372252,17500,último hidden 1bp + cabeça linear
+MLP,beat-v7-mlp-head-seed0,0.48229819241734206,17500,capacidade não-linear simples na cabeça
+Multi-scale dilated,beat-v7-multiscale-dilated-noresume-seed0,0.4833714755833412,19500,convs dilatadas sem gate
+Bio-readout,beat-v7-bio-readout-phylo-structure-mlp-seed0,0.4841099094206386,19500,MLP + phylo/structure internos congelados
+Gated hybrid,beat-v7-gated-hybrid-phylo-structure-seed0,0.48528144817113095,17500,bio-readout + ramo conv local gated
+Recipe LR/LLRD,beat-v7-20k-aggressive-moderate-lr125-llrd085-seed0,0.5142397990947251,19000,LR backbone 1.25e-4 + LLRD 0.85 + EMA
+Global context,beat-v7-20k-global-context-standalone-lr125-llrd085-seed0,0.5226819204066192,19932,recipe + embedding global da janela
+Context pyramid,beat-v7-20k-context-pyramid-lr125-llrd085-seed0,0.5319731135771725,19932,global context + pirâmide multi-escala sem gate

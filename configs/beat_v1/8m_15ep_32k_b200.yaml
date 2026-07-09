@@ -1,0 +1,23 @@
+# 8M Beat-v1, 15 epochs, 32k context, 8xB200 192GB.
+# Inherits all defaults from _base.yaml.
+# batch_size=8 × grad_accum=4 × 8 GPUs = 256 global effective (4× A100 config).
+# sqrt-scaled LR and 2× warmup for larger batch. 1 epoch ~ 120 steps.
+
+_inherit: _base.yaml
+
+seq_len: 32768
+batch_size: 8
+grad_accum_steps: 4
+
+lr: 0.0016
+min_lr: 0.00016
+warmup_steps: 768
+
+max_steps: 1800
+eval_every: 60
+save_every: 120
+
+conservation_mix: 0.5
+
+output_dir: /opt/ml/model
+wandb_run_name: beat-v1-8m-15ep-32k-b200

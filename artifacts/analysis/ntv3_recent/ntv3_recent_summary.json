@@ -1,0 +1,394 @@
+{
+  "all_ranking": [
+    {
+      "best_val_metric": 0.51053382,
+      "best_val_step": 17500,
+      "experiment": "beat-v7-mlp-head-seed0",
+      "functional_head_type": "mlp",
+      "model_name": "Lumina beat-v7 MLP-head",
+      "model_version": "beat-v7",
+      "rank": 1,
+      "test_mean_pearson": 0.482298192417342,
+      "training_tokens": 20900216832.0
+    },
+    {
+      "best_val_metric": 0.48544754,
+      "best_val_step": 19500,
+      "experiment": "ntv3-beat-v7-official-human-functional-seed0-r2",
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v7",
+      "model_version": "beat-v7",
+      "rank": 2,
+      "test_mean_pearson": 0.4614521841197114,
+      "training_tokens": 20900216832.0
+    },
+    {
+      "best_val_metric": 0.4852527,
+      "best_val_step": 17500,
+      "experiment": "beat-v7-official-hidden-repro-seed0",
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v7 official-hidden repro",
+      "model_version": "beat-v7",
+      "rank": 3,
+      "test_mean_pearson": 0.4604545546372252,
+      "training_tokens": 20900216832.0
+    },
+    {
+      "best_val_metric": 0.44691348,
+      "best_val_step": 17500,
+      "experiment": "ntv3-beat-v6-official-human-functional-seed0-r2",
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v6",
+      "model_version": "beat-v6",
+      "rank": 4,
+      "test_mean_pearson": 0.42446572513952086,
+      "training_tokens": 20900216832.0
+    },
+    {
+      "best_val_metric": 0.26156358,
+      "best_val_step": 19932,
+      "experiment": "beat-v5-dec-coupled",
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v5 decoder-coupled stable-nosync",
+      "model_version": "beat-v5",
+      "rank": 5,
+      "test_mean_pearson": 0.24504309604462093,
+      "training_tokens": 20900216832.0
+    },
+    {
+      "best_val_metric": 3.614e-05,
+      "best_val_step": 10,
+      "experiment": "ntv3-beat-v5-val-b12-seed42",
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v5 22M",
+      "model_version": "beat-v5",
+      "rank": 6,
+      "test_mean_pearson": 0.005834878395440791,
+      "training_tokens": 327680.0
+    },
+    {
+      "best_val_metric": 0.00388108,
+      "best_val_step": 10,
+      "experiment": "ntv3-beat-v5-val-13b-seed42",
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v5 22M",
+      "model_version": "beat-v5",
+      "rank": 7,
+      "test_mean_pearson": 0.0031054246526375827,
+      "training_tokens": 327680.0
+    },
+    {
+      "best_val_metric": 0.00388108,
+      "best_val_step": 10,
+      "experiment": "ntv3-beat-v5-val-13c-seed42",
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v5 22M",
+      "model_version": "beat-v5",
+      "rank": 8,
+      "test_mean_pearson": 0.0031054246526375827,
+      "training_tokens": 327680.0
+    },
+    {
+      "best_val_metric": -0.00444174,
+      "best_val_step": 2,
+      "experiment": "beat-v5-dec-coupled-smoke-nosync",
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v5 decoder-coupled smoke",
+      "model_version": "beat-v5",
+      "rank": 9,
+      "test_mean_pearson": -0.00035814797339413473,
+      "training_tokens": 2097152.0
+    }
+  ],
+  "comparisons": {
+    "official_r2": {
+      "assay_deltas": {
+        "ATAC-seq": 0.003064422023774993,
+        "Histone ChIP-seq": 0.004103261258003199,
+        "PRO-cap": 0.04112869325773949,
+        "eCLIP": 0.019953507052657193,
+        "polyA plus RNA-seq": 0.019447418138484496,
+        "total RNA-seq": 0.009104095862539685
+      },
+      "delta_best_val_metric": 0.025086280000000016,
+      "delta_best_val_step": -2000,
+      "delta_final_val_metric": 0.023145530000000025,
+      "delta_test_loss": -0.006258507169700778,
+      "delta_test_mean_pearson": 0.020846008297630614,
+      "relative_test_gain_percent": 4.517479603525438
+    },
+    "repro": {
+      "assay_deltas": {
+        "ATAC-seq": 0.009185981882182781,
+        "Histone ChIP-seq": 0.006791365199729005,
+        "PRO-cap": 0.04547408900485711,
+        "eCLIP": 0.015987520246758424,
+        "polyA plus RNA-seq": 0.014502677760439009,
+        "total RNA-seq": 0.008655622092370141
+      },
+      "delta_best_val_metric": 0.025281120000000046,
+      "delta_best_val_step": 0,
+      "delta_final_val_metric": 0.02589693000000004,
+      "delta_test_loss": -0.007041140377770816,
+      "delta_test_mean_pearson": 0.02184363778011683,
+      "relative_test_gain_percent": 4.7439291370082355
+    }
+  },
+  "full_comparable_ranking": [
+    {
+      "best_val_metric": 0.51053382,
+      "best_val_step": 17500,
+      "experiment": "beat-v7-mlp-head-seed0",
+      "final_val_metric": 0.5047502,
+      "functional_head_type": "mlp",
+      "model_name": "Lumina beat-v7 MLP-head",
+      "model_version": "beat-v7",
+      "rank": 1,
+      "running_time": 24634.394881801003,
+      "test_loss": 4.2645466690999765,
+      "test_mean_pearson": 0.482298192417342,
+      "training_tokens": 20900216832.0
+    },
+    {
+      "best_val_metric": 0.48544754,
+      "best_val_step": 19500,
+      "experiment": "ntv3-beat-v7-official-human-functional-seed0-r2",
+      "final_val_metric": 0.48160467,
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v7",
+      "model_version": "beat-v7",
+      "rank": 2,
+      "running_time": 25433.502506962,
+      "test_loss": 4.270805176269677,
+      "test_mean_pearson": 0.4614521841197114,
+      "training_tokens": 20900216832.0
+    },
+    {
+      "best_val_metric": 0.4852527,
+      "best_val_step": 17500,
+      "experiment": "beat-v7-official-hidden-repro-seed0",
+      "final_val_metric": 0.47885327,
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v7 official-hidden repro",
+      "model_version": "beat-v7",
+      "rank": 3,
+      "running_time": 24589.90853179,
+      "test_loss": 4.271587809477747,
+      "test_mean_pearson": 0.4604545546372252,
+      "training_tokens": 20900216832.0
+    },
+    {
+      "best_val_metric": 0.44691348,
+      "best_val_step": 17500,
+      "experiment": "ntv3-beat-v6-official-human-functional-seed0-r2",
+      "final_val_metric": 0.44122053,
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v6",
+      "model_version": "beat-v6",
+      "rank": 4,
+      "running_time": 15277.199140055998,
+      "test_loss": 4.298349573025448,
+      "test_mean_pearson": 0.42446572513952086,
+      "training_tokens": 20900216832.0
+    },
+    {
+      "best_val_metric": 0.26156358,
+      "best_val_step": 19932,
+      "experiment": "beat-v5-dec-coupled",
+      "final_val_metric": 0.26156358,
+      "functional_head_type": "linear",
+      "model_name": "Lumina beat-v5 decoder-coupled stable-nosync",
+      "model_version": "beat-v5",
+      "rank": 5,
+      "running_time": 27645.683660352002,
+      "test_loss": 4.435894149476206,
+      "test_mean_pearson": 0.24504309604462093,
+      "training_tokens": 20900216832.0
+    }
+  ],
+  "mlp_assay_scores": {
+    "ATAC-seq": 0.5437788322237439,
+    "Histone ChIP-seq": 0.5562830982913421,
+    "PRO-cap": 0.376438434977154,
+    "eCLIP": 0.49450685076557693,
+    "polyA plus RNA-seq": 0.5207881860645242,
+    "total RNA-seq": 0.5676942527830616
+  },
+  "paths": {
+    "all_ranking_csv": "artifacts/analysis/ntv3_recent/ntv3_recent_ranking_all.csv",
+    "full_ranking_csv": "artifacts/analysis/ntv3_recent/ntv3_recent_ranking_full_comparable.csv",
+    "track_delta_csv": "artifacts/analysis/ntv3_recent/beat_v7_mlp_vs_repro_track_deltas.csv"
+  },
+  "repro_assay_scores": {
+    "ATAC-seq": 0.5345928503415611,
+    "Histone ChIP-seq": 0.5494917330916131,
+    "PRO-cap": 0.3309643459722969,
+    "eCLIP": 0.4785193305188185,
+    "polyA plus RNA-seq": 0.5062855083040851,
+    "total RNA-seq": 0.5590386306906915
+  },
+  "top_track_gains_mlp_vs_repro": [
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.352146519920939,
+      "dataset": "ENCSR935RNW_P",
+      "delta": 0.06054953239727823,
+      "mlp": 0.4126960523182172,
+      "track_name_clean": "ENCSR935RNW_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.3488590439915329,
+      "dataset": "ENCSR100LIJ_P",
+      "delta": 0.05904370118264313,
+      "mlp": 0.407902745174176,
+      "track_name_clean": "ENCSR100LIJ_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.35447555645257584,
+      "dataset": "ENCSR799DGV_P",
+      "delta": 0.05885774442885122,
+      "mlp": 0.41333330088142706,
+      "track_name_clean": "ENCSR799DGV_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.3572073019919189,
+      "dataset": "ENCSR100LIJ_M",
+      "delta": 0.05464832824196458,
+      "mlp": 0.4118556302338835,
+      "track_name_clean": "ENCSR100LIJ_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.3545597416253371,
+      "dataset": "ENCSR935RNW_M",
+      "delta": 0.0542566743377233,
+      "mlp": 0.4088164159630604,
+      "track_name_clean": "ENCSR935RNW_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.3573638748908317,
+      "dataset": "ENCSR799DGV_M",
+      "delta": 0.052980474736136596,
+      "mlp": 0.4103443496269683,
+      "track_name_clean": "ENCSR799DGV_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.29736757974778916,
+      "dataset": "ENCSR046BCI_P",
+      "delta": 0.052278429548607064,
+      "mlp": 0.3496460092963962,
+      "track_name_clean": "ENCSR046BCI_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.33273169875513214,
+      "dataset": "ENCSR046BCI_M",
+      "delta": 0.05213230728132062,
+      "mlp": 0.38486400603645277,
+      "track_name_clean": "ENCSR046BCI_M"
+    },
+    {
+      "assay_type": "eCLIP",
+      "baseline_repro": 0.5582914542840309,
+      "dataset": "ENCSR321PWZ_M",
+      "delta": 0.03954381234188098,
+      "mlp": 0.5978352666259119,
+      "track_name_clean": "ENCSR321PWZ_M"
+    },
+    {
+      "assay_type": "eCLIP",
+      "baseline_repro": 0.5943184561242448,
+      "dataset": "ENCSR321PWZ_P",
+      "delta": 0.024910263795314136,
+      "mlp": 0.619228719919559,
+      "track_name_clean": "ENCSR321PWZ_P"
+    }
+  ],
+  "top_track_losses_mlp_vs_repro": [
+    {
+      "assay_type": "eCLIP",
+      "baseline_repro": 0.4548252842887309,
+      "dataset": "ENCSR154HRN_P",
+      "delta": 0.006906284199225954,
+      "mlp": 0.4617315684879569,
+      "track_name_clean": "ENCSR154HRN_P"
+    },
+    {
+      "assay_type": "eCLIP",
+      "baseline_repro": 0.5314732004472958,
+      "dataset": "ENCSR249ROI_M",
+      "delta": 0.006693828867365914,
+      "mlp": 0.5381670293146618,
+      "track_name_clean": "ENCSR249ROI_M"
+    },
+    {
+      "assay_type": "eCLIP",
+      "baseline_repro": 0.5208024048128314,
+      "dataset": "ENCSR249ROI_P",
+      "delta": 0.006541255598419116,
+      "mlp": 0.5273436604112505,
+      "track_name_clean": "ENCSR249ROI_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.26220930853669533,
+      "dataset": "ENCSR114HGS_M",
+      "delta": 0.005612417413550397,
+      "mlp": 0.2678217259502457,
+      "track_name_clean": "ENCSR114HGS_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "baseline_repro": 0.292722833810217,
+      "dataset": "ENCSR114HGS_P",
+      "delta": 0.004381280480495908,
+      "mlp": 0.29710411429071293,
+      "track_name_clean": "ENCSR114HGS_P"
+    },
+    {
+      "assay_type": "ATAC-seq",
+      "baseline_repro": 0.4979666562060154,
+      "dataset": "ENCSR410DWV",
+      "delta": 0.004113878377916491,
+      "mlp": 0.5020805345839319,
+      "track_name_clean": "ENCSR410DWV"
+    },
+    {
+      "assay_type": "eCLIP",
+      "baseline_repro": 0.43878359414893614,
+      "dataset": "ENCSR154HRN_M",
+      "delta": 0.0034092292420890846,
+      "mlp": 0.4421928233910252,
+      "track_name_clean": "ENCSR154HRN_M"
+    },
+    {
+      "assay_type": "total RNA-seq",
+      "baseline_repro": 0.6170201349599177,
+      "dataset": "ENCSR619DQO_P",
+      "delta": 0.002322371554035252,
+      "mlp": 0.619342506513953,
+      "track_name_clean": "ENCSR619DQO_P"
+    },
+    {
+      "assay_type": "Histone ChIP-seq",
+      "baseline_repro": 0.49310345656418264,
+      "dataset": "ENCSR863PSM",
+      "delta": -0.0036235832709304305,
+      "mlp": 0.4894798732932522,
+      "track_name_clean": "ENCSR863PSM"
+    },
+    {
+      "assay_type": "Histone ChIP-seq",
+      "baseline_repro": 0.4576829753407918,
+      "dataset": "ENCSR682BFG",
+      "delta": -0.006409353723515421,
+      "mlp": 0.45127362161727635,
+      "track_name_clean": "ENCSR682BFG"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# 8M BiMamba with MLM objective only (auxiliary losses zeroed).
+# Ablation: MLM-only vs full multitask.
+
+_inherit: _base.yaml
+
+output_dir: outputs/lumina_8m_mlm_only
+
+w_phylo100: 0.0
+w_phylo470: 0.0
+w_structure: 0.0
+w_rc: 0.0

@@ -1,0 +1,101 @@
+{
+  "assay_summary": [
+    {
+      "assay_type": "ATAC-seq",
+      "gate_logit_max": -3.657853841781616,
+      "gate_logit_mean": -3.700026273727417,
+      "gate_logit_min": -3.7605576515197754,
+      "gate_logit_std": 0.040154276133633954,
+      "gate_value_max": 0.02513950504362583,
+      "gate_value_mean": 0.024140776321291923,
+      "gate_value_min": 0.022741546854376793,
+      "gate_value_std": 0.0009375315980148166,
+      "num_tracks": 5,
+      "test_pearson_mean": 0.5474994441918575
+    },
+    {
+      "assay_type": "Histone ChIP-seq",
+      "gate_logit_max": -3.7175543308258057,
+      "gate_logit_mean": -3.7543861269950867,
+      "gate_logit_min": -3.7775049209594727,
+      "gate_logit_std": 0.028744179293432585,
+      "gate_value_max": 0.023717140778899193,
+      "gate_value_mean": 0.02288574120029807,
+      "gate_value_min": 0.0223679356276989,
+      "gate_value_std": 0.0006460176999757125,
+      "num_tracks": 4,
+      "test_pearson_mean": 0.5605383414887682
+    },
+    {
+      "assay_type": "PRO-cap",
+      "gate_logit_max": -3.7418594360351562,
+      "gate_logit_mean": -3.765757131576538,
+      "gate_logit_min": -3.7887558937072754,
+      "gate_logit_std": 0.014686784526930091,
+      "gate_value_max": 0.02316083200275898,
+      "gate_value_mean": 0.02262832783162594,
+      "gate_value_min": 0.022123221307992935,
+      "gate_value_std": 0.0003248886609433441,
+      "num_tracks": 10,
+      "test_pearson_mean": 0.38078353537256077
+    },
+    {
+      "assay_type": "eCLIP",
+      "gate_logit_max": -3.7576534748077393,
+      "gate_logit_mean": -3.814871573448181,
+      "gate_logit_min": -3.865384817123413,
+      "gate_logit_std": 0.03495071690168582,
+      "gate_value_max": 0.022806180641055107,
+      "gate_value_mean": 0.021576356887817384,
+      "gate_value_min": 0.020524762570858,
+      "gate_value_std": 0.0007400348400267663,
+      "num_tracks": 10,
+      "test_pearson_mean": 0.49638881850156125
+    },
+    {
+      "assay_type": "polyA plus RNA-seq",
+      "gate_logit_max": -3.8715083599090576,
+      "gate_logit_mean": -3.8807973861694336,
+      "gate_logit_min": -3.8900864124298096,
+      "gate_logit_std": 0.01313666691866354,
+      "gate_value_max": 0.02040201984345913,
+      "gate_value_mean": 0.0202180165797472,
+      "gate_value_min": 0.02003401331603527,
+      "gate_value_std": 0.00026021991106232363,
+      "num_tracks": 2,
+      "test_pearson_mean": 0.520795754607691
+    },
+    {
+      "assay_type": "total RNA-seq",
+      "gate_logit_max": -3.8290505409240723,
+      "gate_logit_mean": -3.846541245778402,
+      "gate_logit_min": -3.8780107498168945,
+      "gate_logit_std": 0.027309899920735226,
+      "gate_value_max": 0.021268079057335854,
+      "gate_value_mean": 0.020911882321039837,
+      "gate_value_min": 0.020272471010684967,
+      "gate_value_std": 0.0005549474901812789,
+      "num_tracks": 3,
+      "test_pearson_mean": 0.5688678676491632
+    }
+  ],
+  "assay_summary_csv": "artifacts/analysis/ntv3_recent/beat-v7-gated-hybrid-phylo-structure-seed0/human/functional/gate_analysis/gated_hybrid_assay_gate_summary.csv",
+  "checkpoint": "artifacts/analysis/ntv3_recent/beat-v7-gated-hybrid-phylo-structure-seed0/human/functional/best_model.pt",
+  "gate_value_max": 0.02513950504362583,
+  "gate_value_mean": 0.022278393344844088,
+  "gate_value_min": 0.02003401331603527,
+  "gate_value_std": 0.001235750992339382,
+  "metric_value": 0.5127843920335957,
+  "num_tracks": 34,
+  "species": "human",
+  "step": 17500,
+  "track_gates_csv": "artifacts/analysis/ntv3_recent/beat-v7-gated-hybrid-phylo-structure-seed0/human/functional/gate_analysis/gated_hybrid_track_gates.csv",
+  "validation_forward": {
+    "batch_size": 1,
+    "batches": 2,
+    "device": "cuda",
+    "examples": 2,
+    "loss": 3.899942994117737,
+    "mean_pearson": 0.2169989991197174
+  }
+}

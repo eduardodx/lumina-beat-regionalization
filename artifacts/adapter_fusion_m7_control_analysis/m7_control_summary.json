@@ -1,0 +1,31 @@
+{
+  "generated_at_utc": "2026-06-29T12:40:13.793742+00:00",
+  "output_dir": "artifacts/adapter_fusion_m7_control_analysis",
+  "n_discordant_tables": 38,
+  "decisions": [
+    {
+      "dataset": "br_only",
+      "base_model": "M7_dynamic_scrambled",
+      "compare_model": "M4_dynamic_gated",
+      "interpretation": "Real ABRAOM did not clearly beat scrambled control for this metric."
+    },
+    {
+      "dataset": "abraom_common_benign",
+      "base_model": "M7_dynamic_scrambled",
+      "compare_model": "M4_dynamic_gated",
+      "interpretation": "Scrambled control matched or beat real ABRAOM on the selected metric."
+    },
+    {
+      "dataset": "abraom_pathogenic_present",
+      "base_model": "M7_dynamic_scrambled",
+      "compare_model": "M4_dynamic_gated",
+      "interpretation": "Real ABRAOM beat scrambled control on the selected metric."
+    },
+    {
+      "dataset": "global_nonbr_no_abraom",
+      "base_model": "M7_dynamic_scrambled",
+      "compare_model": "M4_dynamic_gated",
+      "interpretation": "Real ABRAOM did not clearly beat scrambled control for this metric."
+    }
+  ]
+}

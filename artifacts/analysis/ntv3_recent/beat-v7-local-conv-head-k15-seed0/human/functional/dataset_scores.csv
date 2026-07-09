@@ -1,0 +1,35 @@
+Metric,run_id,model_name,best_step,best_step_time,training_tokens,running_time,species,datasets,assay_type,track_name_clean
+0.35528130422634935,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR046BCI_M,PRO-cap,ENCSR046BCI_M
+0.3172691125687201,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR046BCI_P,PRO-cap,ENCSR046BCI_P
+0.37864781700219174,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR100LIJ_M,PRO-cap,ENCSR100LIJ_M
+0.3699845420945997,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR100LIJ_P,PRO-cap,ENCSR100LIJ_P
+0.2670325638959915,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR114HGS_M,PRO-cap,ENCSR114HGS_M
+0.29353656062018485,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR114HGS_P,PRO-cap,ENCSR114HGS_P
+0.44290626720445186,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR154HRN_M,eCLIP,ENCSR154HRN_M
+0.4610155265632717,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR154HRN_P,eCLIP,ENCSR154HRN_P
+0.5355171018725574,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR249ROI_M,eCLIP,ENCSR249ROI_M
+0.526129243801564,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR249ROI_P,eCLIP,ENCSR249ROI_P
+0.5739269150886148,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR321PWZ_M,eCLIP,ENCSR321PWZ_M
+0.6069132037986554,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR321PWZ_P,eCLIP,ENCSR321PWZ_P
+0.6724476280075997,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR325NFE,ATAC-seq,ENCSR325NFE
+0.5125069568757712,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR410DWV,ATAC-seq,ENCSR410DWV
+0.40366179527810236,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR484LTQ_M,eCLIP,ENCSR484LTQ_M
+0.411861485557039,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR484LTQ_P,eCLIP,ENCSR484LTQ_P
+0.5047840038227962,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR487QSB,ATAC-seq,ENCSR487QSB
+0.41033659156365,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR527JGN_M,polyA plus RNA-seq,ENCSR527JGN_M
+0.6106544417039926,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR527JGN_P,polyA plus RNA-seq,ENCSR527JGN_P
+0.5863606825919764,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR619DQO_M,total RNA-seq,ENCSR619DQO_M
+0.6219612382080212,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR619DQO_P,total RNA-seq,ENCSR619DQO_P
+0.41694611605018445,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR628PLS,ATAC-seq,ENCSR628PLS
+0.4665643517863032,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR682BFG,Histone ChIP-seq,ENCSR682BFG
+0.4837939893120614,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR701YIC,total RNA-seq,ENCSR701YIC
+0.4412193417202015,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR754DRC,Histone ChIP-seq,ENCSR754DRC
+0.3797453092599334,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR799DGV_M,PRO-cap,ENCSR799DGV_M
+0.3744200341345679,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR799DGV_P,PRO-cap,ENCSR799DGV_P
+0.6435987891213414,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR814RGG,ATAC-seq,ENCSR814RGG
+0.44897114585559983,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR862QCH_M,eCLIP,ENCSR862QCH_M
+0.4601025588903102,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR862QCH_P,eCLIP,ENCSR862QCH_P
+0.4937275341507998,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR863PSM,Histone ChIP-seq,ENCSR863PSM
+0.37557712025635964,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR935RNW_M,PRO-cap,ENCSR935RNW_M
+0.3726635414748275,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR935RNW_P,PRO-cap,ENCSR935RNW_P
+0.8366179617289262,beat-v7-local-conv-head-k15-seed0,Lumina beat-v7 local-conv-head k15,17500.0,0 days 06:02:49.172292,20900216832.0,24833.553722338,human,ENCSR962OTG,Histone ChIP-seq,ENCSR962OTG

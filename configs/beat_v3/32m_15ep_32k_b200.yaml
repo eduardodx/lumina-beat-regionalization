@@ -1,0 +1,17 @@
+_inherit: _base.yaml
+
+seq_len: 32768
+batch_size: 4
+grad_accum_steps: 8
+
+max_steps: 5365 # 15 epochs
+warmup_steps: 432
+eval_every: 512
+save_every: 1024
+
+conservation_mix: 0.75
+
+lr_scheduler: constant
+
+output_dir: outputs/lumina_beat_v3_32m_15ep_32k_b200
+wandb_run_name: beat-v3-32m-15ep-32k-b200

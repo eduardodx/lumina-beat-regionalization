@@ -1,0 +1,7 @@
+# 8M BiMamba with all objectives enabled and constant LR after warmup.
+# Ablation: constant vs cosine schedule.
+
+_inherit: _base.yaml
+
+lr_scheduler: constant
+output_dir: outputs/lumina_8m_const_lr

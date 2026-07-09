@@ -1,0 +1,23 @@
+{
+  "generated_at_utc": "2026-06-29T11:58:13.610214+00:00",
+  "summary_csv": "artifacts/adapter_fusion_blueprint_completion/dynamic_fusion_regional_summary.csv",
+  "criteria_csv": "artifacts/adapter_fusion_blueprint_completion/dynamic_fusion_success_criteria.csv",
+  "dynamic_models_complete": [
+    "M2_gnomad_only",
+    "M4_dynamic_gated",
+    "M5_dynamic_gated",
+    "M7_dynamic_scrambled"
+  ],
+  "headline": {
+    "M5_dynamic_br_only_mcc": 0.6661711081340419,
+    "M5_dynamic_abraom_common_benign_specificity": 0.9978510620712455,
+    "M5_dynamic_abraom_pathogenic_present_recall": 0.03680981595092025,
+    "M5_v2_calibrated_abraom_pathogenic_present_recall": 0.4355828220858895
+  },
+  "negative_control": {
+    "m4_br_minus_m7_br_mcc": 0.01713498343290215,
+    "m4_common_spec_minus_m7": -0.01942309281758825,
+    "m4_plp_recall_minus_m7": 0.03067484662576686
+  },
+  "decision": "needs_calibrated_safety_before_claim"
+}

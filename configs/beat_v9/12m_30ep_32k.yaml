@@ -1,0 +1,16 @@
+_inherit: _base.yaml
+
+seq_len: 32768
+batch_size: 4
+grad_accum_steps: 4
+length_warmup_enabled: true
+length_warmup_initial_seq_len: 16384
+length_warmup_transition_fraction: 0.8
+max_steps: 35766
+warmup_steps: 1430
+eval_every: 1024
+save_every: 4096
+lr_scheduler: cosine_rewarm
+min_lr: 0.000008
+output_dir: outputs/lumina_beat_v9_30ep_16kto32k
+wandb_run_name: beat-v9-30ep-dense-cf-snv-16kto32k

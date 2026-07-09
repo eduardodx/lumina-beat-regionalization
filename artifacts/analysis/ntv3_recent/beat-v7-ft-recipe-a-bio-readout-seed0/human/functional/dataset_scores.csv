@@ -1,0 +1,35 @@
+Metric,run_id,model_name,best_step,best_step_time,training_tokens,running_time,species,datasets,assay_type,track_name_clean
+0.4440172132428702,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR046BCI_M,PRO-cap,ENCSR046BCI_M
+0.402400124345849,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR046BCI_P,PRO-cap,ENCSR046BCI_P
+0.4743859424876758,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR100LIJ_M,PRO-cap,ENCSR100LIJ_M
+0.4637760899392349,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR100LIJ_P,PRO-cap,ENCSR100LIJ_P
+0.2826610791918837,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR114HGS_M,PRO-cap,ENCSR114HGS_M
+0.3167869411214271,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR114HGS_P,PRO-cap,ENCSR114HGS_P
+0.4557677232927387,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR154HRN_M,eCLIP,ENCSR154HRN_M
+0.46940948032661933,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR154HRN_P,eCLIP,ENCSR154HRN_P
+0.5525605803669138,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR249ROI_M,eCLIP,ENCSR249ROI_M
+0.5401349711732139,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR249ROI_P,eCLIP,ENCSR249ROI_P
+0.6237915379674569,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR321PWZ_M,eCLIP,ENCSR321PWZ_M
+0.6390033499277376,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR321PWZ_P,eCLIP,ENCSR321PWZ_P
+0.6886306134885157,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR325NFE,ATAC-seq,ENCSR325NFE
+0.49091995855319714,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR410DWV,ATAC-seq,ENCSR410DWV
+0.4299062738329697,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR484LTQ_M,eCLIP,ENCSR484LTQ_M
+0.4268834488549329,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR484LTQ_P,eCLIP,ENCSR484LTQ_P
+0.5131302024624705,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR487QSB,ATAC-seq,ENCSR487QSB
+0.43389324681006264,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR527JGN_M,polyA plus RNA-seq,ENCSR527JGN_M
+0.6337156372115755,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR527JGN_P,polyA plus RNA-seq,ENCSR527JGN_P
+0.6163418126603061,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR619DQO_M,total RNA-seq,ENCSR619DQO_M
+0.6330855045269388,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR619DQO_P,total RNA-seq,ENCSR619DQO_P
+0.4255263814242639,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR628PLS,ATAC-seq,ENCSR628PLS
+0.4811844575611711,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR682BFG,Histone ChIP-seq,ENCSR682BFG
+0.5109481858737264,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR701YIC,total RNA-seq,ENCSR701YIC
+0.457601006162917,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR754DRC,Histone ChIP-seq,ENCSR754DRC
+0.46784126011095933,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR799DGV_M,PRO-cap,ENCSR799DGV_M
+0.45492501901233273,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR799DGV_P,PRO-cap,ENCSR799DGV_P
+0.6544893990534445,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR814RGG,ATAC-seq,ENCSR814RGG
+0.48476716690039157,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR862QCH_M,eCLIP,ENCSR862QCH_M
+0.4951147028276041,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR862QCH_P,eCLIP,ENCSR862QCH_P
+0.4995855340853855,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR863PSM,Histone ChIP-seq,ENCSR863PSM
+0.46981739707675735,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR935RNW_M,PRO-cap,ENCSR935RNW_M
+0.46300376348198424,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR935RNW_P,PRO-cap,ENCSR935RNW_P
+0.8510808772176212,beat-v7-ft-recipe-a-bio-readout-seed0,Lumina beat-v7 ft-recipe-a bio-readout,39864.0,0 days 13:52:28.443108,41800433664.0,49989.792446765,human,ENCSR962OTG,Histone ChIP-seq,ENCSR962OTG

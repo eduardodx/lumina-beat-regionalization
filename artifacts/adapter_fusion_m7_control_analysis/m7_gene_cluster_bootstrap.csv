@@ -1,0 +1,11 @@
+base_model,compare_model,dataset,metric,delta,ci95_low,ci95_high,iterations,cluster
+M7_dynamic_scrambled,M4_dynamic_gated,br_only,mcc,0.01713498343290215,-0.024557277053434592,0.05726491712074394,2000,GeneSymbol
+M7_dynamic_scrambled,M4_dynamic_gated,abraom_common_benign,specificity,-0.01942309281758825,-0.02230740891713561,-0.016680563560788546,2000,GeneSymbol
+M7_dynamic_scrambled,M4_dynamic_gated,abraom_pathogenic_present,recall,0.03067484662576686,0.006210221608772345,0.05917257085020245,2000,GeneSymbol
+M7_dynamic_scrambled,M4_dynamic_gated,global_nonbr_no_abraom,mcc,0.008872084509493394,-0.01219586087503743,0.030541894480971048,2000,GeneSymbol
+M2_gnomad_only,M4_dynamic_gated,br_only,mcc,0.009900716292679301,-0.030940894646053603,0.04729551575852777,2000,GeneSymbol
+M2_gnomad_only,M7_dynamic_scrambled,br_only,mcc,-0.00723426714022285,-0.03337130108700187,0.019216750666007896,2000,GeneSymbol
+M7_dynamic_scrambled,M5_v2_calibrated,br_only,mcc,0.30368072037939536,0.17765866122235197,0.43562224310615716,2000,GeneSymbol
+M7_dynamic_scrambled,M5_v2_calibrated,abraom_common_benign,specificity,0.06967517976692295,0.06130084093623067,0.07825425335024878,2000,GeneSymbol
+M7_dynamic_scrambled,M5_v2_calibrated,abraom_pathogenic_present,recall,0.12269938650306744,0.057142857142857106,0.1961007130124776,2000,GeneSymbol
+M7_dynamic_scrambled,M5_v2_calibrated,global_nonbr_no_abraom,mcc,-0.03846123280821501,-0.07114206278379105,-0.005263034418939041,2000,GeneSymbol

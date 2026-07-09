@@ -1,0 +1,14 @@
+model,criterion,value,reference,passed,m0_reference,specificity,specificity_reference,abraom_common_benign_specificity,real_best_abraom_common_benign_specificity
+M5_calibrated,br_only_mcc_above_m0,0.5462501725159192,0.2791131774799588,True,,,,,
+M5_calibrated,abraom_common_benign_specificity_ge_0_95,0.952310108273411,0.95,True,,,,,
+M5_calibrated,abraom_pathogenic_present_recall_not_collapsed_like_m6,0.3312883435582822,0.0184049079754601,True,0.4171779141104294,,,,
+M5_calibrated,global_nonbr_no_abraom_near_m0,0.5122049585015879,0.5122049585015879,True,,0.5444617784711389,0.5444617784711389,,
+M6_calibrated,br_only_mcc_above_m0,0.5527382932643298,0.2791131774799588,True,,,,,
+M6_calibrated,abraom_common_benign_specificity_ge_0_95,0.9540457889081743,0.95,True,,,,,
+M6_calibrated,abraom_pathogenic_present_recall_not_collapsed_like_m6,0.32515337423312884,0.0184049079754601,True,0.4171779141104294,,,,
+M6_calibrated,global_nonbr_no_abraom_near_m0,0.5122049585015879,0.5122049585015879,True,,0.5444617784711389,0.5444617784711389,,
+M7_scrambled,br_only_mcc_above_m0,0.41704834835698706,0.2791131774799588,True,,,,,
+M7_scrambled,abraom_common_benign_specificity_ge_0_95,0.9028018844532606,0.95,False,,,,,
+M7_scrambled,abraom_pathogenic_present_recall_not_collapsed_like_m6,0.25153374233128833,0.0184049079754601,True,0.4171779141104294,,,,
+M7_scrambled,global_nonbr_no_abraom_near_m0,0.5122049585015879,0.5122049585015879,True,,0.5444617784711389,0.5444617784711389,,
+M7_scrambled,negative_control_not_equal_or_better_than_real_abraom,0.41704834835698706,0.5527382932643298,True,,,,0.9028018844532606,0.9540457889081743

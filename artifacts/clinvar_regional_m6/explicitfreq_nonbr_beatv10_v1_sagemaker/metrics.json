@@ -1,0 +1,158 @@
+{
+  "metric": "clinvar_finetune_regime_A",
+  "value": 0.6536897700613133,
+  "regime": "A",
+  "model_family": "lumina",
+  "model_version": "beat-v10",
+  "context_size": 1024,
+  "loss_type": "focal",
+  "requested_precision": "auto",
+  "resolved_precision": "bf16",
+  "allow_tf32": true,
+  "auroc": 0.912515787909557,
+  "auprc": 0.9151294199317415,
+  "mcc": 0.6536897700613133,
+  "f1": 0.8482084690553745,
+  "balanced_accuracy": 0.8072045493944873,
+  "precision": 0.7591836734693878,
+  "recall": 0.9608856088560885,
+  "specificity": 0.6535234899328859,
+  "brier_score": 0.1261164598949214,
+  "log_loss": 0.40371114180260637,
+  "val_mcc": 0.6985773107081285,
+  "val_auprc": 0.9704583101817088,
+  "val_auroc": 0.9216744761161005,
+  "val_optimal_threshold": 0.42679935693740845,
+  "best_epoch": 2,
+  "test_at_val_threshold": {
+    "threshold": 0.42679935693740845,
+    "accuracy": 0.8170396544954849,
+    "balanced_accuracy": 0.8072045493944873,
+    "precision": 0.7591836734693878,
+    "recall": 0.9608856088560885,
+    "specificity": 0.6535234899328859,
+    "f1": 0.8482084690553745,
+    "mcc": 0.6536897700613133,
+    "tp": 1302,
+    "tn": 779,
+    "fp": 413,
+    "fn": 53
+  },
+  "test_at_default_threshold": {
+    "threshold": 0.5,
+    "accuracy": 0.834314880251276,
+    "balanced_accuracy": 0.8295967582159043,
+    "precision": 0.807920792079208,
+    "recall": 0.9033210332103321,
+    "specificity": 0.7558724832214765,
+    "f1": 0.8529616724738676,
+    "mcc": 0.6699995907165158,
+    "tp": 1224,
+    "tn": 901,
+    "fp": 291,
+    "fn": 131
+  },
+  "test_at_test_optimal_threshold_LEAKY": {
+    "threshold": 0.4804786741733551,
+    "accuracy": 0.8358853553199843,
+    "balanced_accuracy": 0.8298112880457664,
+    "precision": 0.798597833014659,
+    "recall": 0.9247232472324723,
+    "specificity": 0.7348993288590604,
+    "f1": 0.8570451436388509,
+    "mcc": 0.6767408420331535,
+    "tp": 1253,
+    "tn": 876,
+    "fp": 316,
+    "fn": 102
+  },
+  "cross_gene_diagnostic": {
+    "auroc": 0.9247956597779918,
+    "auprc": 0.9372600162420545,
+    "mcc_at_val_threshold": 0.723795787836923,
+    "num_variants": 481,
+    "num_genes": 39
+  },
+  "swap_diagnostics": {
+    "swap_mean_abs_prob_sum_minus_one": 0.43052661418914795,
+    "swap_directional_fraction": 0.6246564585787201
+  },
+  "consequence_stratified_metrics": {
+    "indel": {
+      "count": 309.0,
+      "mcc": 0.7199702384964487,
+      "f1": 0.9363449691991786,
+      "precision": 0.8941176470588236,
+      "recall": 0.9827586206896551,
+      "auroc": 0.8958799820868786
+    },
+    "mnv": {
+      "count": 10.0,
+      "mcc": 1.0,
+      "f1": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "auroc": 1.0
+    },
+    "snv": {
+      "count": 2228.0,
+      "mcc": 0.639477927332437,
+      "f1": 0.8304093567251462,
+      "precision": 0.7339765678842178,
+      "recall": 0.9560143626570916,
+      "auroc": 0.9112092222698541
+    }
+  },
+  "hyperparameters": {
+    "lora_rank": 8,
+    "lora_alpha": 16.0,
+    "lora_dropout": 0.05,
+    "lr_backbone": 5e-06,
+    "lr_head": 0.0005,
+    "freeze_backbone_steps": 100,
+    "grad_clip": 0.5,
+    "warmup_fraction": 0.1,
+    "batch_size": 2,
+    "grad_accum_steps": 8,
+    "focal_gamma": 2.0,
+    "pairwise_rank_weight": 0.0,
+    "pairwise_rank_margin": 0.5,
+    "swap_consistency_weight": 0.0,
+    "swap_consistency_margin": 0.5,
+    "explicit_feature_columns": [
+      "af_abraom",
+      "af_gnomad",
+      "specificity",
+      "abraom_present",
+      "is_snv",
+      "af_abraom_missing",
+      "af_gnomad_missing",
+      "log10_af_abraom",
+      "log10_af_gnomad",
+      "af_delta",
+      "af_abs_delta",
+      "af_ratio_log10"
+    ]
+  },
+  "architecture": {
+    "proj_dim": 256,
+    "hidden_dim": 128,
+    "head_dropout": 0.2,
+    "d_model": 288,
+    "head_type": "regime_a_plus_features",
+    "explicit_feature_dim": 12
+  },
+  "trainable_params": {
+    "lora": 394496,
+    "layernorm": 19968,
+    "head": 510595,
+    "other": 4187136,
+    "total": 5112195
+  },
+  "data_summary": {
+    "train_size": 11673,
+    "val_size": 1297,
+    "test_size": 2547,
+    "pos_weight": 0.31630581867388363
+  }
+}

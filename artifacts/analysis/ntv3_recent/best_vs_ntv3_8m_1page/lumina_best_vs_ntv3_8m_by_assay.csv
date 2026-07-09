@@ -1,0 +1,8 @@
+task,ntv3_8m_pre,lumina_beat_v7_best,delta_lumina_minus_ntv3,winner,meaning,measures,better
+PRO-cap,0.354083391031,0.424495875964,0.070412484934,Lumina,"Transcricao nascente no promotor, strand-specific.",Picos finos de iniciacao/capping e direcionalidade TSS.,Captura melhor promotores ativos e sentido da transcricao.
+Overall,0.498236027126,0.508079402477,0.009843375351,Lumina,Resumo human functional.,Media PCC dos 34 tracks funcionais humanos.,Melhor acoplamento geral entre sequencia e sinais funcionais.
+eCLIP,0.513636959593,0.511118757019,-0.002518202573,NTv3 8M,Sinal de interacao RNA-proteina/RBP associado ao locus.,Padroes de ocupacao e contexto de processamento de RNA.,Prediz melhor motifs/contextos usados por proteinas ligantes de RNA.
+Histone ChIP-seq,0.582646886508,0.571592292316,-0.011054594191,NTv3 8M,Marcas de histona e estado de cromatina.,"Enriquecimento epigenetico, muitas vezes mais amplo que picos pontuais.",Representa melhor estados reguladores e dominios cromatinicos.
+ATAC-seq,0.577236000697,0.559815903524,-0.017420097172,NTv3 8M,Acessibilidade de cromatina.,"Regioes abertas como promotores, enhancers e reguladores ativos.",Identifica melhor DNA regulatorio acessivel.
+total RNA-seq,0.607413821750,0.586912883287,-0.020500938463,NTv3 8M,"RNA total, incluindo sinais polyA e nao-polyA.","Coverage transcricional mais amplo, coding e non-coding.",Captura melhor atividade transcricional global do locus.
+polyA plus RNA-seq,0.611906200647,0.536183008814,-0.075723191834,NTv3 8M,"RNA poliadenilado, principalmente mRNA maduro.",Abundancia/coverage de transcritos processados polyA+.,Modela melhor expressao de genes codificantes e isoformas maduras.

@@ -1,0 +1,49 @@
+{
+  "generated_at_utc": "2026-06-29T11:59:01.574406+00:00",
+  "decision": "supported",
+  "checklist": {
+    "data_manifest_and_slices": {
+      "status": "complete",
+      "note": "Baseline datasets present: ['abraom_common_benign', 'abraom_pathogenic_common', 'abraom_pathogenic_present', 'br_any', 'br_only', 'global_nonbr_no_abraom', 'nonbr_only', 'regional_benchmark_any']"
+    },
+    "abraom_frequency_alignment": {
+      "status": "complete",
+      "note": "artifacts/abraom_frequency_adapter/alignment_comparison/ABRAOM_FREQUENCY_ALIGNMENT_REPORT.md"
+    },
+    "baseline_ablation_table": {
+      "status": "complete",
+      "note": "Baseline models present: ['M0', 'M4', 'M5', 'M5_calibrated', 'M5_v2', 'M5_v2_calibrated', 'M6', 'M6_calibrated', 'M7_scrambled']"
+    },
+    "m5_v2_calibrated_final_analysis": {
+      "status": "complete",
+      "note": "artifacts/clinvar_regional_eval/m5_v2_calibrated_holdout_tuned/final_analysis/M5_V2_CALIBRATED_FINAL_ANALYSIS.md"
+    },
+    "sentinel_panel": {
+      "status": "complete",
+      "note": "artifacts/clinvar_regional_eval/brazilian_plp_sentinel_panel/manifest.json"
+    },
+    "dynamic_gate_experiments": {
+      "status": "complete",
+      "note": "Dynamic models present: ['M0', 'M2_gnomad_only', 'M4_dynamic_gated', 'M5_dynamic_gated', 'M5_v2_calibrated', 'M7_dynamic_scrambled']"
+    },
+    "dynamic_gate_diagnostics": {
+      "status": "complete",
+      "note": "Requires dynamic prediction summaries with alpha/gate columns."
+    }
+  },
+  "key_metrics": {
+    "M0_br_only_mcc": 0.2791131774799588,
+    "M5_v2_calibrated_br_only_mcc": 0.6051392365837596,
+    "M0_abraom_common_benign_specificity": 0.8027936193073808,
+    "M5_v2_calibrated_abraom_common_benign_specificity": 0.9585089676832796,
+    "M0_abraom_pathogenic_present_recall": 0.4171779141104294,
+    "M5_v2_calibrated_abraom_pathogenic_present_recall": 0.4355828220858895
+  },
+  "sentinel_rows": {
+    "clinvar_plp_abraom_present": 1596,
+    "curated_public_accepted": 0,
+    "curated_public_matched_local_master": 0,
+    "curated_public_unmatched_local_master": 0,
+    "sentinel_total": 1596
+  }
+}

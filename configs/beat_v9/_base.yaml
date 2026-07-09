@@ -1,0 +1,133 @@
+# Beat-v9: pretraining-only dense all-alt SNV counterfactual architecture.
+fasta_path: data/hg38/hg38.fa
+phylo100_bw_path: data/phylo/hg38.phyloP100way.bw
+phylo470_bw_path: data/phylo/hg38.phyloP470way.bw
+gtf_path: data/gencode/gencode.v38.annotation.gtf.gz
+chromosome_split_mode: full_hg38
+
+model: beat-v9
+model_config:
+  vocab_size: 8
+  d_model: 256
+  depth: 8
+  d_state: 128
+  expand: 2
+  headdim: 64
+  ngroups: 1
+  rope_fraction: 1.0
+  chunk_size: 64
+  is_mimo: false
+  mimo_rank: 4
+  is_outproj_norm: true
+  dropout: 0.05
+  use_rc_fusion: true
+  activation_checkpointing: false
+  checkpoint_use_reentrant: false
+
+  use_local_attention: true
+  local_attention_every: 3
+  local_attention_window: 256
+  local_attention_heads: 4
+
+  use_local_conv_stem: true
+  conv_stem_kernels: [3, 6, 11, 21]
+  conv_stem_dropout: 0.05
+  hidden_tap_layers: [2, 4, 6, 8]
+
+  use_counterfactual_snv_head: true
+  counterfactual_repr_dim: 128
+  num_counterfactual_effect_classes: 12
+
+  use_multiscale_context_head: true
+  multiscale_context_radii: [3, 16, 64, 256, 1024]
+
+  use_sequence_embedding: true
+  sequence_embedding_dim: 256
+  num_encode_tracks: 0
+  heads:
+    mlm: true
+    phylo: true
+    region: true
+    structure: true
+    aa: true
+    codon: true
+    codon_phylo: true
+    transcript_frame: true
+    counterfactual_snv: true
+    encode: false
+
+seq_len: 16384
+batch_size: 4
+num_workers: 6
+prefetch_factor: 4
+mask_prob: 0.20
+mean_span_len: 6
+
+lr: 0.0008
+lr_scheduler: cosine_rewarm
+min_lr: 0.00008
+weight_decay: 0.1
+beta1: 0.9
+beta2: 0.95
+grad_clip: 1.0
+warmup_steps: 384
+
+max_steps: 3840
+eval_every: 512
+save_every: 2048
+log_every: 100
+max_checkpoints_to_keep: 3
+
+loss_balancing: fixed
+w_mlm: 1.0
+w_phylo100: 0.25
+w_phylo470: 0.25
+w_conservation_bin: 0.10
+w_region: 0.25
+w_structure: 0.50
+w_aa: 0.25
+w_codon_phylo: 0.10
+w_codon: 0.15
+w_splice_distance: 0.25
+w_codon_pos: 0.10
+w_exon_phase: 0.10
+w_counterfactual_snv: 1.0
+w_counterfactual_severity: 0.25
+w_counterfactual: 0.0
+w_allele: 0.0
+w_encode: 0.0
+splice_class_weight_cap: 5.0
+region_class_weight_cap: 8.0
+aa_class_weight_cap: 5.0
+
+phylo_weighted_mlm: true
+phylo_mlm_boost: 2.0
+conservation_mix: 0.65
+cds_enrichment_fraction: 0.30
+splice_window_oversample_fraction: 0.10
+hard_position_mix: 0.25
+hard_position_ema_decay: 0.99
+hard_position_warmup_steps: 500
+counterfactual_fraction: 0.0
+allele_fraction: 0.0
+aux_loss_warmup_steps: 1000
+
+length_warmup_enabled: true
+length_warmup_initial_seq_len: 16384
+length_warmup_transition_fraction: 0.8
+
+curriculum:
+  enabled: true
+  exon_centric_fraction: 0.20
+  counterfactual_warmup_fraction: 0.05
+
+encode_track_specs: []
+
+seed: 42
+precision: auto
+allow_tf32: true
+memory_preflight_enabled: true
+
+wandb_enabled: true
+wandb_project: lumina-ssm
+wandb_entity: ai4bio-lumina

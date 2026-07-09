@@ -1,0 +1,178 @@
+[
+  {
+    "category": "Dados ABRAOM",
+    "artifact": "ABRAOM v2 processado",
+    "s3_uri": "s3://ai4bio-lumina/benchmarks/mosaic/data/processed/gen-abraom-seqs/v2/",
+    "reuse": "Entrada prim\u00e1ria para reconstruir o \u00edndice ABRAOM usado no estudo.",
+    "source": "artifacts/abraom_regional_eval/ABRAOM_FINE_TUNING_COMPARATIVE_REPORT.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Dados SageMaker",
+    "artifact": "Raiz de dados e sa\u00eddas do estudo",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/",
+    "reuse": "Prefixo guarda datasets, treinos, avalia\u00e7\u00f5es e artefatos SageMaker do estudo.",
+    "source": "ABRAOM comparative report e scripts SageMaker",
+    "status": "documentado"
+  },
+  {
+    "category": "Dados SageMaker",
+    "artifact": "Dataset do adapter de frequ\u00eancia ABRAOM",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/data/datasets/abraom_frequency_adapter/",
+    "reuse": "Canal `frequency` para treinar/reusar A_BR, A_gnomAD e controle scrambled.",
+    "source": "scripts/sagemaker_abraom_frequency_adapter.py",
+    "status": "prefixo default do launcher"
+  },
+  {
+    "category": "Dados SageMaker",
+    "artifact": "Dataset ClinVar x ABRAOM regional",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/data/datasets/clinvar/regional_abraom/",
+    "reuse": "Raiz esperada para master/slices; usar antes de regenerar parquets grandes.",
+    "source": "scripts/sagemaker_clinvar_m0.py e scripts/sagemaker_clinvar_fusion.py",
+    "status": "prefixo default do launcher"
+  },
+  {
+    "category": "Dados SageMaker",
+    "artifact": "Slices regionais ClinVar x ABRAOM",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/data/datasets/clinvar/regional_abraom/slices/",
+    "reuse": "Canal `dataset` usado por M0, fusion e avalia\u00e7\u00e3o regional.",
+    "source": "artifacts/clinvar_regional_m0/M0_RUN_STATUS.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Refer\u00eancia",
+    "artifact": "Genoma hg38",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/data/hg38/",
+    "reuse": "Canal `reference` dos jobs SageMaker.",
+    "source": "artifacts/clinvar_regional_m0/M0_RUN_STATUS.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Checkpoint base",
+    "artifact": "Lumina BEAT-v10",
+    "s3_uri": "s3://ai4bio-lumina/releases/lumina-beat-v10-20260527182934/",
+    "reuse": "F0/base checkpoint para M0, adapters e fusion.",
+    "source": "artifacts/clinvar_regional_m0/M0_RUN_STATUS.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Modelo ClinVar",
+    "artifact": "M0 baseline non-BR completo",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-m0/clinvar-m0-nonbr-beatv10-v1/sagemaker-artifacts/clinvar-m0-nonbr-beatv10-v1-2e6520-20260621191336/output/model.tar.gz",
+    "reuse": "Modelo molecular geral usado como baseline e init model da fusion.",
+    "source": "artifacts/clinvar_regional_m0/M0_RUN_STATUS.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Adapter de frequ\u00eancia",
+    "artifact": "A_BR ABRAOM balanced",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/abraom-frequency-adapter/abraom-freq-adapter-abraom-balanced-v1-rerun/sagemaker-artifacts/abraom-freq-abraom-balanced-v1-reru-dbb2ad-20260617023522/output/",
+    "reuse": "Adapter populacional brasileiro usado em M4/M5 fusion.",
+    "source": "scripts/sagemaker_clinvar_fusion.py",
+    "status": "prefixo default do launcher"
+  },
+  {
+    "category": "Adapter de frequ\u00eancia",
+    "artifact": "A_gnomAD balanced",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/abraom-frequency-adapter/abraom-freq-adapter-gnomad-balanced-v1/sagemaker-artifacts/abraom-freq-gnomad-balanced-v1-787c1c-20260621124601/output/",
+    "reuse": "Adapter comparador global usado em M4/M5/M2.",
+    "source": "scripts/sagemaker_clinvar_fusion.py",
+    "status": "prefixo default do launcher"
+  },
+  {
+    "category": "Adapter de frequ\u00eancia",
+    "artifact": "A_scrambled balanced",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/abraom-frequency-adapter/abraom-freq-adapter-scrambled-balanced-v1/sagemaker-artifacts/abraom-freq-scrambled-balanced-v1-1b573c-20260616222939/output/",
+    "reuse": "Controle negativo de adapter embaralhado usado em M7.",
+    "source": "scripts/sagemaker_clinvar_fusion.py",
+    "status": "prefixo default do launcher"
+  },
+  {
+    "category": "Treino ClinVar",
+    "artifact": "M6 explicit frequency",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-m0/clinvar-m6-explicitfreq-nonbr-beatv10-v1/sagemaker-artifacts/",
+    "reuse": "Controle com features expl\u00edcitas de frequ\u00eancia, sem adapter populacional.",
+    "source": "artifacts/clinvar_regional_m6_m4_parallel_status.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Treino ClinVar",
+    "artifact": "M4 static fusion",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-fusion/clinvar-m4-staticfusion-nonbr-beatv10-v1-rerun-g52x/sagemaker-artifacts/",
+    "reuse": "Fusion est\u00e1tica sem frequ\u00eancia expl\u00edcita forte.",
+    "source": "artifacts/clinvar_regional_fusion_status.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Treino ClinVar",
+    "artifact": "M5 static fusion explicit frequency",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-fusion/clinvar-m5-staticfusion-explicitfreq-nonbr-beatv10-v1-g5-4x/sagemaker-artifacts/",
+    "reuse": "Fusion est\u00e1tica com adapters populacionais e frequ\u00eancia expl\u00edcita.",
+    "source": "artifacts/clinvar_regional_fusion_status.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Treino ClinVar",
+    "artifact": "M4 dynamic gated",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-fusion/clinvar-m4-dynamic-gated-nonbr-beatv10-v1/sagemaker-artifacts/",
+    "reuse": "Fusion din\u00e2mica M4 para completar o blueprint.",
+    "source": "artifacts/adapter_fusion_blueprint_completion/DYNAMIC_FUSION_JOB_RUNBOOK.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Treino ClinVar",
+    "artifact": "M5 dynamic gated bounded",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-fusion/clinvar-m5-dynamic-gated-bounded-nonbr-beatv10-v1/sagemaker-artifacts/",
+    "reuse": "Fusion din\u00e2mica M5; forte em especificidade, insegura para P/LP sem calibra\u00e7\u00e3o.",
+    "source": "artifacts/adapter_fusion_blueprint_completion/DYNAMIC_FUSION_JOB_RUNBOOK.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Avalia\u00e7\u00e3o regional",
+    "artifact": "M4 regional eval",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-regional-eval/clinvar-regional-eval-m4-staticfusion-nonbr-beatv10-v1/sagemaker-artifacts/",
+    "reuse": "Sa\u00eddas SageMaker da avalia\u00e7\u00e3o regional M4.",
+    "source": "artifacts/clinvar_regional_fusion_status.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Avalia\u00e7\u00e3o regional",
+    "artifact": "M5 regional eval",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-regional-eval/clinvar-regional-eval-m5-staticfusion-explicitfreq-nonbr-beatv10-v1/sagemaker-artifacts/",
+    "reuse": "Sa\u00eddas SageMaker da avalia\u00e7\u00e3o regional M5.",
+    "source": "artifacts/clinvar_regional_fusion_status.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Avalia\u00e7\u00e3o regional",
+    "artifact": "M6 regional eval",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-regional-eval/clinvar-regional-eval-m6-explicitfreq-nonbr-beatv10-v1/sagemaker-artifacts/",
+    "reuse": "Sa\u00eddas SageMaker da avalia\u00e7\u00e3o regional M6.",
+    "source": "artifacts/clinvar_regional_fusion_status.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Fine-tuning ABRAOM inicial",
+    "artifact": "ABRAOM weighted full",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/experiments/beatv10-abraom-weighted-full-8gpu-ff-v1/",
+    "reuse": "Experimento inicial de fine-tuning ABRAOM ponderado.",
+    "source": "artifacts/abraom_regional_eval/ABRAOM_FINE_TUNING_COMPARATIVE_REPORT.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Fine-tuning ABRAOM inicial",
+    "artifact": "ABRAOM uniform full",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/experiments/beatv10-abraom-uniform-full-8gpu-ff-v1/",
+    "reuse": "Experimento inicial de fine-tuning ABRAOM uniforme.",
+    "source": "artifacts/abraom_regional_eval/ABRAOM_FINE_TUNING_COMPARATIVE_REPORT.md",
+    "status": "documentado"
+  },
+  {
+    "category": "Fine-tuning ABRAOM inicial",
+    "artifact": "ABRAOM wild-only full",
+    "s3_uri": "s3://ai4bio-lumina-experiments-v2/lumina-ssm/experiments/beatv10-abraom-wild-only-full-8gpu-ff-v1/",
+    "reuse": "Controle inicial wild-only.",
+    "source": "artifacts/abraom_regional_eval/ABRAOM_FINE_TUNING_COMPARATIVE_REPORT.md",
+    "status": "documentado"
+  }
+]

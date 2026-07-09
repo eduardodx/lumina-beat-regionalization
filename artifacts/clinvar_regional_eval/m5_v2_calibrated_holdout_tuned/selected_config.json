@@ -1,0 +1,6 @@
+{
+  "discount_scale": 0.5,
+  "max_discount": 0.5,
+  "regional_threshold": 0.35,
+  "global_threshold": 0.75
+}

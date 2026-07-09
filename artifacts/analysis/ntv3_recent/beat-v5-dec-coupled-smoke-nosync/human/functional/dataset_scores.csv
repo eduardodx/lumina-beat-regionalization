@@ -1,0 +1,35 @@
+Metric,run_id,model_name,best_step,best_step_time,training_tokens,running_time,species,datasets,assay_type,track_name_clean
+-0.001280932032809117,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR046BCI_M,PRO-cap,ENCSR046BCI_M
+0.005288383141499665,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR046BCI_P,PRO-cap,ENCSR046BCI_P
+0.0025345485400465376,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR100LIJ_M,PRO-cap,ENCSR100LIJ_M
+-4.775770995126379e-05,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR100LIJ_P,PRO-cap,ENCSR100LIJ_P
+-0.0005469034871117749,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR114HGS_M,PRO-cap,ENCSR114HGS_M
+-0.002423623467243555,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR114HGS_P,PRO-cap,ENCSR114HGS_P
+0.005122685655558924,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR154HRN_M,eCLIP,ENCSR154HRN_M
+-0.010606994722987761,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR154HRN_P,eCLIP,ENCSR154HRN_P
+-0.019319338421170933,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR249ROI_M,eCLIP,ENCSR249ROI_M
+-0.015802045570886183,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR249ROI_P,eCLIP,ENCSR249ROI_P
+-0.012489744642550102,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR321PWZ_M,eCLIP,ENCSR321PWZ_M
+-0.020861696687599414,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR321PWZ_P,eCLIP,ENCSR321PWZ_P
+0.16644927849168564,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR325NFE,ATAC-seq,ENCSR325NFE
+0.011102481679244066,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR410DWV,ATAC-seq,ENCSR410DWV
+-0.030022694792910188,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR484LTQ_M,eCLIP,ENCSR484LTQ_M
+0.005540834880629489,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR484LTQ_P,eCLIP,ENCSR484LTQ_P
+-0.03388822313559642,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR487QSB,ATAC-seq,ENCSR487QSB
+0.009955615688980481,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR527JGN_M,polyA plus RNA-seq,ENCSR527JGN_M
+0.007392749000918502,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR527JGN_P,polyA plus RNA-seq,ENCSR527JGN_P
+0.005709628725515463,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR619DQO_M,total RNA-seq,ENCSR619DQO_M
+0.029367375520627195,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR619DQO_P,total RNA-seq,ENCSR619DQO_P
+0.005939968532588949,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR628PLS,ATAC-seq,ENCSR628PLS
+-0.025662221190629195,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR682BFG,Histone ChIP-seq,ENCSR682BFG
+-0.008824575387611224,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR701YIC,total RNA-seq,ENCSR701YIC
+0.044638941006740096,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR754DRC,Histone ChIP-seq,ENCSR754DRC
+0.00584503023186316,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR799DGV_M,PRO-cap,ENCSR799DGV_M
+-0.00536988673919721,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR799DGV_P,PRO-cap,ENCSR799DGV_P
+-0.056464086719878286,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR814RGG,ATAC-seq,ENCSR814RGG
+-0.005348587495544522,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR862QCH_M,eCLIP,ENCSR862QCH_M
+-0.0069586064436476585,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR862QCH_P,eCLIP,ENCSR862QCH_P
+0.02316081651105261,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR863PSM,Histone ChIP-seq,ENCSR863PSM
+0.0012296911323607842,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR935RNW_M,PRO-cap,ENCSR935RNW_M
+0.0037201450105614382,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR935RNW_P,PRO-cap,ENCSR935RNW_P
+-0.08925728619794876,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,2.0,0 days 00:00:29.443979,2097152.0,30.263904032000028,human,ENCSR962OTG,Histone ChIP-seq,ENCSR962OTG

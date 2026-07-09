@@ -1,0 +1,24 @@
+{
+  "generated_at_utc": "2026-06-23T19:33:11.854769+00:00",
+  "inputs": {
+    "clinvar_master": "data/datasets/clinvar/regional_abraom/clinvar_regional_abraom_master.parquet",
+    "clinvar_master_sha256": "cd5cf598a3d81f27b4aad5ab3e48710fd0fa4da4137da4fa91dc52c43752f038",
+    "curated_public_tsv": "data/curation/brazilian_founder_plp_public.tsv",
+    "curated_public_available": false,
+    "curated_public_sha256": null
+  },
+  "outputs": {
+    "clinvar_plp_abraom_present": "artifacts/clinvar_regional_eval/brazilian_plp_sentinel_panel/clinvar_plp_abraom_present.parquet",
+    "brazilian_plp_sentinel_panel": "artifacts/clinvar_regional_eval/brazilian_plp_sentinel_panel/brazilian_plp_sentinel_panel.parquet",
+    "curated_public_founder_plp_panel": null,
+    "curated_public_unmatched": null
+  },
+  "rows": {
+    "clinvar_plp_abraom_present": 1596,
+    "curated_public_accepted": 0,
+    "curated_public_matched_local_master": 0,
+    "curated_public_unmatched_local_master": 0,
+    "sentinel_total": 1596
+  },
+  "usage": "Evaluation-only sensitivity panel. Do not train on this panel."
+}

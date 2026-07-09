@@ -1,0 +1,25 @@
+{
+  "alphagenome_model_version": "fold_0",
+  "alphagenome_output_type": "ATAC",
+  "alphagenome_source": "huggingface",
+  "dataset_root": "data/datasets/ntv3",
+  "dry_run": false,
+  "keep_target_center_fraction": 0.375,
+  "ontology_term": "UBERON:0000056",
+  "selected_windows": 32,
+  "sequence_length": 32768,
+  "species": "human",
+  "split": "test",
+  "target_center_end": 22528,
+  "target_center_start": 10240,
+  "target_length": 12288,
+  "total_split_windows": 10531,
+  "track_info": {
+    "assay": "ATAC-seq",
+    "mean": 0.7250170204686959,
+    "path": "data/datasets/ntv3/human/functional_tracks/ENCSR814RGG.bigwig",
+    "std": 0.6537994463881371,
+    "track_id": "ENCSR814RGG"
+  },
+  "window_sampling": "uniform"
+}

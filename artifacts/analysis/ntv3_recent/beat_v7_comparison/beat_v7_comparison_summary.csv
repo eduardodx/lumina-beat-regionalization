@@ -1,0 +1,17 @@
+rank,label,kind,score,best_step,training_tokens,note
+1,NTv3 650M (pos),rival,0.619276114831,,,"public leaderboard, n=34 grouped tracks"
+2,NTv3 650M (pre),rival,0.579368723374,,,"public leaderboard, n=34 grouped tracks"
+3,NTv3 100M (pre),rival,0.530332422432,,,"public leaderboard, n=34 grouped tracks"
+4,Residual CNN 44M,rival,0.515638489641,,,"public leaderboard, n=34 grouped tracks"
+5,Lumina beat-v7 aggressive 20k,ours_best,0.508079402477,19932,20900216832,"backbone LR 1e-4, LLRD .8, dropout .02, EMA"
+6,Lumina beat-v7 Recipe A 40k,ours_extended,0.507267261252,39864,41800433664,"LLRD + EMA + bias init + cosine, 2x budget"
+7,NTv3 8M (pre),rival,0.498236027126,,,"public leaderboard, n=34 grouped tracks"
+8,Lumina beat-v7 gated-hybrid,ours,0.485281448171,17500,20900216832,gate conv medido ~2%; ganho nao-mecanistico
+9,Caduceus 7M,rival,0.484692780118,,,"public leaderboard, n=34 grouped tracks"
+10,Lumina beat-v7 bio-readout,ours,0.484109909421,19500,20900216832,MLP + aux phylo/structure
+11,Lumina beat-v7 multiscale,ours,0.483371475583,19500,20900216832,"convs dilatadas; ATAC/Histone sobem, PRO/eCLIP caem"
+12,Lumina beat-v7 MLP head,ours,0.482298192417,17500,20900216832,head nao-linear simples
+13,Lumina beat-v7 local-conv,ours,0.472255375767,17500,20900216832,"conv local k=15; ajudou slices, piorou global"
+14,Lumina beat-v7 linear,ours,0.460454554637,17500,20900216832,baseline: ultimo hidden 1bp + head linear
+15,Residual CNN 700k,rival,0.438857039838,,,"public leaderboard, n=34 grouped tracks"
+16,HyenaDNA 7M,rival,0.358431952987,,,"public leaderboard, n=34 grouped tracks"

@@ -1,0 +1,575 @@
+Adapter-Fusion Regionalization Blueprint
+Regionalizing a nucleotide foundation model with synthetic ABraOM frequency post-training and ClinVar pathogenicity fine-tuning
+Prepared for implementation planningDate: 2026-06-15
+Core recommendation: Build a modular adapter-fusion system, not a single Brazil-specific checkpoint. Train population adapters on allele-frequency objectives, train a separate pathogenicity adapter on strong-evidence ClinVar, then train a fusion/calibration layer that composes molecular and population evidence without leaking submitter provenance into the model.
+One-page summary
+Component
+Design choice
+Base model
+Frozen nucleotide foundation model, e.g., Caduceus, Nucleotide Transformer, or NTv3-style model. It supplies general DNA grammar and sequence context.
+Population adapters
+LoRA or bottleneck adapters trained independently on population-frequency objectives. The Brazilian adapter A_BR is trained from ABraOM synthetic frequency targets.
+Pathogenicity adapter
+A_path trained on strong-evidence ClinVar P/LP versus B/LB labels using paired ref/alt sequence contexts.
+Fusion controller
+A learned layer-wise gate that weights regional adapters for a given variant. It should not receive ClinVar submitter country as a feature.
+Outputs
+At least two outputs: molecular_effect_score and region_calibrated_pathogenicity_score. This separation makes the system auditable.
+Main evaluation claim
+A valid regionalized model reduces Brazilian false pathogenic calls and improves calibration on Brazilian-enriched variants without losing sensitivity on P/LP variants or degrading global ClinVar performance.
+Contents
+1. Goals, scope, and non-negotiable design principles
+2. Data roles and leakage boundaries
+3. Synthetic ABraOM frequency post-training
+4. Adapter-fusion architecture
+5. Training protocol
+6. ClinVar handling with Brazilian and non-Brazilian submissions
+7. Evaluation protocol
+8. Ablation plan and success criteria
+9. Implementation blueprint
+10. Production and monitoring notes
+11. References
+1. Goals, scope, and non-negotiable design principles
+The objective is to regionalize a nucleotide-sequence foundation model for Brazilian clinical variant interpretation while preserving general molecular pathogenicity reasoning. The regionalization signal comes from ABraOM allele frequencies and optionally other population resources. The pathogenicity label signal comes from strong-evidence ClinVar. These two signals must remain conceptually and technically distinct.
+A regionalized model should not learn the trivial rule “Brazil-associated equals benign.” It should learn that Brazilian population frequency is a population-prior evidence source that can change the clinical posterior for some variants, especially variants that are rare globally but present or enriched in ABraOM.
+The best architecture is therefore modular: a frozen base model, one or more independently trained population adapters, a pathogenicity adapter, and a fusion/calibration component. This prevents destructive fine-tuning and makes future regionalizations incremental.
+1.1 What “properly adapted” means
+Molecular effect is preserved: severe sequence-level evidence, such as canonical splice disruption or protein-truncating effect in an appropriate disease gene, should not disappear merely because a regional adapter is active.
+Brazilian frequency evidence is used: variants that are common or enriched in ABraOM should be less likely to be called pathogenic for rare high-penetrance Mendelian disease, subject to disease architecture, inheritance mode, penetrance, and founder exceptions.
+Calibration improves: the predicted probability should be better calibrated on Brazilian-submitted, Brazilian-enriched, and ABraOM-present strata.
+False positives fall: the model should reduce false pathogenic calls among ABraOM variants that are too common to be plausible high-penetrance pathogenic variants.
+Sensitivity is preserved: true P/LP variants, including Brazilian founder or ABraOM-present pathogenic variants, should not be suppressed.
+Global performance is non-inferior: the model must not meaningfully degrade on non-Brazilian ClinVar temporal/gene/submitter holdouts.
+1.2 Recommended model decomposition
+F0       = frozen genomic foundation modelA_BR     = Brazilian population adapter trained from ABraOM frequency objectiveA_r      = optional additional population adapters: global, AFR, EUR, AMR, EAS, SAS, etc.A_path   = pathogenicity adapter trained from strong-evidence ClinVarG        = fusion controller / gateH_mol    = molecular effect headH_reg    = regional clinical interpretation headPrimary outputs:  molecular_effect_score                = H_mol(F0 + A_path)  pathogenicity_score_BR                = H_reg(F0 + A_path + fused population adapters)  pathogenicity_score_global            = H_reg(F0 + A_path + global population context)
+Strong position: The production model should probably include explicit ABraOM/gnomAD frequency features in addition to population adapters. Adapter fusion can encode regional sequence-distribution priors, but explicit allele frequency remains too clinically informative to hide inside embeddings only.
+2. Data roles and leakage boundaries
+Regionalization fails when data sources are assigned the wrong semantic role. ABraOM should not be treated as a pathogenicity-label dataset. ClinVar should not be treated as a population-frequency dataset. Brazilian-submitted ClinVar records should not be treated as proof that the variant arose in a Brazilian patient unless that is explicitly documented in the submission or linked evidence.
+2.1 Dataset roles
+Source
+Role
+ABraOM
+Brazilian/São Paulo admixed population frequency prior. Useful for allele-frequency alignment, false-positive suppression, and Brazilian calibration. Not a pathogenicity truth set.
+ClinVar
+Variant or variant-condition clinical classification archive. Useful for P/LP vs B/LB supervised fine-tuning after strong-evidence filtering. Submitter provenance is useful for splitting and evaluation.
+gnomAD / global frequency resources
+Global and ancestry-stratified frequency prior. Needed as comparator and baseline. Helps test whether ABraOM adds information beyond existing frequency resources.
+Brazilian clinical cohort, if available
+Gold-standard patient-level evaluation. Supports causal-variant ranking, false positives per genome/exome, and diagnostic yield analyses.
+Curated Brazilian founder/P/LP panel
+Sensitivity protection set. Ensures regional frequency adaptation does not suppress real disease-causing variants observed in Brazil.
+2.2 ABraOM assumptions
+The ABraOM WGS dataset is based on 1,171 unrelated SABE participants from São Paulo, uses hg38 for the WGS release, and contains tens of millions of SNVs and short indels. The cohort is elderly and admixed. That makes it valuable for identifying variants that are locally common but underrepresented globally, but it is not a complete representation of all Brazilian populations.
+The practical consequence is asymmetric evidence: a variant being common in ABraOM can be strong benign population evidence for many rare Mendelian contexts; a variant being absent from ABraOM is generally weak evidence because the cohort size is modest relative to rare-disease allele frequencies.
+2.3 ClinVar assumptions
+ClinVar stores submitted classifications as SCV records, aggregates by variant-condition as RCV records, and aggregates by variant as VCV records. For this project, preserve SCV-level provenance even if the final label is VCV-level or variant-level, because you need submitter country/lab metadata for splitting and leakage control.
+Use review status and strong-evidence filtering for inclusion and weighting. Do not use review status, submitter country, or submitter identity as inference-time model features.
+2.4 Leakage boundaries
+Pattern
+Status
+Mitigation
+Same normalized variant appears in train and test
+Leakage
+Split by normalized variant ID. Do not split SCVs of the same variant across partitions.
+Non-BR SCV in train, BR SCV of same variant in test
+Leakage
+Assign the entire variant to one split based on variant ID.
+ABraOM post-training includes ClinVar test variant
+Depends on claim
+Report two modes: strict ML mode excludes ClinVar test variants from ABraOM post-training; deployment mode allows population databases as inference annotations.
+Submitter country fed as model feature
+Leakage/provenance shortcut
+Use submitter country only for stratification, splitting, and reporting.
+Random ClinVar split
+Inflated performance
+Use temporal, gene, submitter, and variant-family splits.
+Pseudo-benign ABraOM labels used without disease architecture
+Label noise
+Use disease/gene-specific maximum credible AF or conservative pseudo-benign bins; always keep sensitivity protection sets.
+3. Synthetic ABraOM frequency post-training
+The purpose of ABraOM post-training is to create a Brazilian population adapter A_BR that makes the base model more aware of Brazilian allele distributions. It is not meant to teach pathogenicity. The best objective uses ABraOM allele counts as a soft target for allele probabilities at known variant sites.
+3.1 Core frequency objective for SNVs
+For a biallelic SNV v at locus i:
+reference allele = REF_ialternate allele = ALT_iABraOM allele count = AC_iABraOM allele number = AN_iSmoothed Brazilian alternate-allele target:  f_BR_i = (AC_i + alpha) / (AN_i + alpha + beta)Jeffreys-style default:  alpha = 0.5  beta  = 0.5
+Train the adapter to predict the observed reference/alternate allele distribution under sequence context:
+L_ABraOM =  - sum_i w_i [      AC_i        * log P_theta(ALT_i | context_i)    + (AN_i-AC_i) * log P_theta(REF_i | context_i)  ]Equivalent normalized form:  L_ABraOM =  - sum_i w_i [      f_BR_i       * log p_alt_i    + (1-f_BR_i)   * log (1-p_alt_i)  ]
+The weight w_i should reflect call confidence, allele number, region callability, mapping ambiguity, and desired AF-bin balancing. Without balancing, very common and very rare bins can dominate training in undesirable ways.
+3.2 Sampling strategy
+Use sparse perturbations: If you only have aggregate frequencies, avoid building fully synthetic genomes by independently sampling all variants. That destroys haplotypes, LD, phase, and local ancestry.
+Use single-locus or sparse multi-locus contexts: For each training example, generate ref and alt contexts around one or a few variants. Keep the reference genome context otherwise intact.
+Balance by AF bin: Sample from bins such as singleton/very rare, low-frequency, moderate-frequency, common, and Brazil-enriched. Do not allow common variants alone to define the adapter.
+Hold out variants: Create ABraOM_train_freq and ABraOM_test_freq before post-training. Also create ABraOM_test_no_ClinVar_overlap for strict evaluation.
+Treat indels separately: For indels, use ref/alt sequence pseudo-likelihood ratio or span-level reconstruction rather than forcing a single-token allele prediction.
+3.3 Recommended ABraOM training examples
+Example type
+Construction
+Purpose
+Masked allele prediction
+Mask the variant position and train P(REF/ALT | local context) against ABraOM frequency target.
+Main SNV objective.
+Ref/alt likelihood contrast
+Compute log P(ALT context) - log P(REF context) and align to logit(AF_BR).
+Good for models where full sequence likelihood or pseudo-likelihood is available.
+Brazil-enriched contrastive pair
+Pair variants common/enriched in ABraOM with globally common or globally rare controls.
+Teaches regional distinctiveness.
+Negative control
+Use scrambled AF labels or random allele assignment.
+Detects evaluation artifacts and extra-parameter effects.
+Global comparator
+Train an otherwise identical adapter on gnomAD/global frequencies.
+Tests whether ABraOM adds information beyond generic population adaptation.
+3.4 ABraOM post-training validation
+Before touching ClinVar, prove that A_BR actually learned Brazilian frequency structure. Use held-out ABraOM variants and compare the frozen base model against the base plus A_BR.
+Frequency negative log-likelihood: binomial cross-entropy between predicted p_alt and observed ABraOM AF.
+Brier score: squared error between predicted p_alt and f_BR.
+Spearman correlation: correlation between ref/alt log-likelihood ratio and logit(AF_BR).
+Calibration by AF bin: predicted versus observed AF in bins: singleton/rare, 0.01–0.1%, 0.1–0.5%, 0.5–1%, 1–5%, >5%.
+Brazil-enriched ranking: variants common in ABraOM but rare globally should rank higher under A_BR than under global-only adapters.
+Controls: scrambled ABraOM adapter should not improve these metrics; global-frequency adapter may improve generic frequency prediction but should not fully explain Brazil-enriched gains.
+4. Adapter-fusion architecture
+Adapter fusion allows regionalization to scale. Instead of creating one full model checkpoint per country or cohort, keep a frozen base model and compose small adapters through a learned fusion controller. This is directly inspired by the AdapterFusion idea of separating knowledge extraction from knowledge composition.
+4.1 Layer-wise LoRA fusion
+For a transformer layer with base projection W, a LoRA adapter adds a low-rank update ΔW = B A. A regional fusion layer uses a weighted sum of regional low-rank updates:
+Base layer:  y = W xSingle LoRA adapter:  y = W x + DeltaW_path xFused adapters:  y = W x      + DeltaW_path x      + sum_r alpha_{layer,r}(x, meta) * DeltaW_r x
+Here r indexes population adapters such as A_BR, A_global_pop, A_AFR, A_EUR, A_AMR, A_EAS, and A_SAS. The fusion weights alpha may be fixed, metadata-driven, or learned dynamically.
+4.2 Architecture diagram
+ref sequence context      alt sequence context                         |                         |                         v                         v                +-----------------------------------------+                | Frozen nucleotide foundation model F0   |                +-----------------------------------------+                         |                         |             +-----------+-----------+-------------+-----------+             |                       |                         |             v                       v                         v      Pathogenicity adapter     Population adapters        Optional task adapters          A_path                A_BR, A_global, ...        splice/regulatory/etc.             |                       |                         |             +-----------+-----------+-------------------------+                         |                         v              Layer-wise fusion controller G                         |                         v       pooled ref/alt/delta embeddings + explicit frequency features                         |                         v        H_mol: molecular effect score        H_reg: region-calibrated pathogenicity probability
+4.3 Fusion strategies
+Strategy
+Mechanism
+Strength
+Risk
+Hard regional routing
+Use A_BR whenever the target calibration region is Brazil.
+Easy to debug; useful first baseline.
+Too crude for admixed individuals and multi-population comparison.
+Fixed soft fusion
+Use preset weights based on cohort or patient ancestry proportions.
+Good for admixed populations if ancestry estimates exist.
+Requires reliable ancestry proportions and still may miss locus-specific ancestry.
+Learned layer-wise fusion
+Gate learns alpha_{layer,r} from representation plus metadata/frequency features.
+Best balance of power and stability.
+Requires good regularization and ablations.
+Token-wise fusion
+Gate varies by token/position.
+Potentially powerful for long contexts and local ancestry.
+Likely overkill until datasets are much larger.
+4.4 Gate inputs
+The gate should receive biological and population evidence, not ClinVar provenance shortcuts.
+Category
+Features
+Allowed
+pooled ref/alt embeddings; delta embeddings; ABraOM AF/AC/AN/homozygote count; gnomAD AF/grpmax; consequence; gene constraint; optional inheritance mode; target calibration population; patient ancestry proportions if available.
+Not allowed
+ClinVar submitter country; submitter name; SCV accession; review status as an inference-time feature; label-derived features; Brazilian-submitted flag.
+Use only for splitting/weights
+review status; SCV submitter metadata; last-evaluated date; submitter country; assertion-method details.
+4.5 Recommended fusion block pseudocode
+class RegionalFusionBlock(nn.Module):    def __init__(self, base_block, path_adapter, region_adapters, hidden_dim, meta_dim):        super().__init__()        self.base_block = freeze(base_block)        self.path_adapter = path_adapter        self.region_adapters = nn.ModuleDict(region_adapters)        self.gate = nn.Sequential(            nn.Linear(hidden_dim + meta_dim, hidden_dim // 4),            nn.GELU(),            nn.Linear(hidden_dim // 4, len(region_adapters))        )    def forward(self, h, meta):        base_out = self.base_block(h)        path_update = self.path_adapter(h)        pooled = pool_variant_center(h)        alpha = torch.softmax(self.gate(torch.cat([pooled, meta], dim=-1)), dim=-1)        region_update = 0        for k, adapter in enumerate(self.region_adapters.values()):            region_update = region_update + alpha[:, k, None, None] * adapter(h)        return base_out + path_update + region_update, alpha
+4.6 Regularization
+Adapter dropout: randomly drop one regional adapter during fusion training so the controller cannot rely on a single adapter shortcut.
+Region dropout: hide explicit ABraOM/gnomAD features on a fraction of batches to force robustness.
+Sparsity or entropy control: prevent either total collapse to A_BR or noisy use of all adapters everywhere.
+Counterfactual consistency: changing target region should not drastically change a score unless allele-frequency evidence differs materially.
+Monotonic frequency constraint: for rare high-penetrance Mendelian disease, increasing credible regional AF should not increase pathogenic probability when other evidence is fixed.
+Adapter norm penalty: prevent regional updates from overwhelming the pathogenicity adapter.
+5. Training protocol
+Training should occur in separated phases. The point is to let each adapter acquire one kind of knowledge, then learn composition. Do not fine-tune the entire system end-to-end from the beginning.
+5.1 Phase 0 — normalization and dataset build
+Normalize all variants to GRCh38 chr:pos:ref:alt. Left-normalize, split multiallelic variants, and harmonize representation across ABraOM, ClinVar, and gnomAD.
+Preserve original identifiers: ClinVar VariationID, VCV, RCV, SCV list, submitters, conditions, review status, last-evaluated date, ABraOM AC/AN/AF, and gnomAD AC/AN/AF.
+Build variant-level and optionally variant-condition-level tables. Do not collapse variant-condition records if disease context is central to your task.
+Create leakage-resistant split keys: normalized_variant_id, gene, condition/disease group, submitter, codon/amino-acid change, splice motif, genomic position.
+5.2 Phase 1 — train population adapters
+for region in population_regions:    freeze(F0)    train(A_region) on frequency objective for that region    validate(A_region) on held-out frequency sites    save adapter checkpoint and frequency-alignment report
+For the first build, train at least A_BR and one comparator adapter A_global or A_gnomAD. If you later add LATAM, Japan, Finland, or other cohorts, train them independently and plug them into the same fusion bank.
+5.3 Phase 2 — train the pathogenicity adapter
+Train A_path and an initial pathogenicity head on strong-evidence ClinVar. Use paired reference and alternate sequence contexts.
+Input per variant:  ref_context = reference sequence around variant  alt_context = same sequence with REF replaced by ALTRepresentations:  h_ref = F0 + A_path(ref_context)  h_alt = F0 + A_path(alt_context)  delta = h_alt - h_refHead input:  z = [pool(h_ref), pool(h_alt), pool(delta), optional likelihood-ratio features]Target:  P/LP = 1  B/LB = 0
+For the cleanest regionalization experiment, train A_path on nonBR_only ClinVar and hold out Brazilian-submitted variants. This tests whether ABraOM adaptation helps without supervised Brazilian ClinVar labels.
+5.4 Phase 3 — train fusion and regional head
+Freeze F0 and the independently trained adapters. Train only the fusion gates and regional head first. This mirrors the knowledge-composition stage from AdapterFusion.
+Frozen:  F0  A_path  A_BR  A_global / A_gnomAD / ancestry adaptersTrainable:  G         = fusion gates  H_reg     = regional pathogenicity/calibration head  optional H_mol calibration layerLoss:  L_total =      L_ClinVar    + lambda_brier * L_Brier    + lambda_freq  * L_frequency_consistency    + lambda_gate  * L_gate_regularization    + lambda_mono  * L_monotonic_frequency_penalty
+A practical loss starts simple: weighted BCE for ClinVar plus a mild calibration loss or post-hoc calibration. Add monotonic penalties only after you have a stable baseline.
+5.5 Phase 4 — optional supervised Brazilian fusion
+After the clean zero-shot/leave-Brazilian-out experiment, you may train with Brazilian-submitted ClinVar. Then evaluation must be stricter: leave-Brazilian-submitter-out, temporal holdout, gene holdout, and variant-family holdout. Do not train and test on different SCVs of the same variant.
+5.6 Suggested initial hyperparameters
+Parameter
+Starting range
+Comment
+LoRA rank
+4–16
+Start with 8. Use rank-matched controls so gains are not just parameter count.
+LoRA alpha
+rank to 2×rank
+Keep stable across regional adapters.
+Adapter dropout
+0.05–0.20
+Useful during fusion training.
+Population adapter LR
+1e-4 to 5e-4
+Depends on backbone and adapter placement.
+Pathogenicity adapter LR
+5e-5 to 2e-4
+Use validation AUPRC/calibration, not only loss.
+Fusion gate LR
+1e-4 to 1e-3
+Only small modules train here; monitor gate collapse.
+Context window
+model-dependent
+Use long context where practical; always compare shorter windows for cost.
+Batch composition
+balanced by label and AF bin
+Avoid pathogenicity labels or common variants dominating.
+6. ClinVar handling with Brazilian and non-Brazilian submissions
+Since you already filter ClinVar for strong evidence, the remaining critical issue is provenance-aware splitting. Brazilian-submitted ClinVar records are not automatically Brazilian population variants; they are submitter-provenance records. Use that provenance to design tests, not as a feature.
+6.1 Preserve SCV provenance
+Recommended ClinVar-derived columns:normalized_variant_idbuild, chrom, pos, ref, altClinVar VariationID / VCVRCV list, condition listSCV listSCV submitter namesSCV submitter countriesaggregate germline classificationsubmitted classifications that contribute to aggregate classificationreview statuslast evaluated / submitted dategene, transcript, consequenceABraOM_AF, ABraOM_AC, ABraOM_AN, ABraOM_hom_countgnomAD_AF, gnomAD_grpmax_AFflags: nonBR_only, BR_only, mixed_BR_nonBR, BR_any
+6.2 Brazilian provenance flags
+Flag
+Definition
+Use
+nonBR_only
+No strong contributing SCV from a Brazilian submitter.
+Primary training source for clean zero-shot regionalization.
+BR_only
+All strong contributing SCVs are from Brazilian submitters.
+Cleanest Brazilian-submitted test stratum.
+mixed_BR_nonBR
+At least one Brazilian and at least one non-Brazilian strong contributing SCV.
+Evaluate separately; do not split SCVs across train/test.
+BR_any
+BR_only or mixed_BR_nonBR.
+Useful aggregate reporting stratum; less clean than BR_only.
+6.3 Primary split: leave Brazilian ClinVar out
+Train:  nonBR_only strong-evidence ClinVarValidation:  nonBR_only validation  ABraOM frequency validationTest:  BR_only ClinVar  mixed_BR_nonBR ClinVar  Brazil-enriched ClinVar  nonBR_only temporal/gene/submitter holdouts  ABraOM common pseudo-benign benchmark
+This is the cleanest test. If A_BR and fusion improve Brazilian-relevant performance despite no Brazilian ClinVar labels in training, you have evidence that population regionalization is doing real work.
+6.4 Secondary split: supervised Brazilian ClinVar
+Train:  nonBR_only ClinVar  plus Brazilian submitters A/B/CTest:  held-out Brazilian submitter D  or Brazilian-submitted variants added after date T  or held-out Brazilian disease/gene groups
+Use this only after the primary leave-Brazilian-out experiment. Otherwise the model may simply learn Brazilian lab curation patterns.
+6.5 Variant-level versus condition-specific training
+Task
+Unit
+Advantage
+Risk
+Variant-level
+chr:pos:ref:alt -> P/LP or B/LB
+Simpler; good first model.
+Can corrupt labels if pathogenicity differs by condition.
+Variant-condition
+chr:pos:ref:alt + condition -> classification
+More clinically faithful.
+Needs disease normalization and more data.
+Patient-level prioritization
+variant + phenotype/patient context
+Best deployment metric.
+Requires clinical cohort and expert adjudication.
+7. Evaluation protocol
+A proper evaluation has to prove three things simultaneously: the ABraOM adapter learned Brazilian allele-frequency structure, the fused model improves Brazilian-relevant pathogenicity calibration, and the model does not suppress true pathogenic variants or degrade outside Brazil.
+7.1 Evaluation layer A: ABraOM frequency alignment
+Run this before ClinVar analysis. It answers whether A_BR is doing anything real.
+Metric
+Definition
+Pass signal
+Held-out ABraOM NLL
+Binomial cross-entropy using held-out AC/AN.
+A_BR should beat F0 and scrambled A_BR.
+Brier score for AF
+Mean squared error between predicted p_alt and observed AF.
+A_BR should improve, especially in reliable AF bins.
+Spearman correlation
+corr(logit predicted p_alt or ref/alt LLR, logit AF_BR).
+Should increase after A_BR training.
+AF-bin calibration
+Predicted versus observed AF by bins.
+Should not be overconfident in rare bins.
+Brazil-enriched ranking
+Rank variants common in ABraOM and rare globally.
+A_BR should rank these higher than global adapters.
+Negative controls
+Scrambled AF adapter and rank-matched random adapter.
+Should not reproduce A_BR gains.
+7.2 Evaluation layer B: ClinVar classification
+Set
+Purpose
+Metrics
+nonBR_only holdout
+Tests global/non-Brazilian pathogenicity preservation.
+AUROC, AUPRC, Brier, ECE, sensitivity at fixed specificity.
+BR_only holdout
+Clean Brazilian-submitted test stratum.
+AUPRC, Brier, ECE, false-benign rate on P/LP, false-pathogenic rate on B/LB.
+mixed_BR_nonBR
+Cross-provenance variants.
+Report separately; not primary headline.
+Brazil-enriched ClinVar
+ClinVar variants with ABraOM AF materially above global AF.
+Most direct ClinVar test of regional frequency usefulness.
+temporal holdout
+Variants added or reclassified after training cutoff T.
+Realistic forward-looking generalization.
+gene/disease holdout
+Hold out genes or disease groups.
+Tests biology transfer rather than memorized gene priors.
+7.3 Evaluation layer C: ABraOM pseudo-benign benchmark
+This benchmark is essential because Brazilian regionalization should reduce false pathogenic calls among variants that are common in ABraOM but rare or absent in global resources.
+Construct pseudo-benign candidate set:  ABraOM PASS / high-confidence  ABraOM AC and AN above reliability threshold  not ClinVar P/LP  not in known founder/pathogenic exception list  AF_BR above disease/gene-specific maximum credible AF  or in conservative exploratory bins:      0.1–0.5%      0.5–1%      1–5%      >5%Main metric:  false_pathogenic_rate = # variants predicted pathogenic / # variants in bin
+Use disease/gene-specific maximum credible allele frequency wherever possible. A universal AF cutoff is crude because dominant, recessive, high-penetrance, low-penetrance, and founder architectures differ.
+7.4 Evaluation layer D: do-not-suppress pathogenic benchmark
+This is the safety counterpart to the pseudo-benign benchmark. It detects whether regionalization learned an overbroad benign prior.
+ClinVar P/LP variants with ABraOM_AC > 0.
+Brazilian-submitted P/LP variants held out from training.
+Curated Brazilian founder/pathogenic variants from independent sources.
+P/LP variants in recessive genes where nonzero carrier frequency is plausible.
+Severe molecular-effect variants where population evidence should not dominate without disease context.
+Metrics: sensitivity, false-benign rate, score drop from non-regionalized to regionalized model, and number of P/LP variants crossing below the reporting threshold.
+7.5 Evaluation layer E: patient-level Brazilian clinical cohort
+If available, this is the gold standard. The model should be evaluated at the patient/exome/genome level rather than only variant-level classification.
+Metric
+Definition
+Desired direction
+Causal variant rank
+Rank of expert-adjudicated causal variant among all candidate variants.
+Top-1, top-5, top-10 recovery.
+False positives per genome/exome
+Number of variants above pathogenic/reporting threshold.
+Should decrease with regionalization.
+Diagnostic sensitivity
+Solved cases where causal variant remains reportable.
+Must not decline materially.
+VUS burden proxy
+Number of plausible but unresolved candidates after filtering.
+Should fall in Brazilian cases.
+Phenotype-aware rank
+If phenotype/HPO used, measure variant rank conditioned on phenotype.
+Best clinical prioritization metric.
+7.6 Calibration metrics
+Regionalization is often more visible in calibration than in AUROC. Report calibration globally and by stratum.
+Calibration metrics:  Brier score  Expected calibration error (ECE)  Maximum calibration error (MCE)  Calibration slope  Calibration intercept  Reliability curvesStrata:  nonBR_only  BR_only  mixed_BR_nonBR  ABraOM_AF = 0  ABraOM_AF low/moderate/high  Brazil-enriched  consequence class  gene constraint bin  inheritance mode, if available  ClinVar review-status tier
+7.7 Gate diagnostics
+The fusion gate is part of the scientific claim. Evaluate whether it behaves sensibly.
+Diagnostic
+How
+Expected behavior
+alpha_BR by stratum
+Mean/median Brazilian adapter weight by ABraOM AF and Brazil-enrichment bin.
+alpha_BR should rise for ABraOM-enriched variants.
+A_path dominance
+Adapter weights for severe molecular-effect variants.
+A_path should dominate when molecular evidence is overwhelming.
+Counterfactual region
+Score same variant under Brazil/global/EUR/AFR target contexts.
+Scores should move only when regional frequency evidence changes.
+Adapter ablation
+Run with all adapters, minus A_BR, minus A_path, only A_BR, scrambled A_BR.
+Removing A_BR should matter on Brazil-enriched variants; removing A_path should hurt molecular classification.
+Gate entropy
+Measure collapse or over-diffuse gating.
+Stable model uses sparse but not degenerate adapter mixtures.
+7.8 Statistical testing
+Clustered bootstrap: resample by gene, disease group, or gene+submitter rather than independent variants. Report confidence intervals for metric differences.
+Paired comparisons: compare M4 versus M0 on the same test variants; report ΔAUPRC, ΔBrier, ΔECE, Δfalse-pathogenic-rate, and Δsensitivity.
+Permutation sanity check: shuffled ABraOM labels or randomized adapter assignment should not yield the same gain.
+Pre-register operating points: choose sensitivity-at-specificity or specificity-at-sensitivity thresholds before looking at the final test set.
+8. Ablation plan and success criteria
+Ablations are not optional. Without them, you cannot tell whether the adapter fusion helped, whether explicit frequency features did all the work, or whether gains came from extra parameters.
+8.1 Model variants
+ID
+Model
+Purpose
+M0
+F0 + A_path + H_mol/H_reg
+No population adapter. Baseline ClinVar model.
+M1
+F0 + A_path + A_BR hard routing
+Tests simple Brazilian adapter use.
+M2
+F0 + A_path + A_global/gnomAD adapters
+Controls for generic population adaptation.
+M3
+F0 + A_path + A_BR + global adapters, fixed soft fusion
+Tests non-learned mixtures.
+M4
+F0 + A_path + A_BR + global adapters, learned fusion
+Main adapter-fusion candidate.
+M5
+M4 + explicit ABraOM/gnomAD frequency features
+Likely best production candidate.
+M6
+F0 + A_path + explicit frequency features, no regional adapters
+Tests whether explicit features alone beat adapter fusion.
+M7
+M4 but A_BR trained on scrambled frequencies
+Negative control.
+M8
+M4 but ClinVar training includes Brazilian submissions
+Supervised Brazilian-fusion variant; evaluate with stricter splits.
+8.2 Required comparisons
+M4 versus M0: does adapter fusion improve over the plain ClinVar model?
+M4 versus M2: does ABraOM add value beyond global/gnomAD population adaptation?
+M4 versus M1: does learned fusion beat hard Brazil routing?
+M5 versus M4: do explicit frequencies still add value after representation regionalization?
+M6 versus M5: are regional adapters actually useful beyond explicit frequency features?
+M4 versus M7: does a real ABraOM adapter beat a scrambled adapter? If not, the claim fails.
+8.3 Suggested pass/fail criteria
+Criterion
+Operational definition
+Status
+ABraOM alignment
+A_BR improves held-out ABraOM NLL/Brier/correlation versus F0 and scrambled A_BR.
+Required.
+Brazilian calibration
+Brier/ECE improve on BR_only, BR_any, or Brazil-enriched ClinVar.
+Required.
+False positives
+False pathogenic rate drops among ABraOM common/enriched pseudo-benign variants.
+Required.
+P/LP sensitivity
+No material sensitivity loss on Brazilian P/LP and ABraOM_AC>0 P/LP sets.
+Required.
+Global non-inferiority
+M4/M5 remains close to M0 on nonBR temporal/gene holdouts.
+Required.
+ABraOM-specific value
+M4/M5 beats gnomAD-only M2 on Brazil-enriched strata.
+Required for regionalization claim.
+Negative control
+Scrambled A_BR does not reproduce gains.
+Required.
+Interpretability
+Gate diagnostics show A_BR used primarily when Brazilian frequency evidence is relevant.
+Strongly recommended.
+8.4 What would falsify the approach
+A_BR improves neither held-out ABraOM frequency prediction nor Brazil-enriched ranking.
+M4 gains are matched by scrambled A_BR.
+M6, the explicit-frequency-only model, clearly beats M5 with lower complexity.
+False pathogenic calls fall only because sensitivity on P/LP variants collapses.
+Performance improves only on random ClinVar splits but not temporal, gene, submitter, or variant-family splits.
+The gate always selects A_BR whenever target_region=Brazil regardless of AF, consequence, and molecular evidence.
+9. Implementation blueprint
+This section turns the design into build tasks.
+9.1 Minimum viable build
+Normalize variants: create one GRCh38 left-normalized table joining ClinVar, ABraOM, and gnomAD.
+Create ClinVar provenance flags: nonBR_only, BR_only, mixed_BR_nonBR, BR_any.
+Create ABraOM frequency splits: ABraOM_train_freq, ABraOM_test_freq, ABraOM_test_no_ClinVar_overlap.
+Train A_BR: use the ABraOM frequency objective with balanced AF-bin sampling.
+Validate A_BR: frequency NLL/Brier/correlation/calibration on held-out ABraOM.
+Train M0: F0 + A_path on nonBR_only ClinVar.
+Train M4: frozen F0 + A_path + A_BR + global adapter with learned fusion.
+Train M5: M4 plus explicit ABraOM/gnomAD frequency features.
+Evaluate: nonBR holdout, BR_only, mixed, Brazil-enriched ClinVar, ABraOM pseudo-benign, P/LP sensitivity protection.
+Report ablations: include M2, M6, and scrambled A_BR at minimum.
+9.2 Recommended data table schemas
+Variant table:  variant_id: chr:pos:ref:alt  build  chrom, pos, ref, alt  normalized_status  gene, transcript, consequence  coding_change, protein_change  splice_region_flag  ClinVar labels and accessions  SCV submitter metadata  ABraOM_AF, ABraOM_AC, ABraOM_AN, ABraOM_hom_count, ABraOM_QC  gnomAD_AF, gnomAD_grpmax_AF, gnomAD_popmax_pop  split assignments  leakage_cluster_ids: gene, disease_group, codon, position, submitter_clusterTraining example table:  example_id  variant_id  ref_context_path or encoded sequence  alt_context_path or encoded sequence  target_label  label_source  sample_weight  region_context  metadata_features
+9.3 Example training configuration
+base_model: caduceus_or_ntv3_checkpointreference_build: GRCh38context_window_bp: 8192        # adjust to model/cost; run ablationvariant_representation: paired_ref_alttrainable:  phase_1_population: [A_BR, A_global]  phase_2_pathogenicity: [A_path, H_mol]  phase_3_fusion: [G, H_reg]lora:  rank: 8  alpha: 16  dropout: 0.1abraom_objective:  smoothing_alpha: 0.5  smoothing_beta: 0.5  af_bin_balancing: true  exclude_clinvar_test_variants_strict_mode: trueclinvar:  labels: [P, LP, B, LB]  exclude: [VUS, conflicting, risk_factor, protective, drug_response, somatic_only]  train_split: nonBR_only_preT  test_splits: [nonBR_postT, BR_only, mixed_BR_nonBR, Brazil_enriched]fusion:  gate: layerwise  explicit_frequency_features: true  adapter_dropout: 0.1  monotonic_frequency_penalty: optional_after_baselineevaluation:  metrics: [AUROC, AUPRC, Brier, ECE, sensitivity_at_specificity, false_pathogenic_rate]  bootstrap_cluster: gene
+9.4 Inference outputs
+The model should output an evidence decomposition, not just one opaque probability.
+Per variant output:  variant_id  molecular_effect_score  pathogenicity_score_global  pathogenicity_score_BR  score_delta_BR_vs_global  ABraOM_AF, ABraOM_AC, ABraOM_AN  gnomAD_AF, gnomAD_grpmax_AF  top_adapter_weights_by_layer_or_summary  consequence/gene features used  decision_threshold_used  decision_category:      high_confidence_pathogenic_candidate      manual_review      likely_benign_by_frequency      insufficient_evidence
+This output makes error review easier. If a variant is downweighted in Brazil because ABraOM AF is high, the system should expose that explicitly.
+9.5 Experiment tracking artifacts
+Frozen data manifest with checksums for ClinVar, ABraOM, gnomAD, and reference genome files.
+Exact ClinVar release date and time cutoff T.
+List of variants excluded to avoid ABraOM/ClinVar strict-mode overlap.
+A_BR held-out frequency-alignment report.
+Model card for each ablation M0–M7.
+Evaluation tables by stratum and AF bin.
+Gate diagnostics and adapter ablation plots.
+Error-analysis tables for false positives and false negatives.
+10. Production and monitoring notes
+The deployment risk is not that the adapter fusion is too weak; it is that the model becomes overconfident and hides the distinction between molecular effect and population evidence. The production interface should preserve this distinction.
+10.1 Recommended production modes
+Mode
+Use
+Caution
+Research prioritization
+High sensitivity; low threshold; returns ranked candidates.
+Accepts more false positives.
+Clinical triage
+Moderate threshold; requires evidence decomposition.
+Should avoid automatic pathogenic assertions.
+Benign suppression
+High-specificity benign downranking of common regional variants.
+Requires strong calibration and false-negative protection.
+Patient-level diagnosis support
+Variant ranking with phenotype, inheritance, and family segregation if available.
+Requires separate patient-level validation.
+10.2 Monitoring
+Track score drift after each ClinVar or ABraOM update.
+Track false pathogenic rate by ABraOM AF bin and consequence class.
+Track sensitivity on a frozen P/LP sentinel panel, including Brazilian founder/pathogenic variants.
+Track gate behavior: mean alpha_BR by AF bin should not change unexpectedly between releases.
+Re-run temporal ClinVar evaluation after each major release.
+Keep adapter versions independent so A_BR can be updated without retraining F0 or A_path from scratch.
+10.3 Future regionalizations
+The same architecture allows new regional adapters. For a new region R, train A_R on the region’s allele-frequency or haplotype data, validate frequency alignment, plug A_R into the adapter bank, then evaluate region-enriched ClinVar/local clinical variants and common-region pseudo-benign benchmarks. The base model and A_path do not need to be retrained unless the task definition changes.
+Add a new region:  1. Normalize regional frequency table to GRCh38.  2. Create train/test frequency splits.  3. Train A_region with same objective as A_BR.  4. Validate frequency alignment.  5. Add A_region to fusion bank.  6. Calibrate if local labels exist.  7. Evaluate:       region-enriched ClinVar       region common pseudo-benign       local P/LP sensitivity panel       global non-inferiority
+10.4 Practical recommendation
+Build order: First build M0, A_BR, M4, M5, M6, and scrambled A_BR. Do not invest in token-wise fusion, end-to-end fine-tuning, or many regional adapters until M5 beats M0/M2/M6 on Brazil-enriched calibration and false-positive reduction while preserving P/LP sensitivity.
+11. References
+References are included to anchor design assumptions. Accessed 2026-06-15.
+#
+Source
+Why it matters
+URL
+[1]
+ABraOM official site
+Cohort description and current ABraOM release details, including SABE-WGS-1171 in hg38.
+https://abraom.ib.usp.br/
+[2]
+Naslavsky et al., Nature Communications 2022
+Whole-genome sequencing of 1,171 elderly admixed individuals from Brazil; over 76 million variants and population-specific clinical utility.
+https://www.nature.com/articles/s41467-022-28648-3
+[3]
+ClinVar FTP/e-utilities primer, NCBI
+ClinVar SCV, RCV, and VCV aggregation model and monthly data products.
+https://www.ncbi.nlm.nih.gov/clinvar/docs/ftp_primer/
+[4]
+ClinVar review status documentation, NCBI
+Review-status definitions for SCV and aggregate ClinVar records.
+https://www.ncbi.nlm.nih.gov/clinvar/docs/review_status/
+[5]
+ClinVar NAR update, 2025 issue
+Updates supporting germline, oncogenicity, and somatic clinical-impact classifications.
+https://academic.oup.com/nar/article/53/D1/D1313/7907366
+[6]
+Richards et al., ACMG/AMP standards and guidelines, 2015
+Variant interpretation framework including population, computational, functional, and segregation evidence.
+https://www.nature.com/articles/gim201530
+[7]
+Whiffin et al., Genetics in Medicine
+Maximum credible allele-frequency framework for determining whether a variant is too common for disease.
+https://www.nature.com/articles/gim201726
+[8]
+Pfeiffer et al., AdapterFusion
+Non-destructive task composition through separately trained adapters and learned composition.
+https://aclanthology.org/2021.eacl-main.39/
+[9]
+Hu et al., LoRA
+Low-rank adaptation: freeze base weights and train low-rank updates for efficient adaptation.
+https://arxiv.org/abs/2106.09685
+[10]
+Schiff et al., Caduceus
+Bidirectional, reverse-complement-equivariant long-range DNA sequence modeling.
+https://proceedings.mlr.press/v235/schiff24a.html
+[11]
+Dalla-Torre et al., Nucleotide Transformer, Nature Methods
+Nucleotide Transformer family and downstream genomic fine-tuning.
+https://www.nature.com/articles/s41592-024-02523-z
+[12]
+Nucleotide Transformer v3 documentation / preprint
+NTv3 long-context base-resolution model description.
+https://github.com/instadeepai/nucleotide-transformer/blob/main/docs/nucleotide_transformer_v3.md
+[13]
+gnomAD local ancestry allele frequencies, Nature Communications 2025
+Local ancestry-informed allele frequencies for admixed populations and relevance to variant interpretation.
+https://www.nature.com/articles/s41467-025-63340-2
+Appendix A. Error analysis templates
+A.1 False pathogenic calls on ABraOM common variants
+For each false pathogenic ABraOM-common variant:  variant_id  gene / consequence  ABraOM_AF / AC / AN / homozygote_count  gnomAD_AF / grpmax  ClinVar status if any  molecular_effect_score  pathogenicity_score_BR  pathogenicity_score_global  top adapter weights  reason for model call  likely failure category:    frequency ignored    molecular score overdominant    gene prior overdominant    mapping/annotation problem    known founder/pathogenic exception    label conflict / data issue
+A.2 False benign calls on P/LP variants
+For each false benign P/LP variant:  variant_id  gene / disease  inheritance mode  consequence  ClinVar review status / submitter provenance  ABraOM_AF / AC / AN  gnomAD_AF / grpmax  molecular_effect_score  pathogenicity_score_BR  pathogenicity_score_global  score drop from M0 to M5  adapter weights  likely failure category:    regional AF over-suppression    recessive carrier-frequency issue    low penetrance/founder mismatch    disease architecture missing    insufficient sequence context    annotation error
+Appendix B. Minimal report structure
+1. Dataset manifest2. Variant normalization and filtering statistics3. ClinVar split statistics:     nonBR_only, BR_only, mixed_BR_nonBR, BR_any4. ABraOM frequency split statistics5. A_BR frequency-alignment validation6. Main model ablation table M0-M77. ClinVar performance tables by stratum8. ABraOM pseudo-benign false-pathogenic-rate table9. P/LP sensitivity protection table10. Gate diagnostics11. Error analysis12. Release recommendation:      ship / do not ship / needs more validation

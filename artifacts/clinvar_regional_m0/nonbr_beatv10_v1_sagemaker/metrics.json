@@ -1,0 +1,142 @@
+{
+  "metric": "clinvar_finetune_regime_A",
+  "value": 0.5757740641776724,
+  "regime": "A",
+  "model_family": "lumina",
+  "model_version": "beat-v10",
+  "context_size": 1024,
+  "loss_type": "focal",
+  "requested_precision": "auto",
+  "resolved_precision": "bf16",
+  "allow_tf32": true,
+  "auroc": 0.8794930533197949,
+  "auprc": 0.8900046074568309,
+  "mcc": 0.5757740641776724,
+  "f1": 0.8173108688470433,
+  "balanced_accuracy": 0.7739911216226256,
+  "precision": 0.7398325358851675,
+  "recall": 0.9129151291512915,
+  "specificity": 0.6350671140939598,
+  "brier_score": 0.14915531616962807,
+  "log_loss": 0.46546441639806785,
+  "val_mcc": 0.5998677157578757,
+  "val_auprc": 0.9623076084154335,
+  "val_auroc": 0.8991995314330341,
+  "val_optimal_threshold": 0.4311051070690155,
+  "best_epoch": 3,
+  "test_at_val_threshold": {
+    "threshold": 0.4311051070690155,
+    "accuracy": 0.7828818217510797,
+    "balanced_accuracy": 0.7739911216226256,
+    "precision": 0.7398325358851675,
+    "recall": 0.9129151291512915,
+    "specificity": 0.6350671140939598,
+    "f1": 0.8173108688470433,
+    "mcc": 0.5757740641776724,
+    "tp": 1237,
+    "tn": 757,
+    "fp": 435,
+    "fn": 118
+  },
+  "test_at_default_threshold": {
+    "threshold": 0.5,
+    "accuracy": 0.7981939536709854,
+    "balanced_accuracy": 0.7951942841576067,
+    "precision": 0.7918112421929215,
+    "recall": 0.8420664206642067,
+    "specificity": 0.7483221476510067,
+    "f1": 0.8161659513590844,
+    "mcc": 0.5943416437896187,
+    "tp": 1141,
+    "tn": 892,
+    "fp": 300,
+    "fn": 214
+  },
+  "test_at_test_optimal_threshold_LEAKY": {
+    "threshold": 0.487002432346344,
+    "accuracy": 0.8040832351786416,
+    "balanced_accuracy": 0.8001238267416231,
+    "precision": 0.7891891891891892,
+    "recall": 0.8619926199261992,
+    "specificity": 0.738255033557047,
+    "f1": 0.8239858906525573,
+    "mcc": 0.6070510000009169,
+    "tp": 1168,
+    "tn": 880,
+    "fp": 312,
+    "fn": 187
+  },
+  "cross_gene_diagnostic": {
+    "auroc": 0.8868365635150087,
+    "auprc": 0.9108075534647033,
+    "mcc_at_val_threshold": 0.583531102326984,
+    "num_variants": 481,
+    "num_genes": 39
+  },
+  "swap_diagnostics": {
+    "swap_mean_abs_prob_sum_minus_one": 0.3646121025085449,
+    "swap_directional_fraction": 0.6529250098154692
+  },
+  "consequence_stratified_metrics": {
+    "indel": {
+      "count": 309.0,
+      "mcc": 0.7785302065349858,
+      "f1": 0.9469214437367304,
+      "precision": 0.9330543933054394,
+      "recall": 0.9612068965517241,
+      "auroc": 0.9071316614420062
+    },
+    "mnv": {
+      "count": 10.0,
+      "mcc": 1.0,
+      "f1": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "auroc": 1.0
+    },
+    "snv": {
+      "count": 2228.0,
+      "mcc": 0.5476645081054878,
+      "f1": 0.7919621749408984,
+      "precision": 0.7057584269662921,
+      "recall": 0.9021543985637342,
+      "auroc": 0.8697634803013063
+    }
+  },
+  "hyperparameters": {
+    "lora_rank": 8,
+    "lora_alpha": 16.0,
+    "lora_dropout": 0.05,
+    "lr_backbone": 5e-06,
+    "lr_head": 0.0005,
+    "freeze_backbone_steps": 100,
+    "grad_clip": 0.5,
+    "warmup_fraction": 0.1,
+    "batch_size": 2,
+    "grad_accum_steps": 8,
+    "focal_gamma": 2.0,
+    "pairwise_rank_weight": 0.0,
+    "pairwise_rank_margin": 0.5,
+    "swap_consistency_weight": 0.0,
+    "swap_consistency_margin": 0.5
+  },
+  "architecture": {
+    "proj_dim": 256,
+    "hidden_dim": 128,
+    "head_dropout": 0.2,
+    "d_model": 288
+  },
+  "trainable_params": {
+    "lora": 394496,
+    "layernorm": 19968,
+    "head": 501443,
+    "other": 4187136,
+    "total": 5103043
+  },
+  "data_summary": {
+    "train_size": 11673,
+    "val_size": 1297,
+    "test_size": 2547,
+    "pos_weight": 0.31630581867388363
+  }
+}

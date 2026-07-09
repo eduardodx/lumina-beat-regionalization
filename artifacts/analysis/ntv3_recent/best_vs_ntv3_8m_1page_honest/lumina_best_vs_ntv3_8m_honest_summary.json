@@ -1,0 +1,16 @@
+{
+  "assay_wins_vs_ntv3_8m_pre": 5,
+  "best_step": 19932,
+  "best_step_time": "0 days 06:58:50.317270",
+  "delta_vs_ntv3_100m_pre": 0.0016406911453950013,
+  "delta_vs_ntv3_8m_pre": 0.033737086450953746,
+  "gap_vs_ntv3_650m_pos": -0.08730300125361123,
+  "lumina_overall": 0.5319731135771725,
+  "ntv3_100m_pre_overall": 0.5303324224317775,
+  "ntv3_650m_pos_overall": 0.6192761148307837,
+  "ntv3_8m_pre_overall": 0.49823602712621873,
+  "rank_lumina": 3,
+  "run_id": "beat-v7-20k-context-pyramid-lr125-llrd085-seed0",
+  "track_losses_vs_ntv3_8m_pre": 8,
+  "track_wins_vs_ntv3_8m_pre": 26
+}

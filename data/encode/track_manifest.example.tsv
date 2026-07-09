@@ -1,0 +1,3 @@
+# assay	cell_line	track_name	url	transform	normalize
+# DNase-seq	K562	dnase_fcoc	https://www.encodeproject.org/files/ENCFF.../@@download/ENCFF....bigWig	asinh	per_chromosome_zscore
+# Histone_ChIP	K562	h3k27ac_fcoc	https://www.encodeproject.org/files/ENCFF.../@@download/ENCFF....bigWig	asinh	per_chromosome_zscore

@@ -1,0 +1,13 @@
+# 8M BiMamba3 with full Mamba3 features.
+# MIMO rank-4, full RoPE, output projection norm, cosine LR schedule.
+
+_inherit: _base.yaml
+
+model_config:
+  is_mimo: true
+  mimo_rank: 4
+  rope_fraction: 1.0
+  is_outproj_norm: true
+  chunk_size: 16  # 64 / mimo_rank for bf16
+
+output_dir: outputs/lumina_8m_bimamba3

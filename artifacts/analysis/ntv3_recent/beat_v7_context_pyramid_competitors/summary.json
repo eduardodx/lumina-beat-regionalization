@@ -1,0 +1,21 @@
+{
+  "assay_wins_vs_ntv3_100m_pre": 2,
+  "assay_wins_vs_ntv3_8m_pre": 5,
+  "best_step": 19932,
+  "best_step_time": "0 days 06:58:50.317270",
+  "delta_vs_ntv3_100m_pre": 0.0016406911453950013,
+  "delta_vs_ntv3_8m_pre": 0.033737086450953746,
+  "gap_vs_ntv3_650m_post": -0.08730300125361123,
+  "lumina_overall": 0.5319731135771725,
+  "lumina_rank": 3,
+  "track_wins_vs_ntv3_100m_pre": {
+    "losses": 15,
+    "ties": 0,
+    "wins": 19
+  },
+  "track_wins_vs_ntv3_8m_pre": {
+    "losses": 8,
+    "ties": 0,
+    "wins": 26
+  }
+}

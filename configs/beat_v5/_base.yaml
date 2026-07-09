@@ -1,0 +1,63 @@
+# Beat-v5: width-first shared bidirectional scan backbone with shared biology decoder.
+fasta_path: data/hg38/hg38.fa
+phylo100_bw_path: data/phylo/hg38.phyloP100way.bw
+phylo470_bw_path: data/phylo/hg38.phyloP470way.bw
+gtf_path: data/gencode/gencode.v38.annotation.gtf.gz
+chromosome_split_mode: full_hg38
+
+model: beat-v5
+model_config:
+  d_model: 384
+  n_layers: 8
+  d_state: 64
+  expand: 2
+  headdim: 64
+  ngroups: 1
+  rope_fraction: 1.0
+  chunk_size: 16
+  is_mimo: false
+  mimo_rank: 4
+  is_outproj_norm: true
+  dropout: 0.01
+  num_aa_classes: 22
+  local_kernel_size: 7
+  decoder_dim: 192
+  decoder_kernel_small: 3
+  decoder_kernel_large: 9
+  activation_checkpointing: true
+
+seq_len: 4096
+batch_size: 8
+num_workers: 6
+prefetch_factor: 4
+mask_prob: 0.15
+mean_span_len: 3
+
+lr: 0.0008
+lr_scheduler: cosine
+min_lr: 0.00008
+weight_decay: 0.1
+beta1: 0.9
+beta2: 0.95
+grad_clip: 1.0
+warmup_steps: 384
+
+max_steps: 3840
+eval_every: 512
+save_every: 2048
+log_every: 100
+max_checkpoints_to_keep: 3
+
+use_uncertainty_weighting: true
+w_region: 0.25
+w_aa: 0.25
+w_codon_phylo: 0.1
+w_mutation_effect: 0.15
+
+seed: 42
+precision: auto
+allow_tf32: true
+
+wandb_enabled: true
+wandb_project: lumina-ssm
+wandb_entity: ai4bio-lumina

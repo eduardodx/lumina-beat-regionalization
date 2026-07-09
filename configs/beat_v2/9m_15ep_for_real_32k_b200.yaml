@@ -1,0 +1,17 @@
+_inherit: _base.yaml
+
+seq_len: 32768
+batch_size: 8
+grad_accum_steps: 1
+
+mean_span_len: 6
+
+max_steps: 21600 # 15 epochs for reals
+warmup_steps: 1728 # 5% of max_steps
+eval_every: 1080
+save_every: 2048
+
+conservation_mix: 0.5
+
+output_dir: outputs/lumina_beat_v2_9m_15ep_for_real_32k_b200
+wandb_run_name: beat-v2-9m-15ep-for-real-32k-b200

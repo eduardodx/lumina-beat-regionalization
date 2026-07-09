@@ -1,0 +1,35 @@
+Metric,run_id,model_name,best_step,best_step_time,training_tokens,running_time,species,datasets,assay_type,track_name_clean
+0.33273169875513214,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR046BCI_M,PRO-cap,ENCSR046BCI_M
+0.29736757974778916,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR046BCI_P,PRO-cap,ENCSR046BCI_P
+0.3572073019919189,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR100LIJ_M,PRO-cap,ENCSR100LIJ_M
+0.3488590439915329,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR100LIJ_P,PRO-cap,ENCSR100LIJ_P
+0.26220930853669533,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR114HGS_M,PRO-cap,ENCSR114HGS_M
+0.292722833810217,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR114HGS_P,PRO-cap,ENCSR114HGS_P
+0.43878359414893614,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR154HRN_M,eCLIP,ENCSR154HRN_M
+0.4548252842887309,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR154HRN_P,eCLIP,ENCSR154HRN_P
+0.5314732004472958,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR249ROI_M,eCLIP,ENCSR249ROI_M
+0.5208024048128314,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR249ROI_P,eCLIP,ENCSR249ROI_P
+0.5582914542840309,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR321PWZ_M,eCLIP,ENCSR321PWZ_M
+0.5943184561242448,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR321PWZ_P,eCLIP,ENCSR321PWZ_P
+0.6547503431920723,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR325NFE,ATAC-seq,ENCSR325NFE
+0.4979666562060154,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR410DWV,ATAC-seq,ENCSR410DWV
+0.39508556853715826,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR484LTQ_M,eCLIP,ENCSR484LTQ_M
+0.4040069587670902,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR484LTQ_P,eCLIP,ENCSR484LTQ_P
+0.4920472875395038,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR487QSB,ATAC-seq,ENCSR487QSB
+0.4081933211678693,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR527JGN_M,polyA plus RNA-seq,ENCSR527JGN_M
+0.604377695440301,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR527JGN_P,polyA plus RNA-seq,ENCSR527JGN_P
+0.5841861153033664,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR619DQO_M,total RNA-seq,ENCSR619DQO_M
+0.6170201349599177,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR619DQO_P,total RNA-seq,ENCSR619DQO_P
+0.4032663463501069,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR628PLS,ATAC-seq,ENCSR628PLS
+0.4576829753407918,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR682BFG,Histone ChIP-seq,ENCSR682BFG
+0.4759096418087903,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR701YIC,total RNA-seq,ENCSR701YIC
+0.42784136088975605,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR754DRC,Histone ChIP-seq,ENCSR754DRC
+0.3573638748908317,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR799DGV_M,PRO-cap,ENCSR799DGV_M
+0.35447555645257584,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR799DGV_P,PRO-cap,ENCSR799DGV_P
+0.6249336184201071,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR814RGG,ATAC-seq,ENCSR814RGG
+0.4356792208178461,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR862QCH_M,eCLIP,ENCSR862QCH_M
+0.45192716296002033,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR862QCH_P,eCLIP,ENCSR862QCH_P
+0.49310345656418264,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR863PSM,Histone ChIP-seq,ENCSR863PSM
+0.3545597416253371,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR935RNW_M,PRO-cap,ENCSR935RNW_M
+0.352146519920939,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR935RNW_P,PRO-cap,ENCSR935RNW_P
+0.819339139571722,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,17500.0,0 days 05:59:16.474513,20900216832.0,24589.90853179,human,ENCSR962OTG,Histone ChIP-seq,ENCSR962OTG

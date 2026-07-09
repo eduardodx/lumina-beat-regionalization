@@ -1,0 +1,73 @@
+{
+  "generated_at_utc": "2026-06-29T12:18:56.982259+00:00",
+  "m5_dynamic_rescued_false_pathogenic_vs_m5_v2": 476,
+  "m5_dynamic_dangerous_false_benign_regressions_vs_m5_v2": 65,
+  "top_regression_genes": {
+    "ALMS1": 3,
+    "EYS": 3,
+    "F13B": 2,
+    "FKTN": 2,
+    "JUP": 2,
+    "MUC5B": 2,
+    "NLRP3": 2,
+    "VWF": 2,
+    "TNFRSF13C": 2,
+    "NPHP4": 2
+  },
+  "top_rescue_genes": {
+    "MUC5B": 12,
+    "ANKRD26": 6,
+    "ADGRV1": 6,
+    "VWF": 6,
+    "CPLANE1": 5,
+    "COL4A1": 5,
+    "COL12A1": 5,
+    "VPS13D": 5,
+    "ADAMTS10": 5,
+    "ALMS1": 4
+  },
+  "best_posthoc_candidate": [],
+  "best_posthoc_near_miss": [
+    {
+      "threshold": 0.425,
+      "br_only_mcc": 0.5989267609290376,
+      "br_only_recall": 0.9946949602122016,
+      "br_only_specificity": 0.44881889763779526,
+      "br_only_fp": 70,
+      "br_only_fn": 2,
+      "abraom_common_benign_mcc": 0.0,
+      "abraom_common_benign_recall": NaN,
+      "abraom_common_benign_specificity": 0.9669394164807009,
+      "abraom_common_benign_fp": 400,
+      "abraom_common_benign_fn": 0,
+      "abraom_pathogenic_present_mcc": 0.0,
+      "abraom_pathogenic_present_recall": 0.36809815950920244,
+      "abraom_pathogenic_present_specificity": NaN,
+      "abraom_pathogenic_present_fp": 0,
+      "abraom_pathogenic_present_fn": 103,
+      "global_nonbr_no_abraom_mcc": 0.16415155797717015,
+      "global_nonbr_no_abraom_recall": 0.9992581602373887,
+      "global_nonbr_no_abraom_specificity": 0.0421216848673947,
+      "global_nonbr_no_abraom_fp": 614,
+      "global_nonbr_no_abraom_fn": 1,
+      "discount_scale": 0.0,
+      "constraint_gap": 0.2958484420228299
+    }
+  ],
+  "error_outputs": {
+    "M0_false_pathogenic": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M0.false_pathogenic_abraom_common_benign.csv",
+    "M0_false_benign": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M0.false_benign_abraom_pathogenic_present.csv",
+    "M2_gnomad_only_false_pathogenic": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M2_gnomad_only.false_pathogenic_abraom_common_benign.csv",
+    "M2_gnomad_only_false_benign": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M2_gnomad_only.false_benign_abraom_pathogenic_present.csv",
+    "M4_dynamic_gated_false_pathogenic": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M4_dynamic_gated.false_pathogenic_abraom_common_benign.csv",
+    "M4_dynamic_gated_false_benign": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M4_dynamic_gated.false_benign_abraom_pathogenic_present.csv",
+    "M5_dynamic_gated_false_pathogenic": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M5_dynamic_gated.false_pathogenic_abraom_common_benign.csv",
+    "M5_dynamic_gated_false_benign": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M5_dynamic_gated.false_benign_abraom_pathogenic_present.csv",
+    "M7_dynamic_scrambled_false_pathogenic": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M7_dynamic_scrambled.false_pathogenic_abraom_common_benign.csv",
+    "M7_dynamic_scrambled_false_benign": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M7_dynamic_scrambled.false_benign_abraom_pathogenic_present.csv",
+    "M5_v2_calibrated_false_pathogenic": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M5_v2_calibrated.false_pathogenic_abraom_common_benign.csv",
+    "M5_v2_calibrated_false_benign": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M5_v2_calibrated.false_benign_abraom_pathogenic_present.csv",
+    "m5_dynamic_rescued_false_pathogenic_vs_m5_v2": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M5_dynamic.rescued_false_pathogenic_vs_M5_v2.csv",
+    "m5_dynamic_dangerous_false_benign_regressions_vs_m5_v2": "artifacts/adapter_fusion_error_analysis_deep/variant_error_tables/M5_dynamic.dangerous_false_benign_regressions_vs_M5_v2.csv"
+  }
+}

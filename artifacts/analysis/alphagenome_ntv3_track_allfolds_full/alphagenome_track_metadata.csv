@@ -1,0 +1,2 @@
+name,strand,Assay title,ontology_curie,biosample_name,biosample_type,biosample_life_stage,data_source,endedness,genetically_modified,nonzero_mean
+UBERON:0000056 ATAC-seq,.,ATAC-seq,UBERON:0000056,ureter,tissue,adult,encode,paired,False,0.48642194271087646

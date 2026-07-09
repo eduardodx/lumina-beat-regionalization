@@ -1,0 +1,2 @@
+window_ordinal,window_index,chrom,start,end,target_start,target_end,n_fraction,num_alpha_tracks,pearson_raw,pearson_ntv3_scaled_both,pearson_ntv3_target_only,target_raw_mean,alpha_raw_mean,target_ntv3_mean,alpha_ntv3_mean
+1,0,chr1,143479625,143512393,143489865,143502153,0.0,1,0.2807858655620776,0.2807858659011971,0.280785866356453,0.15190774202346802,0.00382298999466002,0.209523007273674,0.005272966343909502

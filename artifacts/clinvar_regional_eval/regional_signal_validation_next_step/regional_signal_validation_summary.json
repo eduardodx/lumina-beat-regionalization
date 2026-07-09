@@ -1,0 +1,18 @@
+{
+  "generated_at_utc": "2026-06-29T13:28:59.329774+00:00",
+  "output_dir": "artifacts/clinvar_regional_eval/regional_signal_validation_next_step",
+  "decision": "do_not_train_next: prioritize manual critical-error review and external validation; 92 P/LP false benign remain, 60 high-priority.",
+  "critical_errors": {
+    "false_benign_plp": 92,
+    "false_pathogenic_common_benign": 502
+  },
+  "derived_review_sentinel_rows": 757,
+  "control_modes": [
+    "within_gene_af_bin",
+    "within_af_bin_variant_type",
+    "within_specificity_bin_variant_type",
+    "within_chromosome_af_bin",
+    "within_chromosome_af_bin_variant_type",
+    "within_gene_af_bin_variant_type"
+  ]
+}

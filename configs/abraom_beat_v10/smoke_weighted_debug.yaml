@@ -1,0 +1,13 @@
+_inherit: _base.yaml
+
+abraom_dataset_arm: abraom_weighted
+max_steps: 5
+warmup_steps: 1
+eval_every: 0
+save_every: 5
+log_every: 1
+batch_size: 2
+grad_accum_steps: 1
+num_workers: 2
+prefetch_factor: 2
+wandb_run_name: beat-v10-abraom-smoke-weighted-debug

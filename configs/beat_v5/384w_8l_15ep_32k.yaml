@@ -1,0 +1,23 @@
+_inherit: _base.yaml
+
+seq_len: 32768
+
+# B200
+# batch_size: 6
+# grad_accum_steps: 4
+
+# H200 - p5en
+batch_size: 7
+grad_accum_steps: 4
+
+max_steps: 5365
+warmup_steps: 432
+eval_every: 512
+save_every: 1024
+
+conservation_mix: 0.5
+
+lr_scheduler: constant
+
+output_dir: outputs/lumina_beat_v5_384w_8l_15ep_32k
+wandb_run_name: beat-v5-384w-8l-15ep-32k

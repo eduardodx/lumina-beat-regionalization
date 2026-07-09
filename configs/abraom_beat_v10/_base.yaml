@@ -1,0 +1,113 @@
+# BEATv10 ABRAOM regional fine-tuning base.
+dataset_mode: abraom_sequences
+abraom_data_root: /opt/ml/input/data/abraom
+abraom_train_split: train
+abraom_val_split: val
+abraom_shuffle_shards: true
+chromosome_split_mode: full_hg38
+
+model: beat-v10
+model_config:
+  activation_checkpointing: false
+  checkpoint_use_reentrant: false
+  chunk_size: 64
+  conv_stem_kernels: [3, 7, 15]
+  d_model: 256
+  d_pure: 32
+  d_state: 128
+  dropout: 0.05
+  expand: 2
+  heads:
+    mlm: true
+    phylo100: false
+    zoo241: false
+    splice: false
+    region: false
+    gnomad: false
+    counterfactual_snv: false
+    regulatory: false
+  headdim: 64
+  is_mimo: false
+  is_outproj_norm: true
+  l_max: 32768
+  local_attention_heads: 4
+  local_attention_window: 256
+  mimo_rank: 4
+  n_downsample_stages: 3
+  n_mid_blocks: 8
+  ngroups: 1
+  num_counterfactual_effect_classes: 12
+  num_region_classes: 5
+  num_regulatory_tracks: 50
+  num_splice_classes: 5
+  position_embedding: sinusoidal
+  rope_fraction: 1.0
+  sequence_embedding_dim: 256
+  sparse_global_heads: 4
+  sparse_global_stride: 16
+  use_sequence_embedding: true
+  variant_residual_gamma: 0.5
+  vocab_size: 8
+
+seq_len: 4096
+length_warmup_enabled: false
+batch_size: 16
+grad_accum_steps: 4
+num_workers: 4
+prefetch_factor: 4
+mask_prob: 0.20
+mean_span_len: 8
+
+lr: 0.00005
+lr_scheduler: cosine
+min_lr: 0.000005
+weight_decay: 0.1
+beta1: 0.9
+beta2: 0.95
+grad_clip: 1.0
+warmup_steps: 500
+
+max_steps: 5000
+eval_every: 500
+save_every: 1000
+log_every: 50
+max_checkpoints_to_keep: 3
+
+loss_balancing: fixed
+w_mlm: 1.0
+w_phylo100: 0.0
+w_phylo470: 0.0
+w_structure: 0.0
+w_region: 0.0
+w_aa: 0.0
+w_codon_phylo: 0.0
+w_mutation_effect: 0.0
+w_counterfactual: 0.0
+w_allele: 0.0
+w_codon: 0.0
+w_encode: 0.0
+w_conservation_bin: 0.0
+w_splice_distance: 0.0
+w_codon_pos: 0.0
+w_exon_phase: 0.0
+w_counterfactual_snv: 0.0
+w_counterfactual_severity: 0.0
+w_rc: 0.0
+phylo_weighted_mlm: false
+conservation_mix: 0.0
+cds_enrichment_fraction: 0.0
+splice_window_oversample_fraction: 0.0
+hard_position_mix: 0.0
+counterfactual_fraction: 0.0
+allele_fraction: 0.0
+aux_loss_warmup_steps: 0
+encode_track_specs: []
+
+seed: 42
+precision: auto
+allow_tf32: true
+memory_preflight_enabled: false
+wandb_enabled: true
+wandb_project: lumina-ssm
+wandb_entity: ai4bio-lumina
+wandb_tags: [beat-v10, abraom-v2, regionalization]

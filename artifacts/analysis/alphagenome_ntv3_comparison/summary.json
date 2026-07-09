@@ -1,0 +1,37 @@
+{
+  "artifact_inputs": {
+    "alpha_track_metadata": "artifacts/analysis/alphagenome_ntv3_track_allfolds_full/alphagenome_track_metadata.csv",
+    "honest_deltas": "artifacts/analysis/ntv3_recent/best_vs_ntv3_8m_1page_honest/lumina_best_vs_ntv3_8m_honest_track_deltas.csv",
+    "public_best_slice": "artifacts/analysis/ntv3_recent/ntv3_latest_track_slice_analysis.csv",
+    "public_results": "artifacts/analysis/ntv3_recent/public_ntv3_space/ntv3_benchmark_results.csv",
+    "readout_metrics": "artifacts/analysis/alphagenome_ntv3_readout_allfolds_2048_512_fulltest/metrics.json",
+    "readout_weights": "artifacts/analysis/alphagenome_ntv3_readout_allfolds_2048_512_fulltest/readout_weights.json",
+    "zero_shot_metrics": "artifacts/analysis/alphagenome_ntv3_track_allfolds_full/metrics.json"
+  },
+  "best_model": "NTv3 650M (pos)",
+  "best_pearson": 0.7984862526257833,
+  "canonical_results_csv": "artifacts/analysis/alphagenome_ntv3_comparison/canonical_results.csv",
+  "comparison_report_html": "artifacts/analysis/alphagenome_ntv3_comparison/comparison_report.html",
+  "comparison_report_md": "artifacts/analysis/alphagenome_ntv3_comparison/comparison_report.md",
+  "generated_at_utc": "2026-06-07T20:24:52.598605+00:00",
+  "key_deltas": {
+    "alphagenome_readout_minus_lumina": 0.02642076285308903,
+    "alphagenome_readout_minus_zero_shot": 0.4018144145488572,
+    "lumina_minus_ntv3_8m": 0.0052545568550821375
+  },
+  "output_dir": "artifacts/analysis/alphagenome_ntv3_comparison",
+  "track_audit": {
+    "alphagenome_assay_title": "ATAC-seq",
+    "alphagenome_biosample_name": "ureter",
+    "alphagenome_ontology_curie": "UBERON:0000056",
+    "alphagenome_output_type": "ATAC",
+    "metadata_source": "artifacts/analysis/alphagenome_ntv3_track_allfolds_full/alphagenome_track_metadata.csv",
+    "ntv3_assay_type": "ATAC-seq",
+    "ntv3_track_name_clean": "ATAC_seq (ureter)",
+    "overlap_class": "exact_assay_tissue_match",
+    "rationale": "AlphaGenome metadata matches the NTv3 assay and the NTv3 public track label tissue.",
+    "track_id": "ENCSR814RGG"
+  },
+  "track_audit_csv": "artifacts/analysis/alphagenome_ntv3_comparison/track_audit.csv",
+  "track_id": "ENCSR814RGG"
+}

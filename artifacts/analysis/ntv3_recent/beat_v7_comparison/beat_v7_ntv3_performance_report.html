@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NTv3 beat-v7 performance report</title>
+  <style>
+:root {
+  --ink: #0f172a;
+  --muted: #475569;
+  --line: #dbe4ef;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --blue: #2563eb;
+  --amber: #f59e0b;
+  --teal: #0f766e;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Verdana, DejaVu Sans, Arial, sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at top left, #e0f2fe 0, transparent 32rem), linear-gradient(120deg, #f8fafc 0%, #eef2f7 100%);
+}
+.report { width: min(1220px, calc(100vw - 44px)); margin: 32px auto 56px; }
+.hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 52%, #0f766e 100%);
+  color: white;
+  border-radius: 28px;
+  padding: 38px 42px;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, .22);
+}
+.hero .eyebrow { color: #bfdbfe; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; font-weight: 800; }
+h1 { margin: 12px 0 12px; font-size: 42px; line-height: 1.08; letter-spacing: -.035em; }
+.hero p { max-width: 930px; color: #dbeafe; font-size: 18px; line-height: 1.55; margin: 0; }
+.grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 20px 0 24px; }
+.card { background: rgba(255,255,255,.96); border: 1px solid var(--line); border-radius: 20px; padding: 18px; box-shadow: 0 14px 36px rgba(15, 23, 42, .08); }
+.card .label { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.card .value { font-size: 30px; font-weight: 850; margin-top: 8px; letter-spacing: -.02em; }
+.card .detail { color: var(--muted); font-size: 14px; margin-top: 6px; line-height: 1.4; }
+.section { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; margin-top: 22px; padding: 26px; box-shadow: 0 16px 44px rgba(15, 23, 42, .07); }
+h2 { margin: 0 0 8px; font-size: 26px; letter-spacing: -.02em; }
+.section > p { color: var(--muted); line-height: 1.55; margin: 0 0 20px; }
+.figure-wrap { overflow: auto; border-radius: 18px; border: 1px solid var(--line); background: #fff; }
+.figure-wrap svg { width: 100%; height: auto; display: block; }
+.findings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.finding { border-left: 5px solid var(--blue); background: #f8fafc; border-radius: 14px; padding: 14px 16px; line-height: 1.5; }
+.finding strong { display: block; margin-bottom: 4px; }
+.version-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.version-card { border: 1px solid var(--line); border-radius: 18px; padding: 18px; background: #f8fafc; }
+.version-card.best-card { background: #fffbeb; border-color: #fbbf24; }
+.version-topline { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.version-topline span { font-size: 19px; font-weight: 850; }
+.version-topline strong { font-size: 22px; color: #0f766e; }
+.best-card .version-topline strong { color: #92400e; }
+dl { margin: 0; display: grid; gap: 8px; }
+dt { color: #334155; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; font-weight: 850; }
+dd { margin: 0 0 4px; color: #475569; line-height: 1.5; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; color: #334155; background: #f1f5f9; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+tr.highlight { background: #fffbeb; }
+.badge { display: inline-flex; border-radius: 999px; padding: 3px 9px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.badge.best { background: #fef3c7; color: #92400e; }
+.badge.ours { background: #dbeafe; color: #1d4ed8; }
+.badge.rival { background: #e2e8f0; color: #334155; }
+.delta-pos { color: #047857; font-weight: 850; white-space: nowrap; }
+.footer { color: #64748b; font-size: 13px; line-height: 1.5; margin: 18px 4px 0; }
+@media (max-width: 900px) { .grid, .findings, .version-grid { grid-template-columns: 1fr; } h1 { font-size: 34px; } }
+@media print { body { background: white; } .report { width: 100%; margin: 0; } .hero, .section, .card { box-shadow: none; } .grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+</head>
+<body>
+  <main class="report">
+    <section class="hero">
+      <div class="eyebrow">Lumina SSM · NTv3 human functional</div>
+      <h1>Comparativo beat-v7: o que cada treinamento incorporou e como mudou a performance</h1>
+      <p>Relatorio revisado para separar ranking, explicacoes tecnicas e desempenho por assay. A metrica principal e o PCC medio nos 34 tracks funcionais humanos.</p>
+    </section>
+
+    <section class="grid" aria-label="Metricas principais">
+      <article class="card"><div class="label">Melhor beat-v7</div><div class="value">0.5081</div><div class="detail">aggressive 20k, dentro do budget comparavel</div></article>
+      <article class="card"><div class="label">Ganho vs linear</div><div class="value">+0.0476</div><div class="detail">efeito acumulado da receita completa</div></article>
+      <article class="card"><div class="label">Delta vs Recipe A 40k</div><div class="value">+0.0008</div><div class="detail">melhor score com metade dos tokens</div></article>
+      <article class="card"><div class="label">Delta vs NTv3 8M pre</div><div class="value">+0.0098</div><div class="detail">baseline pequeno superado</div></article>
+    </section>
+
+    <section class="section">
+      <h2>Visual principal revisado</h2>
+      <p>O layout foi refeito para evitar sobreposicoes: ranking, cards tecnicos e heatmap por assay agora ficam em blocos separados.</p>
+      <div class="figure-wrap"><svg xmlns="http://www.w3.org/2000/svg" width="1900" height="2520" viewBox="0 0 1900 2520">
+<rect x="0" y="0" width="1900" height="2520" rx="0" fill="#f8fafc" stroke="none" stroke-width="1" />
+<rect x="32" y="32" width="1836" height="2456" rx="28" fill="#ffffff" stroke="#dbe4ef" stroke-width="2" />
+<text x="70" y="92" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="36" fill="#0f172a" font-weight="800" text-anchor="start">NTv3 human functional: Lumina beat-v7 vs rivais</text>
+<text x="70" y="130" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="18" fill="#475569" font-weight="400" text-anchor="start">PCC medio em 34 tracks funcionais. Grafico revisado com blocos separados para evitar sobreposicao.</text>
+<text x="70" y="165" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="25" fill="#0f172a" font-weight="800" text-anchor="start">Ranking comparativo</text>
+<line x1="644.8" y1="176" x2="644.8" y2="910" stroke="#e2e8f0" stroke-width="1" />
+<text x="644.8275862068964" y="178" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="600" text-anchor="middle">0.35</text>
+<line x1="769.0" y1="176" x2="769.0" y2="910" stroke="#e2e8f0" stroke-width="1" />
+<text x="768.9655172413793" y="178" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="600" text-anchor="middle">0.40</text>
+<line x1="893.1" y1="176" x2="893.1" y2="910" stroke="#e2e8f0" stroke-width="1" />
+<text x="893.1034482758621" y="178" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="600" text-anchor="middle">0.45</text>
+<line x1="1017.2" y1="176" x2="1017.2" y2="910" stroke="#e2e8f0" stroke-width="1" />
+<text x="1017.2413793103449" y="178" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="600" text-anchor="middle">0.50</text>
+<line x1="1141.4" y1="176" x2="1141.4" y2="910" stroke="#e2e8f0" stroke-width="1" />
+<text x="1141.3793103448277" y="178" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="600" text-anchor="middle">0.55</text>
+<line x1="1265.5" y1="176" x2="1265.5" y2="910" stroke="#e2e8f0" stroke-width="1" />
+<text x="1265.5172413793102" y="178" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="600" text-anchor="middle">0.60</text>
+<line x1="1012.9" y1="185" x2="1012.9" y2="910" stroke="#ef4444" stroke-width="2" stroke-dasharray="7 7" />
+<text x="1020.8618604507586" y="202" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#b91c1c" font-weight="700" text-anchor="start">NTv3 8M pre</text>
+<text x="75" y="213" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#334155" font-weight="500" text-anchor="start">1. NTv3 650M (pos)</text>
+<rect x="620.0" y="190" width="693.3751816493791" height="34" rx="7" fill="#94a3b8" stroke="none" stroke-width="1" />
+<text x="1322.375181649379" y="213" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.6193</text>
+<text x="1440" y="213" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#64748b" font-weight="600" text-anchor="start">rival publico</text>
+<text x="75" y="259" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#334155" font-weight="500" text-anchor="start">2. NTv3 650M (pre)</text>
+<rect x="620.0" y="236" width="594.2947614802761" height="34" rx="7" fill="#94a3b8" stroke="none" stroke-width="1" />
+<text x="1223.294761480276" y="259" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.5794</text>
+<text x="75" y="305" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#334155" font-weight="500" text-anchor="start">3. NTv3 100M (pre)</text>
+<rect x="620.0" y="282" width="472.54946258979294" height="34" rx="7" fill="#94a3b8" stroke="none" stroke-width="1" />
+<text x="1101.549462589793" y="305" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.5303</text>
+<text x="1440" y="305" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#64748b" font-weight="600" text-anchor="start">rival publico</text>
+<text x="75" y="351" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#334155" font-weight="500" text-anchor="start">4. Residual CNN 44M</text>
+<rect x="620.0" y="328" width="436.0679742811035" height="34" rx="7" fill="#94a3b8" stroke="none" stroke-width="1" />
+<text x="1065.0679742811035" y="351" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.5156</text>
+<rect x="58" y="368" width="1784" height="46" rx="10" fill="#fffbeb" stroke="#fbbf24" stroke-width="2" />
+<text x="75" y="397" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="700" text-anchor="start">5. Lumina beat-v7 aggressive 20k</text>
+<rect x="620.0" y="374" width="417.3005854601379" height="34" rx="7" fill="#f59e0b" stroke="none" stroke-width="1" />
+<text x="1046.3005854601379" y="397" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.5081</text>
+<text x="1440" y="397" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#475569" font-weight="700" text-anchor="start">+0.0476 vs linear</text>
+<text x="75" y="443" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="700" text-anchor="start">6. Lumina beat-v7 Recipe A 40k</text>
+<rect x="620.0" y="420" width="415.28423483255165" height="34" rx="7" fill="#0f766e" stroke="none" stroke-width="1" />
+<text x="1044.2842348325516" y="443" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.5073</text>
+<text x="1440" y="443" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#475569" font-weight="700" text-anchor="start">+0.0468 vs linear</text>
+<text x="75" y="489" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#334155" font-weight="500" text-anchor="start">7. NTv3 8M (pre)</text>
+<rect x="620.0" y="466" width="392.8618604507586" height="34" rx="7" fill="#94a3b8" stroke="none" stroke-width="1" />
+<text x="1021.8618604507586" y="489" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.4982</text>
+<text x="1440" y="489" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#64748b" font-weight="600" text-anchor="start">rival publico</text>
+<text x="75" y="535" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="700" text-anchor="start">8. Lumina beat-v7 gated-hybrid</text>
+<rect x="620.0" y="512" width="360.6987678728276" height="34" rx="7" fill="#2563eb" stroke="none" stroke-width="1" />
+<text x="989.6987678728276" y="535" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.4853</text>
+<text x="1440" y="535" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#475569" font-weight="700" text-anchor="start">+0.0248 vs linear</text>
+<text x="75" y="581" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#334155" font-weight="500" text-anchor="start">9. Caduceus 7M</text>
+<rect x="620.0" y="558" width="359.2372471895171" height="34" rx="7" fill="#94a3b8" stroke="none" stroke-width="1" />
+<text x="988.2372471895171" y="581" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.4847</text>
+<text x="1440" y="581" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#64748b" font-weight="600" text-anchor="start">rival publico</text>
+<text x="75" y="627" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="700" text-anchor="start">10. Lumina beat-v7 bio-readout</text>
+<rect x="620.0" y="604" width="357.79011994179314" height="34" rx="7" fill="#2563eb" stroke="none" stroke-width="1" />
+<text x="986.7901199417931" y="627" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.4841</text>
+<text x="1440" y="627" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#475569" font-weight="700" text-anchor="start">+0.0237 vs linear</text>
+<text x="75" y="673" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="700" text-anchor="start">11. Lumina beat-v7 multiscale</text>
+<rect x="620.0" y="650" width="355.95676696468956" height="34" rx="7" fill="#2563eb" stroke="none" stroke-width="1" />
+<text x="984.9567669646896" y="673" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.4834</text>
+<text x="1440" y="673" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#475569" font-weight="700" text-anchor="start">+0.0229 vs linear</text>
+<text x="75" y="719" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="700" text-anchor="start">12. Lumina beat-v7 MLP head</text>
+<rect x="620.0" y="696" width="353.292063931862" height="34" rx="7" fill="#2563eb" stroke="none" stroke-width="1" />
+<text x="982.292063931862" y="719" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.4823</text>
+<text x="1440" y="719" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#475569" font-weight="700" text-anchor="start">+0.0218 vs linear</text>
+<text x="75" y="765" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="700" text-anchor="start">13. Lumina beat-v7 local-conv</text>
+<rect x="620.0" y="742" width="328.3581743180689" height="34" rx="7" fill="#2563eb" stroke="none" stroke-width="1" />
+<text x="957.3581743180689" y="765" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.4723</text>
+<text x="1440" y="765" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#475569" font-weight="700" text-anchor="start">+0.0118 vs linear</text>
+<text x="75" y="811" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="700" text-anchor="start">14. Lumina beat-v7 linear</text>
+<rect x="620.0" y="788" width="299.0595839263449" height="34" rx="7" fill="#2563eb" stroke="none" stroke-width="1" />
+<text x="928.0595839263449" y="811" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.4605</text>
+<text x="1440" y="811" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="16" fill="#475569" font-weight="700" text-anchor="start">+0.0000 vs linear</text>
+<text x="75" y="857" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#334155" font-weight="500" text-anchor="start">15. Residual CNN 700k</text>
+<rect x="620.0" y="834" width="245.43816787365517" height="34" rx="7" fill="#94a3b8" stroke="none" stroke-width="1" />
+<text x="874.4381678736552" y="857" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.4389</text>
+<text x="75" y="903" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#334155" font-weight="500" text-anchor="start">16. HyenaDNA 7M</text>
+<rect x="620.0" y="880" width="45.76209017462054" height="34" rx="7" fill="#94a3b8" stroke="none" stroke-width="1" />
+<text x="674.7620901746205" y="903" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">0.3584</text>
+<rect x="70" y="970" width="405" height="115" rx="18" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5" />
+<text x="92" y="1004" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#64748b" font-weight="800" text-anchor="start">Melhor beat-v7</text>
+<text x="92" y="1044" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="31" fill="#0f172a" font-weight="800" text-anchor="start">0.5081</text>
+<text x="92" y="1071" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#475569" font-weight="600" text-anchor="start">aggressive 20k</text>
+<rect x="515" y="970" width="405" height="115" rx="18" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5" />
+<text x="537" y="1004" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#64748b" font-weight="800" text-anchor="start">Delta vs linear</text>
+<text x="537" y="1044" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="31" fill="#0f172a" font-weight="800" text-anchor="start">+0.0476</text>
+<text x="537" y="1071" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#475569" font-weight="600" text-anchor="start">ganho da receita completa</text>
+<rect x="960" y="970" width="405" height="115" rx="18" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5" />
+<text x="982" y="1004" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#64748b" font-weight="800" text-anchor="start">Delta vs Recipe A 40k</text>
+<text x="982" y="1044" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="31" fill="#0f172a" font-weight="800" text-anchor="start">+0.0008</text>
+<text x="982" y="1071" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#475569" font-weight="600" text-anchor="start">metade dos tokens</text>
+<rect x="1405" y="970" width="405" height="115" rx="18" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5" />
+<text x="1427" y="1004" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#64748b" font-weight="800" text-anchor="start">Delta vs NTv3 8M pre</text>
+<text x="1427" y="1044" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="31" fill="#0f172a" font-weight="800" text-anchor="start">+0.0098</text>
+<text x="1427" y="1071" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#475569" font-weight="600" text-anchor="start">baseline pequeno superado</text>
+<text x="70" y="1145" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="27" fill="#0f172a" font-weight="800" text-anchor="start">Diferencial tecnico de cada versao beat-v7</text>
+<text x="70" y="1175" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#64748b" font-weight="400" text-anchor="start">Cada card resume o que foi incorporado, a hipotese testada e o que o resultado mostrou.</text>
+<rect x="70" y="1207" width="855" height="118" rx="16" fill="#fffbeb" stroke="#fbbf24" stroke-width="2" />
+<text x="88" y="1235" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="20" fill="#92400e" font-weight="800" text-anchor="start">Aggressive 20k</text>
+<text x="88" y="1262" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">Mantem bio-readout, EMA e bias init, mas aumenta backbone LR para 1e-4, usa</text>
+<text x="88" y="1282" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">LLRD 0.8, dropout 0.02 e head-only warmup menor.</text>
+<text x="88" y="1301" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">Novo melhor resultado: 0.5081 em 20k. Superou a Recipe A 40k com metade dos tokens,</text>
+<text x="88" y="1319" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">sustentando que a adaptacao do backbone era conservadora demais.</text>
+<rect x="965" y="1207" width="855" height="118" rx="16" fill="#f8fafc" stroke="#dbe4ef" stroke-width="1" />
+<text x="983" y="1235" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="20" fill="#0f172a" font-weight="800" text-anchor="start">Recipe A 40k</text>
+<text x="983" y="1262" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">Bio-readout simples com bias init por media do target, cosine schedule, EMA,</text>
+<text x="983" y="1282" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">LLRD e treino 2x mais longo.</text>
+<text x="983" y="1301" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">Chegou a 0.5073 e melhorou ate o ultimo step. Indicou ausencia de overfit e</text>
+<text x="983" y="1319" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">subadaptacao do backbone.</text>
+<rect x="70" y="1343" width="855" height="118" rx="16" fill="#f8fafc" stroke="#dbe4ef" stroke-width="1" />
+<text x="88" y="1371" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="20" fill="#0f172a" font-weight="800" text-anchor="start">Gated-hybrid</text>
+<text x="88" y="1398" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">Combina MLP e ramo conv local com gate aprendido por track, usando tambem</text>
+<text x="88" y="1418" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">phylo/structure.</text>
+<text x="88" y="1437" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">Score 0.4853, mas auditoria mostrou gate medio perto de 2%. O ramo conv ficou</text>
+<text x="88" y="1455" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">praticamente apagado; a narrativa de gating biologico foi falsificada.</text>
+<rect x="965" y="1343" width="855" height="118" rx="16" fill="#f8fafc" stroke="#dbe4ef" stroke-width="1" />
+<text x="983" y="1371" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="20" fill="#0f172a" font-weight="800" text-anchor="start">Bio-readout</text>
+<text x="983" y="1398" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">MLP com features auxiliares phylo/structure projetadas e concatenadas ao</text>
+<text x="983" y="1418" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">hidden do beat-v7.</text>
+<text x="983" y="1437" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">Chegou a 0.4841. Ganho pequeno, mais estabilizador do que transformacional.</text>
+<rect x="70" y="1479" width="855" height="118" rx="16" fill="#f8fafc" stroke="#dbe4ef" stroke-width="1" />
+<text x="88" y="1507" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="20" fill="#0f172a" font-weight="800" text-anchor="start">Multiscale</text>
+<text x="88" y="1534" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">Cabeca com ramos convolucionais dilatados paralelos, sem gate, para escalas</text>
+<text x="88" y="1554" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">local, media e longa.</text>
+<text x="88" y="1573" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">Score 0.4834. Melhorou ATAC/Histone, mas prejudicou PRO-cap/eCLIP. O trade-off por</text>
+<text x="88" y="1591" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">assay anulou o ganho global.</text>
+<rect x="965" y="1479" width="855" height="118" rx="16" fill="#f8fafc" stroke="#dbe4ef" stroke-width="1" />
+<text x="983" y="1507" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="20" fill="#0f172a" font-weight="800" text-anchor="start">MLP head</text>
+<text x="983" y="1534" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">Troca a projecao linear por uma cabeca MLP nao-linear, ainda sem sinais</text>
+<text x="983" y="1554" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">auxiliares.</text>
+<text x="983" y="1573" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">Subiu para 0.4823. Foi o maior salto inicial e confirmou que linear era capacidade</text>
+<text x="983" y="1591" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">insuficiente.</text>
+<rect x="70" y="1615" width="855" height="118" rx="16" fill="#f8fafc" stroke="#dbe4ef" stroke-width="1" />
+<text x="88" y="1643" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="20" fill="#0f172a" font-weight="800" text-anchor="start">Local conv</text>
+<text x="88" y="1670" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">Adiciona convolucao local k=15 na cabeca para capturar vizinhanca curta ao</text>
+<text x="88" y="1690" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">redor de cada base.</text>
+<text x="88" y="1709" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">Caiu para 0.4723. Ajudou alguns sinais amplos, mas piorou o score global; contexto</text>
+<text x="88" y="1727" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">local isolado nao foi o gargalo principal.</text>
+<rect x="965" y="1615" width="855" height="118" rx="16" fill="#f8fafc" stroke="#dbe4ef" stroke-width="1" />
+<text x="983" y="1643" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="20" fill="#0f172a" font-weight="800" text-anchor="start">Linear</text>
+<text x="983" y="1670" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">Backbone beat-v7 com ultimo hidden state denso em 1 bp e uma projecao linear</text>
+<text x="983" y="1690" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="600" text-anchor="start">por track.</text>
+<text x="983" y="1709" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">Ficou em 0.4605. Serviu como piso experimental e mostrou que a cabeca linear</text>
+<text x="983" y="1727" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="14" fill="#64748b" font-weight="500" text-anchor="start">subaproveitava o backbone.</text>
+<text x="70" y="1840" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="27" fill="#0f172a" font-weight="800" text-anchor="start">Performance por assay nas versoes beat-v7</text>
+<text x="70" y="1875" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#64748b" font-weight="400" text-anchor="start">Valores sao medias de PCC por grupo de tracks. Borda amarela marca o melhor por assay.</text>
+<text x="495.0" y="1957" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="800" text-anchor="middle">PRO-cap</text>
+<text x="715.0" y="1957" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="800" text-anchor="middle">eCLIP</text>
+<text x="935.0" y="1957" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="800" text-anchor="middle">ATAC</text>
+<text x="1155.0" y="1957" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="800" text-anchor="middle">Histone</text>
+<text x="1375.0" y="1957" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="800" text-anchor="middle">polyA RNA</text>
+<text x="1595.0" y="1957" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#334155" font-weight="800" text-anchor="middle">total RNA</text>
+<text x="82" y="2002" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="600" text-anchor="start">Linear</text>
+<rect x="390" y="1978" width="210" height="35" rx="6" fill="#eff6ff" stroke="#ffffff" stroke-width="1" />
+<text x="495.0" y="2001" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.3310</text>
+<rect x="610" y="1978" width="210" height="35" rx="6" fill="#549ee5" stroke="#ffffff" stroke-width="1" />
+<text x="715.0" y="2001" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.4785</text>
+<rect x="830" y="1978" width="210" height="35" rx="6" fill="#3089a7" stroke="#ffffff" stroke-width="1" />
+<text x="935.0" y="2001" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5346</text>
+<rect x="1050" y="1978" width="210" height="35" rx="6" fill="#278497" stroke="#ffffff" stroke-width="1" />
+<text x="1155.0" y="2001" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5495</text>
+<rect x="1270" y="1978" width="210" height="35" rx="6" fill="#4294c6" stroke="#ffffff" stroke-width="1" />
+<text x="1375.0" y="2001" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5063</text>
+<rect x="1490" y="1978" width="210" height="35" rx="6" fill="#21808c" stroke="#ffffff" stroke-width="1" />
+<text x="1595.0" y="2001" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5590</text>
+<text x="82" y="2046" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="600" text-anchor="start">MLP</text>
+<rect x="390" y="2022" width="210" height="35" rx="6" fill="#bcd9fd" stroke="#ffffff" stroke-width="1" />
+<text x="495.0" y="2045" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.3764</text>
+<rect x="610" y="2022" width="210" height="35" rx="6" fill="#4998d3" stroke="#ffffff" stroke-width="1" />
+<text x="715.0" y="2045" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.4945</text>
+<rect x="830" y="2022" width="210" height="35" rx="6" fill="#2a869d" stroke="#ffffff" stroke-width="1" />
+<text x="935.0" y="2045" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5438</text>
+<rect x="1050" y="2022" width="210" height="35" rx="6" fill="#228190" stroke="#ffffff" stroke-width="1" />
+<text x="1155.0" y="2045" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5563</text>
+<rect x="1270" y="2022" width="210" height="35" rx="6" fill="#398eb6" stroke="#ffffff" stroke-width="1" />
+<text x="1375.0" y="2045" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5208</text>
+<rect x="1490" y="2022" width="210" height="35" rx="6" fill="#1b7d83" stroke="#ffffff" stroke-width="1" />
+<text x="1595.0" y="2045" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5677</text>
+<text x="82" y="2090" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="600" text-anchor="start">Local conv</text>
+<rect x="390" y="2066" width="210" height="35" rx="6" fill="#dbebfe" stroke="#ffffff" stroke-width="1" />
+<text x="495.0" y="2089" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.3484</text>
+<rect x="610" y="2066" width="210" height="35" rx="6" fill="#4e9bdb" stroke="#ffffff" stroke-width="1" />
+<text x="715.0" y="2089" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.4871</text>
+<rect x="830" y="2066" width="210" height="35" rx="6" fill="#268496" stroke="#ffffff" stroke-width="1" />
+<text x="935.0" y="2089" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5501</text>
+<rect x="1050" y="2066" width="210" height="35" rx="6" fill="#20808c" stroke="#ffffff" stroke-width="1" />
+<text x="1155.0" y="2089" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5595</text>
+<rect x="1270" y="2066" width="210" height="35" rx="6" fill="#3f92c2" stroke="#ffffff" stroke-width="1" />
+<text x="1375.0" y="2089" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5105</text>
+<rect x="1490" y="2066" width="210" height="35" rx="6" fill="#1d7e87" stroke="#ffffff" stroke-width="1" />
+<text x="1595.0" y="2089" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5640</text>
+<text x="82" y="2134" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="600" text-anchor="start">Bio-readout</text>
+<rect x="390" y="2110" width="210" height="35" rx="6" fill="#bbd8fd" stroke="#ffffff" stroke-width="1" />
+<text x="495.0" y="2133" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.3778</text>
+<rect x="610" y="2110" width="210" height="35" rx="6" fill="#4a98d3" stroke="#ffffff" stroke-width="1" />
+<text x="715.0" y="2133" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.4945</text>
+<rect x="830" y="2110" width="210" height="35" rx="6" fill="#278498" stroke="#ffffff" stroke-width="1" />
+<text x="935.0" y="2133" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5487</text>
+<rect x="1050" y="2110" width="210" height="35" rx="6" fill="#21808c" stroke="#ffffff" stroke-width="1" />
+<text x="1155.0" y="2133" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5592</text>
+<rect x="1270" y="2110" width="210" height="35" rx="6" fill="#3a8fb8" stroke="#ffffff" stroke-width="1" />
+<text x="1375.0" y="2133" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5192</text>
+<rect x="1490" y="2110" width="210" height="35" rx="6" fill="#187b7d" stroke="#ffffff" stroke-width="1" />
+<text x="1595.0" y="2133" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5729</text>
+<text x="82" y="2178" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="600" text-anchor="start">Gated</text>
+<rect x="390" y="2154" width="210" height="35" rx="6" fill="#b7d6fd" stroke="#ffffff" stroke-width="1" />
+<text x="495.0" y="2177" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.3808</text>
+<rect x="610" y="2154" width="210" height="35" rx="6" fill="#4897d1" stroke="#ffffff" stroke-width="1" />
+<text x="715.0" y="2177" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.4964</text>
+<rect x="830" y="2154" width="210" height="35" rx="6" fill="#288499" stroke="#ffffff" stroke-width="1" />
+<text x="935.0" y="2177" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5475</text>
+<rect x="1050" y="2154" width="210" height="35" rx="6" fill="#20808b" stroke="#ffffff" stroke-width="1" />
+<text x="1155.0" y="2177" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5605</text>
+<rect x="1270" y="2154" width="210" height="35" rx="6" fill="#398eb6" stroke="#ffffff" stroke-width="1" />
+<text x="1375.0" y="2177" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5208</text>
+<rect x="1490" y="2154" width="210" height="35" rx="6" fill="#1a7d82" stroke="#ffffff" stroke-width="1" />
+<text x="1595.0" y="2177" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5689</text>
+<text x="82" y="2222" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="600" text-anchor="start">Multiscale</text>
+<rect x="390" y="2198" width="210" height="35" rx="6" fill="#c0dbfd" stroke="#ffffff" stroke-width="1" />
+<text x="495.0" y="2221" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.3729</text>
+<rect x="610" y="2198" width="210" height="35" rx="6" fill="#4b99d5" stroke="#ffffff" stroke-width="1" />
+<text x="715.0" y="2221" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.4928</text>
+<rect x="830" y="2198" width="210" height="35" rx="6" fill="#258395" stroke="#ffffff" stroke-width="1" />
+<text x="935.0" y="2221" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5517</text>
+<rect x="1050" y="2198" width="210" height="35" rx="6" fill="#1c7e84" stroke="#ffffff" stroke-width="1" />
+<text x="1155.0" y="2221" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5664</text>
+<rect x="1270" y="2198" width="210" height="35" rx="6" fill="#3a8fb7" stroke="#ffffff" stroke-width="1" />
+<text x="1375.0" y="2221" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5197</text>
+<rect x="1490" y="2198" width="210" height="35" rx="6" fill="#197c7f" stroke="#ffffff" stroke-width="1" />
+<text x="1595.0" y="2221" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5712</text>
+<text x="82" y="2266" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="600" text-anchor="start">Recipe A 40k</text>
+<rect x="390" y="2242" width="210" height="35" rx="6" fill="#87bbfb" stroke="#ffffff" stroke-width="1" />
+<text x="495.0" y="2265" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.4240</text>
+<rect x="610" y="2242" width="210" height="35" rx="6" fill="#3f92c0" stroke="#f59e0b" stroke-width="3" />
+<text x="715.0" y="2265" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5117</text>
+<rect x="830" y="2242" width="210" height="35" rx="6" fill="#238291" stroke="#ffffff" stroke-width="1" />
+<text x="935.0" y="2265" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5545</text>
+<rect x="1050" y="2242" width="210" height="35" rx="6" fill="#187b7e" stroke="#f59e0b" stroke-width="3" />
+<text x="1155.0" y="2265" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5724</text>
+<rect x="1270" y="2242" width="210" height="35" rx="6" fill="#318aa8" stroke="#ffffff" stroke-width="1" />
+<text x="1375.0" y="2265" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5338</text>
+<rect x="1490" y="2242" width="210" height="35" rx="6" fill="#0f766e" stroke="#ffffff" stroke-width="1" />
+<text x="1595.0" y="2265" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5868</text>
+<text x="82" y="2310" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="17" fill="#0f172a" font-weight="800" text-anchor="start">Aggressive 20k</text>
+<rect x="390" y="2286" width="210" height="35" rx="6" fill="#86bbfb" stroke="#f59e0b" stroke-width="3" />
+<text x="495.0" y="2309" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.4245</text>
+<rect x="610" y="2286" width="210" height="35" rx="6" fill="#3f92c1" stroke="#ffffff" stroke-width="1" />
+<text x="715.0" y="2309" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5111</text>
+<rect x="830" y="2286" width="210" height="35" rx="6" fill="#20808c" stroke="#f59e0b" stroke-width="3" />
+<text x="935.0" y="2309" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5598</text>
+<rect x="1050" y="2286" width="210" height="35" rx="6" fill="#197c7f" stroke="#ffffff" stroke-width="1" />
+<text x="1155.0" y="2309" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5716</text>
+<rect x="1270" y="2286" width="210" height="35" rx="6" fill="#2f89a5" stroke="#f59e0b" stroke-width="3" />
+<text x="1375.0" y="2309" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5362</text>
+<rect x="1490" y="2286" width="210" height="35" rx="6" fill="#0f766e" stroke="#f59e0b" stroke-width="3" />
+<text x="1595.0" y="2309" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#0f172a" font-weight="800" text-anchor="middle">0.5869</text>
+<text x="70" y="2410" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#64748b" font-weight="400" text-anchor="start">Fonte rivais: Hugging Face Space InstaDeepAI/ntv3_benchmark data/ntv3_benchmark_results.csv. Lumina: artefatos S3/local.</text>
+<text x="70" y="2438" font-family="Verdana, DejaVu Sans, Arial, sans-serif" font-size="15" fill="#64748b" font-weight="400" text-anchor="start">Revisado em 2026-05-23 21:34 UTC.</text>
+</svg>
+</div>
+    </section>
+
+    <section class="section">
+      <h2>Conclusoes tecnicas</h2>
+      <div class="findings">
+        <div class="finding"><strong>1. A melhor alavanca foi receita de fine-tuning.</strong> O ganho principal veio de LR separado, LLRD, EMA, bias init e adaptacao mais agressiva do backbone, nao de cabecas mais complexas.</div>
+        <div class="finding"><strong>2. O 20k agressivo validou subadaptacao.</strong> Como a Recipe A 40k nao overfitou, aumentar a taxa efetiva de adaptacao do backbone fez sentido e gerou o melhor score.</div>
+        <div class="finding"><strong>3. Gating biologico foi falsificado.</strong> A auditoria dos gates mostrou ramo conv quase apagado. Portanto o resultado gated nao justifica continuar desenhando mecanismos de gate local.</div>
+        <div class="finding"><strong>4. Multiscale tem trade-off por assay.</strong> Convs dilatadas ajudaram ATAC/Histone, mas perderam em PRO-cap/eCLIP, entao nao melhoraram o objetivo global.</div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>O que cada versao beat-v7 incorpora</h2>
+      <p>Esta secao explicita o diferencial tecnico de cada treinamento, a hipotese testada e a leitura do resultado.</p>
+      <div class="version-grid">
+      <article class="version-card best-card">
+        <div class="version-topline"><span>Aggressive 20k</span><strong>0.5081</strong></div>
+        <dl>
+          <dt>O que incorpora</dt><dd>Mantem bio-readout, EMA e bias init, mas aumenta backbone LR para 1e-4, usa LLRD 0.8, dropout 0.02 e head-only warmup menor.</dd>
+          <dt>Hipotese testada</dt><dd>Se 40k nao overfitou, o beat-v7 podia adaptar mais rapido dentro do budget NTv3 de 20k.</dd>
+          <dt>Achado</dt><dd>Novo melhor resultado: 0.5081 em 20k. Superou a Recipe A 40k com metade dos tokens, sustentando que a adaptacao do backbone era conservadora demais.</dd>
+        </dl>
+      </article>
+    
+      <article class="version-card">
+        <div class="version-topline"><span>Recipe A 40k</span><strong>0.5073</strong></div>
+        <dl>
+          <dt>O que incorpora</dt><dd>Bio-readout simples com bias init por media do target, cosine schedule, EMA, LLRD e treino 2x mais longo.</dd>
+          <dt>Hipotese testada</dt><dd>A receita de fine-tuning, nao a cabeca, era o gargalo; mais passos testariam se havia overfit.</dd>
+          <dt>Achado</dt><dd>Chegou a 0.5073 e melhorou ate o ultimo step. Indicou ausencia de overfit e subadaptacao do backbone.</dd>
+        </dl>
+      </article>
+    
+      <article class="version-card">
+        <div class="version-topline"><span>Gated-hybrid</span><strong>0.4853</strong></div>
+        <dl>
+          <dt>O que incorpora</dt><dd>Combina MLP e ramo conv local com gate aprendido por track, usando tambem phylo/structure.</dd>
+          <dt>Hipotese testada</dt><dd>Cada assay escolheria dinamicamente quanto usar de contexto local versus leitura MLP.</dd>
+          <dt>Achado</dt><dd>Score 0.4853, mas auditoria mostrou gate medio perto de 2%. O ramo conv ficou praticamente apagado; a narrativa de gating biologico foi falsificada.</dd>
+        </dl>
+      </article>
+    
+      <article class="version-card">
+        <div class="version-topline"><span>Bio-readout</span><strong>0.4841</strong></div>
+        <dl>
+          <dt>O que incorpora</dt><dd>MLP com features auxiliares phylo/structure projetadas e concatenadas ao hidden do beat-v7.</dd>
+          <dt>Hipotese testada</dt><dd>Sinais evolutivos e estruturais poderiam orientar a leitura funcional sem alterar o backbone.</dd>
+          <dt>Achado</dt><dd>Chegou a 0.4841. Ganho pequeno, mais estabilizador do que transformacional.</dd>
+        </dl>
+      </article>
+    
+      <article class="version-card">
+        <div class="version-topline"><span>Multiscale</span><strong>0.4834</strong></div>
+        <dl>
+          <dt>O que incorpora</dt><dd>Cabeca com ramos convolucionais dilatados paralelos, sem gate, para escalas local, media e longa.</dd>
+          <dt>Hipotese testada</dt><dd>Como beat-v7 nao expoe skips tipo U-Net, a cabeca poderia reconstruir leitura multi-escala.</dd>
+          <dt>Achado</dt><dd>Score 0.4834. Melhorou ATAC/Histone, mas prejudicou PRO-cap/eCLIP. O trade-off por assay anulou o ganho global.</dd>
+        </dl>
+      </article>
+    
+      <article class="version-card">
+        <div class="version-topline"><span>MLP head</span><strong>0.4823</strong></div>
+        <dl>
+          <dt>O que incorpora</dt><dd>Troca a projecao linear por uma cabeca MLP nao-linear, ainda sem sinais auxiliares.</dd>
+          <dt>Hipotese testada</dt><dd>A saida do beat-v7 precisa de uma transformacao nao-linear pequena para acoplar aos tracks funcionais.</dd>
+          <dt>Achado</dt><dd>Subiu para 0.4823. Foi o maior salto inicial e confirmou que linear era capacidade insuficiente.</dd>
+        </dl>
+      </article>
+    
+      <article class="version-card">
+        <div class="version-topline"><span>Local conv</span><strong>0.4723</strong></div>
+        <dl>
+          <dt>O que incorpora</dt><dd>Adiciona convolucao local k=15 na cabeca para capturar vizinhanca curta ao redor de cada base.</dd>
+          <dt>Hipotese testada</dt><dd>Sinais regulatorios locais poderiam ser melhorados por uma leitura explicitamente convolucional.</dd>
+          <dt>Achado</dt><dd>Caiu para 0.4723. Ajudou alguns sinais amplos, mas piorou o score global; contexto local isolado nao foi o gargalo principal.</dd>
+        </dl>
+      </article>
+    
+      <article class="version-card">
+        <div class="version-topline"><span>Linear</span><strong>0.4605</strong></div>
+        <dl>
+          <dt>O que incorpora</dt><dd>Backbone beat-v7 com ultimo hidden state denso em 1 bp e uma projecao linear por track.</dd>
+          <dt>Hipotese testada</dt><dd>Baseline oficial-like: medir quanto a representacao final do backbone ja resolve sem capacidade extra na cabeca.</dd>
+          <dt>Achado</dt><dd>Ficou em 0.4605. Serviu como piso experimental e mostrou que a cabeca linear subaproveitava o backbone.</dd>
+        </dl>
+      </article>
+    </div>
+    </section>
+
+    <section class="section">
+      <h2>Ranking resumido</h2>
+      <p>Inclui as principais versoes Lumina beat-v7 e rivais usados como referencia comparativa.</p>
+      <table>
+        <thead><tr><th>#</th><th>Modelo</th><th>Tipo</th><th>PCC</th><th>Best step</th><th>Delta vs linear</th><th>Nota</th></tr></thead>
+        <tbody><tr><td>1</td><td>NTv3 650M (pos)</td><td><span class="badge rival">Rival</span></td><td><strong>0.6193</strong></td><td></td><td></td><td>public leaderboard, n=34 grouped tracks</td></tr><tr><td>2</td><td>NTv3 650M (pre)</td><td><span class="badge rival">Rival</span></td><td><strong>0.5794</strong></td><td></td><td></td><td>public leaderboard, n=34 grouped tracks</td></tr><tr><td>3</td><td>NTv3 100M (pre)</td><td><span class="badge rival">Rival</span></td><td><strong>0.5303</strong></td><td></td><td></td><td>public leaderboard, n=34 grouped tracks</td></tr><tr><td>4</td><td>Residual CNN 44M</td><td><span class="badge rival">Rival</span></td><td><strong>0.5156</strong></td><td></td><td></td><td>public leaderboard, n=34 grouped tracks</td></tr><tr class="highlight"><td>5</td><td>Lumina beat-v7 aggressive 20k</td><td><span class="badge best">Melhor beat-v7</span></td><td><strong>0.5081</strong></td><td>19932</td><td><span class="delta-pos">+0.0476</span></td><td>backbone LR 1e-4, LLRD .8, dropout .02, EMA</td></tr><tr><td>6</td><td>Lumina beat-v7 Recipe A 40k</td><td><span class="badge ours">Nossa run 40k</span></td><td><strong>0.5073</strong></td><td>39864</td><td><span class="delta-pos">+0.0468</span></td><td>LLRD + EMA + bias init + cosine, 2x budget</td></tr><tr><td>7</td><td>NTv3 8M (pre)</td><td><span class="badge rival">Rival</span></td><td><strong>0.4982</strong></td><td></td><td></td><td>public leaderboard, n=34 grouped tracks</td></tr><tr><td>8</td><td>Lumina beat-v7 gated-hybrid</td><td><span class="badge ours">Nossa run</span></td><td><strong>0.4853</strong></td><td>17500</td><td><span class="delta-pos">+0.0248</span></td><td>gate conv medido ~2%; ganho nao-mecanistico</td></tr><tr><td>9</td><td>Caduceus 7M</td><td><span class="badge rival">Rival</span></td><td><strong>0.4847</strong></td><td></td><td></td><td>public leaderboard, n=34 grouped tracks</td></tr><tr><td>10</td><td>Lumina beat-v7 bio-readout</td><td><span class="badge ours">Nossa run</span></td><td><strong>0.4841</strong></td><td>19500</td><td><span class="delta-pos">+0.0237</span></td><td>MLP + aux phylo/structure</td></tr><tr><td>11</td><td>Lumina beat-v7 multiscale</td><td><span class="badge ours">Nossa run</span></td><td><strong>0.4834</strong></td><td>19500</td><td><span class="delta-pos">+0.0229</span></td><td>convs dilatadas; ATAC/Histone sobem, PRO/eCLIP caem</td></tr><tr><td>12</td><td>Lumina beat-v7 MLP head</td><td><span class="badge ours">Nossa run</span></td><td><strong>0.4823</strong></td><td>17500</td><td><span class="delta-pos">+0.0218</span></td><td>head nao-linear simples</td></tr><tr><td>13</td><td>Lumina beat-v7 local-conv</td><td><span class="badge ours">Nossa run</span></td><td><strong>0.4723</strong></td><td>17500</td><td><span class="delta-pos">+0.0118</span></td><td>conv local k=15; ajudou slices, piorou global</td></tr><tr><td>14</td><td>Lumina beat-v7 linear</td><td><span class="badge ours">Nossa run</span></td><td><strong>0.4605</strong></td><td>17500</td><td><span class="delta-pos">+0.0000</span></td><td>baseline: ultimo hidden 1bp + head linear</td></tr><tr><td>15</td><td>Residual CNN 700k</td><td><span class="badge rival">Rival</span></td><td><strong>0.4389</strong></td><td></td><td></td><td>public leaderboard, n=34 grouped tracks</td></tr><tr><td>16</td><td>HyenaDNA 7M</td><td><span class="badge rival">Rival</span></td><td><strong>0.3584</strong></td><td></td><td></td><td>public leaderboard, n=34 grouped tracks</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>Medias por assay nas versoes beat-v7</h2>
+      <p>Separa ganho global de efeitos especificos por tipo de sinal biologico.</p>
+      <table>
+        <thead><tr><th>Run</th><th>PRO-cap</th><th>eCLIP</th><th>ATAC-seq</th><th>Histone ChIP-seq</th><th>polyA plus RNA-seq</th><th>total RNA-seq</th></tr></thead>
+        <tbody><tr><td><strong>Linear</strong></td><td>0.3310</td><td>0.4785</td><td>0.5346</td><td>0.5495</td><td>0.5063</td><td>0.5590</td></tr><tr><td><strong>MLP</strong></td><td>0.3764</td><td>0.4945</td><td>0.5438</td><td>0.5563</td><td>0.5208</td><td>0.5677</td></tr><tr><td><strong>Local conv</strong></td><td>0.3484</td><td>0.4871</td><td>0.5501</td><td>0.5595</td><td>0.5105</td><td>0.5640</td></tr><tr><td><strong>Bio-readout</strong></td><td>0.3778</td><td>0.4945</td><td>0.5487</td><td>0.5592</td><td>0.5192</td><td>0.5729</td></tr><tr><td><strong>Gated</strong></td><td>0.3808</td><td>0.4964</td><td>0.5475</td><td>0.5605</td><td>0.5208</td><td>0.5689</td></tr><tr><td><strong>Multiscale</strong></td><td>0.3729</td><td>0.4928</td><td>0.5517</td><td>0.5664</td><td>0.5197</td><td>0.5712</td></tr><tr><td><strong>Recipe A 40k</strong></td><td>0.4240</td><td>0.5117</td><td>0.5545</td><td>0.5724</td><td>0.5338</td><td>0.5868</td></tr><tr class="highlight"><td><strong>Aggressive 20k</strong></td><td>0.4245</td><td>0.5111</td><td>0.5598</td><td>0.5716</td><td>0.5362</td><td>0.5869</td></tr></tbody>
+      </table>
+    </section>
+
+    <p class="footer">Gerado em 2026-05-23 21:34 UTC. Fontes: artefatos Lumina em <code>artifacts/analysis/ntv3_recent</code> e leaderboard publico Hugging Face <code>InstaDeepAI/ntv3_benchmark</code>.</p>
+  </main>
+</body>
+</html>

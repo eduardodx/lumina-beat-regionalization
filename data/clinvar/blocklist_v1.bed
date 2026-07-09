@@ -1,0 +1,5 @@
+# ClinVar pretraining blocklist for beat-v7 synthetic counterfactual sampling.
+# Populate with held-out ClinVar test intervals as:
+# chrom <tab> start <tab> end
+# This placeholder keeps the pretraining path import-safe in environments where
+# the curated interval export has not been materialized yet.

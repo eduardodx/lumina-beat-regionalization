@@ -1,0 +1,2 @@
+step,tokens_seen,elapsed_seconds,loss,metric
+10,327680,30.944264,1.89594257,3.614e-05

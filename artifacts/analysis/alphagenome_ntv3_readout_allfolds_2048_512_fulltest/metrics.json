@@ -1,0 +1,112 @@
+{
+  "config": {
+    "alphagenome_model_version": "all_folds",
+    "alphagenome_output_type": "ATAC",
+    "alphagenome_source": "huggingface",
+    "dataset_root": "data/datasets/ntv3",
+    "feature_names": [
+      "intercept",
+      "alpha_raw",
+      "sqrt_alpha",
+      "log1p_alpha",
+      "mean_25",
+      "mean_101",
+      "mean_501"
+    ],
+    "keep_target_center_fraction": 0.375,
+    "ontology_term": "UBERON:0000056",
+    "ridge_lambdas": [
+      0.0,
+      1e-06,
+      0.0001,
+      0.01,
+      1.0,
+      100.0
+    ],
+    "sequence_length": 32768,
+    "species": "human",
+    "split_selected_windows": {
+      "test": 10531,
+      "train": 2048,
+      "val": 512
+    },
+    "split_total_windows": {
+      "test": 10531,
+      "train": 63707,
+      "val": 10534
+    },
+    "target_center_end": 22528,
+    "target_center_start": 10240,
+    "target_length": 12288,
+    "track_info": {
+      "assay": "ATAC-seq",
+      "mean": 0.7250170204686959,
+      "path": "data/datasets/ntv3/human/functional_tracks/ENCSR814RGG.bigwig",
+      "std": 0.6537994463881371,
+      "track_id": "ENCSR814RGG"
+    },
+    "window_sampling": "uniform"
+  },
+  "lumina_context": {
+    "Metric": "0.6711599475840397",
+    "assay_type": "ATAC-seq",
+    "best_step": "19000.0",
+    "best_step_time": "0 days 06:37:54.455832",
+    "datasets": "ENCSR814RGG",
+    "metric_value": 0.6711599475840397,
+    "model_name": "Lumina beat-v7 20k aggressive moderate LR1.25e-4 LLRD0.85",
+    "run_id": "beat-v7-20k-aggressive-moderate-lr125-llrd085-seed0",
+    "running_time": "25089.691698925002",
+    "species": "human",
+    "track_name_clean": "ENCSR814RGG",
+    "training_tokens": "20900216832.0"
+  },
+  "public_ntv3_context": {
+    "assay_type": "ATAC-seq",
+    "dataset": "ENCSR814RGG",
+    "delta_vs_linear": "0.0186651707012343",
+    "delta_vs_mlp": "0.006211858241590651",
+    "gap_to_public_best": "0.15488746350444194",
+    "metric_value": 0.7984862526257833,
+    "public_best_model": "NTv3 650M (pos)",
+    "public_best_score": "0.7984862526257833",
+    "score": "0.6435987891213414",
+    "track_name_clean": "ENCSR814RGG"
+  },
+  "selected_lambda": 0.0,
+  "status": "completed",
+  "test_metrics": {
+    "evaluated_windows": 10531,
+    "num_positions": 129404928,
+    "readout_pearson_ntv3_scaled_lambda_0": 0.6984357842174994,
+    "selected_windows": 10531,
+    "skipped_high_n_windows": 0,
+    "split": "test",
+    "zero_shot_pearson_ntv3_scaled": 0.29662410361356134,
+    "zero_shot_pearson_raw": 0.2976481303456159
+  },
+  "train_metrics": {
+    "evaluated_windows": 2048,
+    "num_positions": 25165824,
+    "selected_windows": 2048,
+    "skipped_high_n_windows": 0,
+    "split": "train",
+    "zero_shot_pearson_ntv3_scaled": 0.3096654381457401,
+    "zero_shot_pearson_raw": 0.30887285743869014
+  },
+  "val_metrics": {
+    "evaluated_windows": 512,
+    "num_positions": 6291456,
+    "readout_pearson_ntv3_scaled_lambda_0": 0.6885579818510561,
+    "readout_pearson_ntv3_scaled_lambda_0.0001": 0.6885579818175466,
+    "readout_pearson_ntv3_scaled_lambda_0.01": 0.6885579784997883,
+    "readout_pearson_ntv3_scaled_lambda_1": 0.6885576460166511,
+    "readout_pearson_ntv3_scaled_lambda_100": 0.6885176116814511,
+    "readout_pearson_ntv3_scaled_lambda_1e-06": 0.6885579818507177,
+    "selected_windows": 512,
+    "skipped_high_n_windows": 0,
+    "split": "val",
+    "zero_shot_pearson_ntv3_scaled": 0.27987984019957207,
+    "zero_shot_pearson_raw": 0.2813884407352882
+  }
+}

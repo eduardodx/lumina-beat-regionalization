@@ -1,0 +1,5 @@
+DEFAULT_FASTA_PATH = "data/hg38/hg38.fa"
+DEFAULT_PHYLO100_BW_PATH = "data/phylo/hg38.phyloP100way.bw"
+DEFAULT_PHYLO470_BW_PATH = "data/phylo/hg38.phyloP470way.bw"
+DEFAULT_GTF_PATH = "data/gencode/gencode.v38.annotation.gtf.gz"
+DEFAULT_OUTPUT_DIR = "outputs/lumina_8m_baseline"

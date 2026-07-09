@@ -1,0 +1,17 @@
+{
+  "generated_at_utc": "2026-07-01T21:40:59.897838+00:00",
+  "output_dir": "artifacts/clinvar_regional_eval/public_abraom_validation",
+  "high_priority_rows": 75,
+  "public_review_status": {
+    "needs_public_lookup": 70,
+    "public_label_conflict": 4,
+    "local_public_supports_label": 1
+  },
+  "public_evidence_decision": {
+    "no_local_variation_id_or_significance": 70,
+    "public_benign_conflicts_with_plp_label": 4,
+    "supports_plp_sentinel": 1
+  },
+  "ready_subset_rows": 1,
+  "decision": "do_not_train_next_public_evidence_unresolved"
+}

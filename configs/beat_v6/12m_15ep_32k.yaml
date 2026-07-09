@@ -1,0 +1,25 @@
+_inherit: _base.yaml
+
+seq_len: 32768
+length_warmup_enabled: true
+length_warmup_initial_seq_len: 16384
+length_warmup_transition_fraction: 0.8
+length_warmup_stage1_warmup_fraction: 0.05
+length_warmup_stage1_end_lr_scale: 0.1
+length_warmup_stage2_warmup_fraction: 0.05
+length_warmup_stage2_peak_lr_scale: 0.2
+length_warmup_final_lr_scale: 0.01
+batch_size: 16
+grad_accum_steps: 1
+
+max_steps: 17883
+warmup_steps: 715
+eval_every: 1024
+save_every: 2048
+
+lr_scheduler: cosine_rewarm
+min_lr: 0.000008
+aux_loss_warmup_steps: 1000
+
+output_dir: outputs/lumina_beat_v6_12m_15ep_16kto32k
+wandb_run_name: beat-v6-12m-10l-15ep-16kto32k

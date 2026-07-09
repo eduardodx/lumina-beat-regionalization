@@ -1,0 +1,42 @@
+# BiMamba3 family defaults: architecture, optimizer, and schedule.
+# Leaf configs inherit these; any key can be overridden.
+
+_inherit: ../_base.yaml
+
+model: bimamba3
+model_config:
+  d_model: 256
+  n_layers: 8
+  d_state: 128
+  expand: 2
+  headdim: 64
+  ngroups: 1
+  rope_fraction: 0.5
+  chunk_size: 64
+  is_mimo: false
+  mimo_rank: 4
+  is_outproj_norm: false
+  dropout: 0.1
+
+seq_len: 4096
+batch_size: 36
+
+lr: 0.0003
+lr_scheduler: cosine
+min_lr: 0.00003
+weight_decay: 0.1
+beta1: 0.9
+beta2: 0.95
+grad_clip: 1.0
+warmup_steps: 1000
+
+max_steps: 16384
+eval_every: 256
+save_every: 512
+
+w_mlm: 1.0
+w_phylo100: 0.25
+w_phylo470: 0.25
+w_structure: 0.25
+w_rc: 0.01
+rc_loss_type: cosine

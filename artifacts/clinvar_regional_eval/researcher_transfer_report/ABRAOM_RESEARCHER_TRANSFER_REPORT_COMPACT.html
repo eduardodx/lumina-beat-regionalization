@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-BR" xml:lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Lumina ABRAOM/ClinVar regionalization study" />
+  <title>ABRAOM Regionalization Compact Handoff</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="ABRAOM_RESEARCHER_TRANSFER_REPORT_COMPACT.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">ABRAOM Regionalization Compact Handoff</h1>
+<p class="subtitle">Resumo técnico, artefatos S3 e próximos passos</p>
+<p class="author">Lumina ABRAOM/ClinVar regionalization study</p>
+<p class="date">2026-07-06T14:05:27+00:00</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#abraom-regionalization-compact-handoff"
+id="toc-abraom-regionalization-compact-handoff">ABRAOM Regionalization
+Compact Handoff</a>
+<ul>
+<li><a href="#conclusão-curta" id="toc-conclusão-curta">1. Conclusão
+Curta</a></li>
+<li><a href="#principais-resultados" id="toc-principais-resultados">2.
+Principais Resultados</a></li>
+<li><a href="#dados-essenciais" id="toc-dados-essenciais">3. Dados
+Essenciais</a></li>
+<li><a href="#o-que-foi-treinado-e-comparado"
+id="toc-o-que-foi-treinado-e-comparado">4. O que foi Treinado e
+Comparado</a></li>
+<li><a href="#artefatos-s3-para-não-regenerar"
+id="toc-artefatos-s3-para-não-regenerar">5. Artefatos S3 para Não
+Regenerar</a></li>
+<li><a href="#onde-estão-os-arquivos-locais-importantes"
+id="toc-onde-estão-os-arquivos-locais-importantes">6. Onde Estão os
+Arquivos Locais Importantes</a></li>
+<li><a href="#limitações-e-próximo-passo"
+id="toc-limitações-e-próximo-passo">7. Limitações e Próximo
+Passo</a></li>
+<li><a href="#comandos-de-continuidade"
+id="toc-comandos-de-continuidade">8. Comandos de Continuidade</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="abraom-regionalization-compact-handoff">ABRAOM Regionalization
+Compact Handoff</h1>
+<p><strong>Gerado em UTC:</strong>
+<code>2026-07-06T14:05:27+00:00</code></p>
+<p><strong>Repositório:</strong>
+<code>/home/sagemaker-user/lumina-ssm</code></p>
+<p><strong>Branch:</strong>
+<code>abraom-regionalization-study</code></p>
+<p><strong>GitHub branch URL:</strong>
+<code>https://github.com/eduardodx/lumina-ssm/tree/abraom-regionalization-study</code></p>
+<p><strong>Commit na geração:</strong>
+<code>88e3c1c008fc53e5da3b30220c2a8beec962fc01</code></p>
+<p><strong>Versão extensa para auditoria:</strong>
+<code>artifacts/clinvar_regional_eval/researcher_transfer_report/ABRAOM_RESEARCHER_TRANSFER_REPORT.md</code></p>
+<h2 id="conclusão-curta">1. Conclusão Curta</h2>
+<p>O estudo encontrou <strong>sinal operacional útil nos benchmarks
+regionais</strong>, principalmente por reduzir falso positivo em
+variantes benignas comuns no ABRAOM. Isso ainda não prova um sinal
+biológico específico do ABRAOM. O melhor candidato atual é
+<code>M5_v3_safety</code>, porque combina o sinal regional com uma
+guarda molecular: a frequência ABRAOM pode reduzir o score de
+patogenicidade, mas não pode apagar completamente evidência molecular
+forte.</p>
+<p>O resultado ainda <strong>não é prova clínica final</strong>. Os
+controles negativos estratificados mostram que parte do ganho pode vir
+de estrutura de frequência, gene ou benchmark. A próxima etapa
+científica deve ser curadoria pública/externa das variantes críticas,
+não outro treino imediato.</p>
+<h2 id="principais-resultados">2. Principais Resultados</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Métrica</th>
+<th>M0</th>
+<th>M5_v3_safety</th>
+<th>Leitura</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>br_only</code> MCC</td>
+<td>0.279</td>
+<td>0.605</td>
+<td>ganho brasileiro claro</td>
+</tr>
+<tr>
+<td><code>abraom_common_benign</code> specificity</td>
+<td>0.803</td>
+<td>0.959</td>
+<td>menos falso positivo benigno</td>
+</tr>
+<tr>
+<td><code>abraom_pathogenic_present</code> recall</td>
+<td>0.417</td>
+<td>0.436</td>
+<td>sensibilidade P/LP recuperada</td>
+</tr>
+<tr>
+<td><code>global_nonbr_no_abraom</code> MCC</td>
+<td>0.512</td>
+<td>0.512</td>
+<td>não degradação global em MCC</td>
+</tr>
+</tbody>
+</table>
+<p>Leitura prática:</p>
+<ul>
+<li><code>M5</code> e <code>M6</code> brutos reduziram falsos positivos,
+mas criaram risco forte de falso benigno em P/LP presentes no
+ABRAOM.</li>
+<li><code>M5_v2_calibrated</code> limitou o impacto da frequência.</li>
+<li><code>M5_v3_safety</code> manteve o ganho regional e adicionou
+proteção molecular.</li>
+<li><code>M7_scrambled</code> foi usado como controle negativo; ele não
+deve ser lido como modelo candidato principal.</li>
+</ul>
+<p>Alertas no painel crítico de curadoria:</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 11%" />
+</colgroup>
+<thead>
+<tr>
+<th>Panel</th>
+<th>Modelo</th>
+<th>n</th>
+<th>Recall</th>
+<th>Specificity</th>
+<th>MCC</th>
+<th>FP</th>
+<th>FN</th>
+<th>Leitura</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>high_priority_review_queue</code></td>
+<td><code>M0</code></td>
+<td>75</td>
+<td>0.250</td>
+<td>0.133</td>
+<td>-0.510</td>
+<td>13</td>
+<td>45</td>
+<td>baseline no painel de stress</td>
+</tr>
+<tr>
+<td><code>high_priority_review_queue</code></td>
+<td><code>M5_v3_safety</code></td>
+<td>75</td>
+<td>0.000</td>
+<td>0.000</td>
+<td>-1.000</td>
+<td>15</td>
+<td>60</td>
+<td>alerta: colapso no painel crítico</td>
+</tr>
+<tr>
+<td><code>plp_high_priority</code></td>
+<td><code>M0</code></td>
+<td>60</td>
+<td>0.250</td>
+<td>0.000</td>
+<td>0.000</td>
+<td>0</td>
+<td>45</td>
+<td>P/LP críticos no baseline</td>
+</tr>
+<tr>
+<td><code>plp_high_priority</code></td>
+<td><code>M5_v3_safety</code></td>
+<td>60</td>
+<td>0.000</td>
+<td>0.000</td>
+<td>0.000</td>
+<td>0</td>
+<td>60</td>
+<td>alerta: 60 falsos benignos</td>
+</tr>
+<tr>
+<td><code>common_benign_high_priority</code></td>
+<td><code>M0</code></td>
+<td>15</td>
+<td>0.000</td>
+<td>0.133</td>
+<td>0.000</td>
+<td>13</td>
+<td>0</td>
+<td>benignas comuns críticas no baseline</td>
+</tr>
+<tr>
+<td><code>common_benign_high_priority</code></td>
+<td><code>M5_v3_safety</code></td>
+<td>15</td>
+<td>0.000</td>
+<td>0.000</td>
+<td>0.000</td>
+<td>15</td>
+<td>0</td>
+<td>alerta: 15 falsos positivos</td>
+</tr>
+</tbody>
+</table>
+<p>Esse painel é um <strong>stress test derivado de erros</strong>, não
+um benchmark populacional balanceado. Ele mostra onde a hipótese ainda
+falha e por que a próxima etapa é curadoria, não treino imediato.</p>
+<h2 id="dados-essenciais">3. Dados Essenciais</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ABRAOM v2 de entrada</td>
+<td>17.833.190 variantes</td>
+</tr>
+<tr>
+<td>Dataset adapter de frequência</td>
+<td>17.784.373 linhas escritas</td>
+</tr>
+<tr>
+<td>ClinVar x ABRAOM</td>
+<td>1.089.826 linhas; 1.089.826 variant keys únicos</td>
+</tr>
+<tr>
+<td>ClinVar presentes no ABRAOM</td>
+<td>71.591</td>
+</tr>
+<tr>
+<td>Fila crítica pública</td>
+<td>75 variantes</td>
+</tr>
+<tr>
+<td>Painel público pronto</td>
+<td>1 variante(s)</td>
+</tr>
+</tbody>
+</table>
+<p>Slices decisivos:</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>Slice</th>
+<th>Rows</th>
+<th>P/LP</th>
+<th>B/LB</th>
+<th>ABRAOM present</th>
+<th>Uso</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>br_only</code></td>
+<td>4.163</td>
+<td>3.510</td>
+<td>653</td>
+<td>381</td>
+<td>ganho no subconjunto brasileiro</td>
+</tr>
+<tr>
+<td><code>abraom_common_benign</code></td>
+<td>56.309</td>
+<td>0</td>
+<td>56.309</td>
+<td>56.309</td>
+<td>redução de falso positivo</td>
+</tr>
+<tr>
+<td><code>abraom_pathogenic_present</code></td>
+<td>1.596</td>
+<td>1.596</td>
+<td>0</td>
+<td>1.596</td>
+<td>proteção contra falso benigno P/LP</td>
+</tr>
+<tr>
+<td><code>global_nonbr_no_abraom</code></td>
+<td>16.208</td>
+<td>13.205</td>
+<td>3.003</td>
+<td>0</td>
+<td>não degradação global</td>
+</tr>
+</tbody>
+</table>
+<h2 id="o-que-foi-treinado-e-comparado">4. O que foi Treinado e
+Comparado</h2>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th>Modelo</th>
+<th>Leitura curta</th>
+<th>br_only MCC</th>
+<th>Benignas comuns ABRAOM specificity</th>
+<th>P/LP ABRAOM recall</th>
+<th>Global nonBR MCC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>M0</code></td>
+<td>baseline molecular geral, sem ABRAOM</td>
+<td>0.279</td>
+<td>0.803</td>
+<td>0.417</td>
+<td>0.512</td>
+</tr>
+<tr>
+<td><code>M4</code></td>
+<td>fusion regional conservadora</td>
+<td>0.292</td>
+<td>0.894</td>
+<td>0.288</td>
+<td>0.526</td>
+</tr>
+<tr>
+<td><code>M5</code></td>
+<td>fusion + frequência; reduziu FP, mas suprimiu P/LP</td>
+<td>0.618</td>
+<td>0.990</td>
+<td>0.135</td>
+<td>0.328</td>
+</tr>
+<tr>
+<td><code>M6</code></td>
+<td>frequência explícita; forte, mas inseguro para P/LP</td>
+<td>0.624</td>
+<td>0.998</td>
+<td>0.018</td>
+<td>0.435</td>
+</tr>
+<tr>
+<td><code>M7_scrambled</code></td>
+<td>controle negativo com ABRAOM embaralhado</td>
+<td>0.417</td>
+<td>0.903</td>
+<td>0.252</td>
+<td>0.512</td>
+</tr>
+<tr>
+<td><code>M5_v2_calibrated</code></td>
+<td>M5 com desconto regional limitado</td>
+<td>0.605</td>
+<td>0.959</td>
+<td>0.436</td>
+<td>0.500</td>
+</tr>
+<tr>
+<td><code>M5_v3_safety</code></td>
+<td>candidato final com guarda molecular</td>
+<td>0.605</td>
+<td>0.959</td>
+<td>0.436</td>
+<td>0.512</td>
+</tr>
+</tbody>
+</table>
+<p>Fusion dinâmica:</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>Modelo</th>
+<th>br_only MCC</th>
+<th>ABRAOM benign specificity</th>
+<th>ABRAOM P/LP recall</th>
+<th>Decisão</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>M5_dynamic_gated</code></td>
+<td>0.666</td>
+<td>0.998</td>
+<td>0.037</td>
+<td>não selecionado: colapso de P/LP</td>
+</tr>
+<tr>
+<td><code>M7_dynamic_scrambled</code></td>
+<td>0.301</td>
+<td>0.889</td>
+<td>0.313</td>
+<td>controle negativo; não superou ABRAOM real</td>
+</tr>
+</tbody>
+</table>
+<p>Receita científica:</p>
+<ol type="1">
+<li>Treinar/usar <code>M0</code> como baseline molecular ClinVar
+non-BR.</li>
+<li>Treinar adapters de frequência <code>A_BR</code>,
+<code>A_gnomAD</code> e <code>A_scrambled</code>.</li>
+<li>Comparar M4/M5/M6 contra M0 nos mesmos slices regionais.</li>
+<li>Usar M7/scrambled e controles estratificados para falsificação.</li>
+<li>Calibrar M5 para limitar desconto por frequência.</li>
+<li>Selecionar <code>M5_v3_safety</code> como melhor candidato
+experimental, com guarda molecular.</li>
+</ol>
+<h2 id="artefatos-s3-para-não-regenerar">5. Artefatos S3 para Não
+Regenerar</h2>
+<p>Esta seção é crítica. Antes de rodar qualquer script pesado,
+verificar estes caminhos. Se o objeto existir e a receita não mudou,
+reutilizar o artefato.</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>Categoria</th>
+<th>Artefato</th>
+<th>S3 URI</th>
+<th>Uso</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dados ABRAOM</td>
+<td>ABRAOM v2 processado</td>
+<td><code>s3://ai4bio-lumina/benchmarks/mosaic/data/processed/gen-abraom-seqs/v2/</code></td>
+<td>Entrada primária para reconstruir o índice ABRAOM usado no
+estudo.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Dados SageMaker</td>
+<td>Raiz de dados e saídas do estudo</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/</code></td>
+<td>Prefixo guarda datasets, treinos, avaliações e artefatos SageMaker
+do estudo.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Dados SageMaker</td>
+<td>Dataset do adapter de frequência ABRAOM</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/data/datasets/abraom_frequency_adapter/</code></td>
+<td>Canal <code>frequency</code> para treinar/reusar A_BR, A_gnomAD e
+controle scrambled.</td>
+<td>prefixo default do launcher</td>
+</tr>
+<tr>
+<td>Dados SageMaker</td>
+<td>Dataset ClinVar x ABRAOM regional</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/data/datasets/clinvar/regional_abraom/</code></td>
+<td>Raiz esperada para master/slices; usar antes de regenerar parquets
+grandes.</td>
+<td>prefixo default do launcher</td>
+</tr>
+<tr>
+<td>Dados SageMaker</td>
+<td>Slices regionais ClinVar x ABRAOM</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/data/datasets/clinvar/regional_abraom/slices/</code></td>
+<td>Canal <code>dataset</code> usado por M0, fusion e avaliação
+regional.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Referência</td>
+<td>Genoma hg38</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/data/hg38/</code></td>
+<td>Canal <code>reference</code> dos jobs SageMaker.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Checkpoint base</td>
+<td>Lumina BEAT-v10</td>
+<td><code>s3://ai4bio-lumina/releases/lumina-beat-v10-20260527182934/</code></td>
+<td>F0/base checkpoint para M0, adapters e fusion.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Modelo ClinVar</td>
+<td>M0 baseline non-BR completo</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-m0/clinvar-m0-nonbr-beatv10-v1/sagemaker-artifacts/clinvar-m0-nonbr-beatv10-v1-2e6520-20260621191336/output/model.tar.gz</code></td>
+<td>Modelo molecular geral usado como baseline e init model da
+fusion.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Adapter de frequência</td>
+<td>A_BR ABRAOM balanced</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/abraom-frequency-adapter/abraom-freq-adapter-abraom-balanced-v1-rerun/sagemaker-artifacts/abraom-freq-abraom-balanced-v1-reru-dbb2ad-20260617023522/output/</code></td>
+<td>Adapter populacional brasileiro usado em M4/M5 fusion.</td>
+<td>prefixo default do launcher</td>
+</tr>
+<tr>
+<td>Adapter de frequência</td>
+<td>A_gnomAD balanced</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/abraom-frequency-adapter/abraom-freq-adapter-gnomad-balanced-v1/sagemaker-artifacts/abraom-freq-gnomad-balanced-v1-787c1c-20260621124601/output/</code></td>
+<td>Adapter comparador global usado em M4/M5/M2.</td>
+<td>prefixo default do launcher</td>
+</tr>
+<tr>
+<td>Adapter de frequência</td>
+<td>A_scrambled balanced</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/abraom-frequency-adapter/abraom-freq-adapter-scrambled-balanced-v1/sagemaker-artifacts/abraom-freq-scrambled-balanced-v1-1b573c-20260616222939/output/</code></td>
+<td>Controle negativo de adapter embaralhado usado em M7.</td>
+<td>prefixo default do launcher</td>
+</tr>
+<tr>
+<td>Treino ClinVar</td>
+<td>M6 explicit frequency</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-m0/clinvar-m6-explicitfreq-nonbr-beatv10-v1/sagemaker-artifacts/</code></td>
+<td>Controle com features explícitas de frequência, sem adapter
+populacional.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Treino ClinVar</td>
+<td>M4 static fusion</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-fusion/clinvar-m4-staticfusion-nonbr-beatv10-v1-rerun-g52x/sagemaker-artifacts/</code></td>
+<td>Fusion estática sem frequência explícita forte.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Treino ClinVar</td>
+<td>M5 static fusion explicit frequency</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-fusion/clinvar-m5-staticfusion-explicitfreq-nonbr-beatv10-v1-g5-4x/sagemaker-artifacts/</code></td>
+<td>Fusion estática com adapters populacionais e frequência
+explícita.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Treino ClinVar</td>
+<td>M4 dynamic gated</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-fusion/clinvar-m4-dynamic-gated-nonbr-beatv10-v1/sagemaker-artifacts/</code></td>
+<td>Fusion dinâmica M4 para completar o blueprint.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Treino ClinVar</td>
+<td>M5 dynamic gated bounded</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-fusion/clinvar-m5-dynamic-gated-bounded-nonbr-beatv10-v1/sagemaker-artifacts/</code></td>
+<td>Fusion dinâmica M5; forte em especificidade, insegura para P/LP sem
+calibração.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Avaliação regional</td>
+<td>M4 regional eval</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-regional-eval/clinvar-regional-eval-m4-staticfusion-nonbr-beatv10-v1/sagemaker-artifacts/</code></td>
+<td>Saídas SageMaker da avaliação regional M4.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Avaliação regional</td>
+<td>M5 regional eval</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-regional-eval/clinvar-regional-eval-m5-staticfusion-explicitfreq-nonbr-beatv10-v1/sagemaker-artifacts/</code></td>
+<td>Saídas SageMaker da avaliação regional M5.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Avaliação regional</td>
+<td>M6 regional eval</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/clinvar-regional-eval/clinvar-regional-eval-m6-explicitfreq-nonbr-beatv10-v1/sagemaker-artifacts/</code></td>
+<td>Saídas SageMaker da avaliação regional M6.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Fine-tuning ABRAOM inicial</td>
+<td>ABRAOM weighted full</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/experiments/beatv10-abraom-weighted-full-8gpu-ff-v1/</code></td>
+<td>Experimento inicial de fine-tuning ABRAOM ponderado.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Fine-tuning ABRAOM inicial</td>
+<td>ABRAOM uniform full</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/experiments/beatv10-abraom-uniform-full-8gpu-ff-v1/</code></td>
+<td>Experimento inicial de fine-tuning ABRAOM uniforme.</td>
+<td>documentado</td>
+</tr>
+<tr>
+<td>Fine-tuning ABRAOM inicial</td>
+<td>ABRAOM wild-only full</td>
+<td><code>s3://ai4bio-lumina-experiments-v2/lumina-ssm/experiments/beatv10-abraom-wild-only-full-8gpu-ff-v1/</code></td>
+<td>Controle inicial wild-only.</td>
+<td>documentado</td>
+</tr>
+</tbody>
+</table>
+<p>Comandos mínimos:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">aws</span> s3 ls <span class="op">&lt;</span>S3_URI<span class="op">&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">aws</span> s3 sync <span class="op">&lt;</span>S3_PREFIX<span class="op">&gt;</span> <span class="op">&lt;</span>local_dir<span class="op">&gt;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="ex">aws</span> s3 cp <span class="op">&lt;</span>S3_FILE<span class="op">&gt;</span> <span class="op">&lt;</span>local_file<span class="op">&gt;</span></span></code></pre></div>
+<p>Manifesto legível por máquina:</p>
+<p><code>artifacts/clinvar_regional_eval/researcher_transfer_report/s3_reuse_manifest.json</code></p>
+<p>Lacuna conhecida: alguns derivados/calibrados, especialmente
+<code>M5_v2</code>, <code>M5_v3</code> e partes das avaliações dinâmicas
+<code>M2/M7</code>, estão preservados nos artefatos locais/Git, mas não
+tinham prefixo S3 exato nos runbooks locais. Para esses casos, procurar
+primeiro no SageMaker/S3; só regenerar se o objeto realmente não
+existir.</p>
+<h2 id="onde-estão-os-arquivos-locais-importantes">6. Onde Estão os
+Arquivos Locais Importantes</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Caminho</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Relatório compacto</td>
+<td><code>artifacts/clinvar_regional_eval/researcher_transfer_report/ABRAOM_RESEARCHER_TRANSFER_REPORT_COMPACT.md</code></td>
+</tr>
+<tr>
+<td>Relatório extenso</td>
+<td><code>artifacts/clinvar_regional_eval/researcher_transfer_report/ABRAOM_RESEARCHER_TRANSFER_REPORT.md</code></td>
+</tr>
+<tr>
+<td>Dataset ABRAOM adapter</td>
+<td><code>data/datasets/abraom_frequency_adapter/</code></td>
+</tr>
+<tr>
+<td>Dataset ClinVar x ABRAOM</td>
+<td><code>data/datasets/clinvar/regional_abraom/</code></td>
+</tr>
+<tr>
+<td>Tabela final</td>
+<td><code>artifacts/clinvar_regional_eval/m5_v3_safety_calibrated/m0_m4_m5_m6_m5cal_m6cal_m7_m5v2cal_m5v3_summary.csv</code></td>
+</tr>
+<tr>
+<td>Relatório M5_v3</td>
+<td><code>artifacts/clinvar_regional_eval/m5_v3_safety_calibrated/M5_V3_SAFETY_REPORT.md</code></td>
+</tr>
+<tr>
+<td>Validação de sinal</td>
+<td><code>artifacts/clinvar_regional_eval/regional_signal_validation_next_step/REGIONAL_SIGNAL_VALIDATION_NEXT_STEP_REPORT.md</code></td>
+</tr>
+<tr>
+<td>Fila de curadoria</td>
+<td><code>artifacts/clinvar_regional_eval/public_abraom_validation/public_evidence_review_queue.tsv</code></td>
+</tr>
+</tbody>
+</table>
+<p>Cobertura GitHub:</p>
+<ul>
+<li>Estão no GitHub: scripts, relatórios, manifesto S3,
+CSS/HTML/DOCX/Markdown, CSV/TSV/JSON leves de decisão.</li>
+<li>Não estão no GitHub: <code>data/datasets/**</code>, parquets
+grandes, checkpoints/modelos e artefatos binários grandes; recuperar
+pelo S3 ou storage compartilhado.</li>
+<li>Para qualquer caminho S3 com status
+<code>prefixo default do launcher</code>, validar existência com
+<code>aws s3 ls</code> antes de assumir disponibilidade.</li>
+</ul>
+<h2 id="limitações-e-próximo-passo">7. Limitações e Próximo Passo</h2>
+<p>Limitações principais:</p>
+<ul>
+<li>ABRAOM é frequência populacional, não verdade clínica.</li>
+<li>Submitter brasileiro ajuda a estratificar, mas não prova
+ancestralidade.</li>
+<li>P/LP presente no ABRAOM pode ser founder, recessivo, penetrância
+variável ou erro de classificação.</li>
+<li>Controles negativos fortes ainda chegam perto do real em alguns
+cenários.</li>
+<li>O painel público pronto ainda é pequeno demais para decisão
+clínica.</li>
+<li>No painel de stress high-priority, <code>M5_v3_safety</code> ainda
+falha fortemente; isso deve guiar curadoria antes de qualquer nova
+alegação de modelo.</li>
+</ul>
+<p>Próximo passo imediato:</p>
+<ol type="1">
+<li>Curar as <code>75</code> variantes críticas públicas.</li>
+<li>Resolver os conflitos e preencher fontes públicas/PMIDs.</li>
+<li>Rerodar
+<code>scripts/build_public_abraom_validation_package.py</code>.</li>
+<li>Reavaliar <code>M5_v3_safety</code> contra um painel sentinela
+público maior.</li>
+<li>Só depois decidir se vale novo treino ou nova arquitetura.</li>
+</ol>
+<h2 id="comandos-de-continuidade">8. Comandos de Continuidade</h2>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /home/sagemaker-user/lumina-ssm</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> switch abraom-regionalization-study</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> sync</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> run python scripts/compile_abraom_researcher_transfer_report.py</span></code></pre></div>
+<p>Decisão atual:</p>
+<ul>
+<li><code>M5_v3_safety</code>:
+<code>conditional_candidate: M5_v3 is safe versus M5_v2 but regional specificity is not fully falsified.</code></li>
+<li>Validação regional:
+<code>do_not_train_next: prioritize manual critical-error review and external validation; 92 P/LP false benign remain, 60 high-priority.</code></li>
+<li>Pacote público:
+<code>do_not_train_next_public_evidence_unresolved</code></li>
+</ul>
+</body>
+</html>

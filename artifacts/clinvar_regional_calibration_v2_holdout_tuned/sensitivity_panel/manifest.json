@@ -1,0 +1,26 @@
+{
+  "components": [
+    {
+      "available": true,
+      "description": "ClinVar pathogenic/likely-pathogenic rows present in ABRAOM.",
+      "name": "clinvar_plp_abraom_present",
+      "path": "artifacts/clinvar_regional_calibration_v2_holdout_tuned/sensitivity_panel/clinvar_plp_abraom_present.parquet",
+      "rows": 1596
+    },
+    {
+      "available": false,
+      "description": "Not found in local repository artifacts.",
+      "name": "known_brazilian_founder_variants",
+      "path": null,
+      "rows": 0
+    },
+    {
+      "available": false,
+      "description": "Not found in local repository artifacts.",
+      "name": "manual_brazilian_plp_curation",
+      "path": null,
+      "rows": 0
+    }
+  ],
+  "generated_at_utc": "2026-06-23T12:51:15.155649+00:00"
+}

@@ -1,0 +1,11 @@
+# 8M BiMamba3-RC, 5 epochs over 1Gb hg38 subset.
+# Inherits all defaults from _base.yaml (1-epoch = 3,840 steps).
+
+_inherit: _base.yaml
+
+max_steps: 19200
+eval_every: 1024
+save_every: 3840
+
+output_dir: outputs/lumina_8m_bimamba3_rc_5ep
+wandb_run_name: bimamba3-rc-8m-5ep

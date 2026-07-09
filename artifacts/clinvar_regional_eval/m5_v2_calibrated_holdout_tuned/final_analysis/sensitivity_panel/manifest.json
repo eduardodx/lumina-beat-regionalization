@@ -1,0 +1,9 @@
+{
+  "by_gene_path": "artifacts/clinvar_regional_eval/m5_v2_calibrated_holdout_tuned/final_analysis/sensitivity_panel/clinvar_plp_abraom_present_test_sensitivity_by_gene.csv",
+  "clinvar_plp_abraom_present_rows": 1596,
+  "known_brazilian_founder_variants_available": false,
+  "manual_brazilian_plp_curation_available": false,
+  "panel_path": "artifacts/clinvar_regional_eval/m5_v2_calibrated_holdout_tuned/final_analysis/sensitivity_panel/clinvar_plp_abraom_present.parquet",
+  "test_recall": 0.43558282208588955,
+  "test_rows": 163
+}

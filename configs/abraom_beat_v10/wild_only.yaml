@@ -1,0 +1,4 @@
+_inherit: _base.yaml
+
+abraom_dataset_arm: wild_only
+wandb_run_name: beat-v10-abraom-wild-only

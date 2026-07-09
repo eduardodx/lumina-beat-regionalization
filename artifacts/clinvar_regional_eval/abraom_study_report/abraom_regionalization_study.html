@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ABRAOM Adapter-Fusion Regionalization Study</title>
+  <style>
+    :root {
+      --ink: #1f2933;
+      --muted: #5b6675;
+      --line: #d7dde5;
+      --panel: #f7f9fc;
+      --panel-2: #eef6f1;
+      --blue: #2458a6;
+      --green: #1f7a4d;
+      --amber: #a35f00;
+      --red: #a43d3d;
+      --white: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #fbfcfe;
+      font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    }
+    header {
+      background: linear-gradient(115deg, #0f243d 0%, #254e6f 58%, #3f6b55 100%);
+      color: white;
+      padding: 42px 28px 30px;
+    }
+    header .inner, main { max-width: 1180px; margin: 0 auto; }
+    h1 { margin: 0 0 10px; font-size: clamp(28px, 4vw, 44px); line-height: 1.05; letter-spacing: 0; }
+    h2 { margin: 34px 0 12px; font-size: 24px; letter-spacing: 0; }
+    h3 { margin: 24px 0 8px; font-size: 18px; letter-spacing: 0; }
+    p { margin: 8px 0 14px; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.93em; }
+    .subtitle { max-width: 880px; color: #dbe7f3; font-size: 17px; }
+    .meta { color: #d2dee9; font-size: 13px; margin-top: 18px; }
+    main { padding: 24px 28px 60px; }
+    nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 28px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    nav a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: white;
+      color: var(--ink);
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 18px 0 24px;
+    }
+    .metric {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 138px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .metric .label { color: var(--muted); font-size: 13px; min-height: 40px; }
+    .metric .value { font-size: 29px; font-weight: 730; margin-top: 10px; }
+    .metric .sub { color: var(--muted); font-size: 13px; }
+    .bar {
+      margin-top: 10px;
+      height: 8px;
+      background: #e7edf4;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar span { display: block; height: 100%; background: var(--green); }
+    .callout {
+      border-left: 4px solid var(--blue);
+      background: var(--panel);
+      padding: 14px 16px;
+      margin: 18px 0;
+    }
+    .callout.warning { border-color: var(--amber); background: #fff7e8; }
+    .callout.danger { border-color: var(--red); background: #fff1f1; }
+    .callout.good { border-color: var(--green); background: var(--panel-2); }
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+      margin: 12px 0 24px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+    th, td {
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: #eef2f7;
+      color: #273241;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    tr:last-child td { border-bottom: 0; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 650;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .badge.good { color: #0c5130; background: #dff3e7; }
+    .badge.warn { color: #794100; background: #ffe6bd; }
+    .badge.neutral { color: #394554; background: #e9eef5; }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(160px, 1fr));
+      gap: 10px;
+      margin: 14px 0 22px;
+    }
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+      padding: 12px;
+      min-height: 120px;
+    }
+    .step strong { display: block; margin-bottom: 6px; }
+    .sources {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 18px;
+      font-size: 13px;
+    }
+    footer {
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      margin-top: 34px;
+      padding-top: 16px;
+      font-size: 13px;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .sources { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      header { padding: 30px 18px 24px; }
+      main { padding: 18px; }
+      .grid, .steps { grid-template-columns: 1fr; }
+      table { min-width: 680px; }
+    }
+    @media print {
+      nav { display: none; }
+      body { background: white; }
+      header { background: #24364a; }
+      .table-wrap { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1>ABRAOM Adapter-Fusion Regionalization Study</h1>
+      <p class="subtitle">Relatório técnico dos treinamentos e avaliações para regionalização brasileira de interpretação ClinVar com adapters, ABRAOM, gnomAD, controles negativos e análise de segurança P/LP.</p>
+      <div class="meta">Gerado em UTC: 2026-07-01T22:05:02+00:00 · Uso: validação científica, não validação clínica final.</div>
+    </div>
+  </header>
+  <main>
+    <nav aria-label="Seções">
+      <a href="#conclusao">Conclusão</a>
+      <a href="#desenho">Desenho</a>
+      <a href="#dados">Dados</a>
+      <a href="#modelos">Modelos</a>
+      <a href="#dinamico">Fusion dinâmica</a>
+      <a href="#safety">M5_v3 safety</a>
+      <a href="#controles">Controles negativos</a>
+      <a href="#erros">Erro e curadoria</a>
+      <a href="#fontes">Fontes</a>
+    </nav>
+
+    <section id="conclusao">
+      <h2>Conclusão Executiva Técnica</h2>
+      <div class="callout good">
+        <strong>Resultado principal:</strong> a regionalização com ABRAOM gerou ganho mensurável em desempenho brasileiro e reduziu falsos positivos em variantes benignas comuns no ABRAOM. A melhor estrutura operacional até agora é <code>M5_v3_safety</code>, uma calibração de <code>M5_v2</code> com separação entre evidência molecular e score regional, mais guarda molecular contra supressão excessiva.
+      </div>
+      <div class="grid">
+        <div class="metric">
+          <div class="label">Ganho brasileiro: <code>br_only</code> MCC</div>
+          <div class="value">0.605</div>
+          <div class="sub">M0 0.279 · Δ <span class="badge good">+0.326</span></div>
+          <div class="bar"><span style="width:60.5%"></span></div>
+        </div>
+        <div class="metric">
+          <div class="label">Redução de falso positivo: benignas comuns ABRAOM</div>
+          <div class="value">95.9%</div>
+          <div class="sub">M0 80.3% · Δ <span class="badge good">+0.156</span></div>
+          <div class="bar"><span style="width:95.9%"></span></div>
+        </div>
+        <div class="metric">
+          <div class="label">Proteção de sensibilidade: P/LP presentes no ABRAOM</div>
+          <div class="value">43.6%</div>
+          <div class="sub">M0 41.7% · Δ <span class="badge good">+0.018</span></div>
+          <div class="bar"><span style="width:43.6%"></span></div>
+        </div>
+        <div class="metric">
+          <div class="label">Não degradação global: <code>global_nonbr_no_abraom</code> MCC</div>
+          <div class="value">0.512</div>
+          <div class="sub">M0 0.512 · Δ <span class="badge warn">-0.000</span></div>
+          <div class="bar"><span style="width:51.2%"></span></div>
+        </div>
+      </div>
+      <div class="callout warning">
+        <strong>Limitação central:</strong> os controles negativos estratificados ainda enfraquecem a afirmação de que o ganho é especificamente biológico do ABRAOM. Eles sugerem que parte do sinal pode ser explicada por frequência, gene, tipo de variante ou estrutura do benchmark. Por isso, a decisão atual é não treinar outro modelo antes de resolver evidência pública e curadoria manual.
+      </div>
+    </section>
+
+    <section id="desenho">
+      <h2>Desenho Científico</h2>
+      <p>O blueprint recomendava separar três fontes de evidência: gramática molecular do modelo base, evidência populacional/frequencial ABRAOM ou gnomAD, e interpretação ClinVar P/LP versus B/LB. O estudo implementou essa lógica por ablações, calibração e controles negativos.</p>
+      <div class="steps">
+        <div class="step"><strong>1. M0</strong>Modelo ClinVar non-BR geral, sem regionalização ABRAOM. Serve como baseline molecular.</div>
+        <div class="step"><strong>2. M4/M5/M6</strong>Adapters/fusion regionais e frequências explícitas. Mostraram ganho brasileiro, mas risco de over-suppression.</div>
+        <div class="step"><strong>3. M5_v2</strong>Calibração holdout com desconto regional limitado e score molecular separado.</div>
+        <div class="step"><strong>4. M7</strong>Controle negativo com sinal ABRAOM embaralhado para medir efeito de arquitetura/parâmetros.</div>
+        <div class="step"><strong>5. M5_v3</strong>Guarda molecular: frequência pode reduzir score, mas não apagar evidência molecular forte.</div>
+      </div>
+      <div class="callout">
+        <strong>Receita M5_v3 selecionada:</strong> <code>discount_scale=0.500</code>, <code>max_discount=0.500</code>, <code>molecular_guard_threshold=0.650</code>, <code>guarded_max_discount=0.000</code>, <code>regional_threshold=0.350</code>, <code>global_threshold=0.720</code>.
+      </div>
+    </section>
+
+    <section id="dados">
+      <h2>Dados e Slices de Avaliação</h2>
+      <p>Os resultados abaixo usam os mesmos slices regionais definidos ao longo do estudo. O ABRAOM é usado como evidência populacional/frequencial, não como truth set clínico.</p>
+      <div class="table-wrap"><table><thead><tr><th>Slice</th><th>Interpretação</th><th>n</th></tr></thead><tbody><tr><td><code>br_only</code></td><td>ClinVar com submissões brasileiras apenas</td><td>504</td></tr><tr><td><code>br_any</code></td><td>ClinVar com qualquer submissão brasileira</td><td>564</td></tr><tr><td><code>regional_benchmark_any</code></td><td>Benchmark regional agregado</td><td>3111</td></tr><tr><td><code>abraom_common_benign</code></td><td>B/LB comuns no ABRAOM</td><td>12099</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td>P/LP presentes no ABRAOM</td><td>163</td></tr><tr><td><code>abraom_pathogenic_common</code></td><td>P/LP comuns no ABRAOM</td><td>60</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td>Controle global non-BR sem ABRAOM</td><td>1989</td></tr><tr><td><code>nonbr_only</code></td><td>ClinVar non-BR apenas</td><td>2547</td></tr></tbody></table></div>
+    </section>
+
+    <section id="modelos">
+      <h2>Comparação Principal dos Modelos</h2>
+      <p>A tabela mostra as métricas centrais de test. O alvo científico era: aumentar <code>br_only</code> MCC, elevar especificidade em benignas comuns ABRAOM, preservar recall P/LP ABRAOM-presentes, e não degradar o controle global non-BR.</p>
+      <div class="table-wrap"><table><thead><tr><th>Modelo</th><th>Receita</th><th>br_only MCC</th><th>ABRAOM common benign specificity</th><th>ABRAOM P/LP present recall</th><th>global nonBR MCC</th><th>global nonBR specificity</th></tr></thead><tbody><tr><td><code>M0</code></td><td>Geral ClinVar non-BR</td><td>0.279</td><td>0.803</td><td>0.417</td><td>0.512</td><td>0.544</td></tr><tr><td><code>M4</code></td><td>Fusion regional sem frequência explícita forte</td><td>0.292</td><td>0.894</td><td>0.288</td><td>0.526</td><td>0.733</td></tr><tr><td><code>M5</code></td><td>Fusion + frequência explícita, bruto</td><td>0.618</td><td>0.990</td><td>0.135</td><td>0.328</td><td>0.190</td></tr><tr><td><code>M6</code></td><td>Frequência explícita alternativa, bruto</td><td>0.624</td><td>0.998</td><td>0.018</td><td>0.435</td><td>0.354</td></tr><tr><td><code>M5_calibrated</code></td><td>M5 com desconto limitado v2 inicial</td><td>0.546</td><td>0.952</td><td>0.331</td><td>0.512</td><td>0.544</td></tr><tr><td><code>M6_calibrated</code></td><td>M6 com desconto limitado v2 inicial</td><td>0.553</td><td>0.954</td><td>0.325</td><td>0.512</td><td>0.544</td></tr><tr><td><code>M7_scrambled</code></td><td>Controle negativo com ABRAOM embaralhado</td><td>0.417</td><td>0.903</td><td>0.252</td><td>0.512</td><td>0.544</td></tr><tr><td><code>M5_v2_calibrated</code></td><td>Lead calibrado holdout</td><td>0.605</td><td>0.959</td><td>0.436</td><td>0.500</td><td>0.844</td></tr><tr><td><code>M5_v3_safety</code></td><td>Lead com guarda molecular</td><td>0.605</td><td>0.959</td><td>0.436</td><td>0.512</td><td>0.788</td></tr></tbody></table></div>
+      <div class="callout">
+        <strong>Leitura:</strong> <code>M5</code>/<code>M6</code> brutos reduziram falsos positivos, mas derrubaram recall P/LP. <code>M5_v2_calibrated</code> corrigiu grande parte desse problema. <code>M5_v3_safety</code> manteve os ganhos de M5_v2 e restaurou o MCC global para o nível de M0, mas ainda não prova especificidade biológica ABRAOM.
+      </div>
+    </section>
+
+    <section id="dinamico">
+      <h2>Fusion Dinâmica e Controle M7</h2>
+      <p>A rodada dinâmica testou se o gate aprendia a combinar adapters populacionais de modo útil. O achado foi misto: <code>M5_dynamic_gated</code> teve forte ganho em <code>br_only</code> e quase eliminou falso positivo comum ABRAOM, mas colapsou o recall P/LP ABRAOM-presentes.</p>
+      <div class="table-wrap"><table><thead><tr><th>Modelo</th><th>br_only MCC</th><th>ABRAOM common benign specificity</th><th>ABRAOM P/LP present recall</th><th>global nonBR MCC</th></tr></thead><tbody><tr><td><code>M0</code></td><td>0.279</td><td>0.803</td><td>0.417</td><td>0.512</td></tr><tr><td><code>M2_gnomad_only</code></td><td>0.309</td><td>0.884</td><td>0.319</td><td>0.537</td></tr><tr><td><code>M4_dynamic_gated</code></td><td>0.319</td><td>0.869</td><td>0.344</td><td>0.547</td></tr><tr><td><code>M5_dynamic_gated</code></td><td>0.666</td><td>0.998</td><td>0.037</td><td>0.400</td></tr><tr><td><code>M7_dynamic_scrambled</code></td><td>0.301</td><td>0.889</td><td>0.313</td><td>0.539</td></tr><tr><td><code>M5_v2_calibrated</code></td><td>0.605</td><td>0.959</td><td>0.436</td><td>0.500</td></tr></tbody></table></div>
+      <div class="callout danger">
+        <strong>Falha de segurança do dinâmico bruto:</strong> <code>M5_dynamic_gated</code> chegou a specificity 0.998 em benignas comuns ABRAOM, mas recall P/LP caiu para 0.037. Isso é o padrão de over-suppression que motivou M5_v2/M5_v3.
+      </div>
+    </section>
+
+    <section id="safety">
+      <h2>M5_v3 Safety</h2>
+      <p>Decisão registrada: <code>conditional_candidate: M5_v3 is safe versus M5_v2 but regional specificity is not fully falsified.</code>. A mudança conceitual foi impor uma guarda molecular: quando o score molecular é forte, o desconto regional é bloqueado ou limitado para evitar transformar P/LP ABRAOM-presentes em falso benigno.</p>
+      <div class="table-wrap"><table><thead><tr><th>Dataset</th><th>M0</th><th>M7</th><th>M5_v2</th><th>M5_v3</th><th>Métrica</th></tr></thead><tbody><tr><td><code>br_only</code></td><td>0.279</td><td>0.417</td><td>0.605</td><td>0.605</td><td><code>mcc</code></td></tr><tr><td><code>abraom_common_benign</code></td><td>0.803</td><td>0.903</td><td>0.959</td><td>0.959</td><td><code>specificity</code></td></tr><tr><td><code>abraom_pathogenic_present</code></td><td>0.417</td><td>0.252</td><td>0.436</td><td>0.436</td><td><code>recall</code></td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td>0.512</td><td>0.512</td><td>0.500</td><td>0.512</td><td><code>mcc</code></td></tr></tbody></table></div>
+    </section>
+
+    <section id="controles">
+      <h2>Controles Negativos e Falsificação</h2>
+      <p>Os controles embaralham ou permutam o sinal regional preservando estruturas importantes. Se o controle iguala ou supera o ABRAOM real, a evidência de especificidade regional não está provada.</p>
+      <h3>Controles M5_v3</h3>
+      <div class="table-wrap"><table><thead><tr><th>Dataset</th><th>Métrica</th><th>Controle</th><th>Real</th><th>Média controle</th><th>P95</th><th>P(controle &gt;= real)</th><th>Desconto alterado</th></tr></thead><tbody><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>global</code></td><td>0.605</td><td>0.572</td><td>0.584</td><td>0.0196</td><td>98.1%</td></tr><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>within_gene</code></td><td>0.605</td><td>0.588</td><td>0.596</td><td>0.0392</td><td>65.9%</td></tr><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>within_af_bin</code></td><td>0.605</td><td>0.600</td><td>0.611</td><td>0.3922</td><td>97.3%</td></tr><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>within_chromosome</code></td><td>0.605</td><td>0.575</td><td>0.590</td><td>0.0196</td><td>93.4%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>global</code></td><td>0.959</td><td>0.977</td><td>0.977</td><td>1.0000</td><td>99.5%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>within_gene</code></td><td>0.959</td><td>0.971</td><td>0.972</td><td>1.0000</td><td>92.7%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>within_af_bin</code></td><td>0.959</td><td>0.976</td><td>0.978</td><td>1.0000</td><td>99.5%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>within_chromosome</code></td><td>0.959</td><td>0.976</td><td>0.977</td><td>1.0000</td><td>99.3%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>global</code></td><td>0.436</td><td>0.429</td><td>0.445</td><td>0.4902</td><td>97.9%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>within_gene</code></td><td>0.436</td><td>0.441</td><td>0.451</td><td>0.8824</td><td>44.0%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>within_af_bin</code></td><td>0.436</td><td>0.443</td><td>0.460</td><td>0.8431</td><td>97.5%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>within_chromosome</code></td><td>0.436</td><td>0.431</td><td>0.451</td><td>0.4314</td><td>84.7%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>global</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>98.0%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>within_gene</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>88.8%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>within_af_bin</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>98.0%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>within_chromosome</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>96.8%</td></tr></tbody></table></div>
+      <h3>Controles Estratificados Fortes</h3>
+      <div class="table-wrap"><table><thead><tr><th>Dataset</th><th>Métrica</th><th>Controle</th><th>Real</th><th>Média controle</th><th>P95</th><th>P(controle &gt;= real)</th><th>Desconto alterado</th></tr></thead><tbody><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>within_gene_af_bin</code></td><td>0.605</td><td>0.603</td><td>0.605</td><td>0.6337</td><td>59.9%</td></tr><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>within_af_bin_variant_type</code></td><td>0.605</td><td>0.600</td><td>0.611</td><td>0.3960</td><td>97.0%</td></tr><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>within_specificity_bin_variant_type</code></td><td>0.605</td><td>0.599</td><td>0.611</td><td>0.3267</td><td>96.3%</td></tr><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>within_chromosome_af_bin</code></td><td>0.605</td><td>0.600</td><td>0.605</td><td>0.3663</td><td>87.5%</td></tr><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>within_chromosome_af_bin_variant_type</code></td><td>0.605</td><td>0.601</td><td>0.605</td><td>0.4653</td><td>84.0%</td></tr><tr><td><code>br_only</code></td><td><code>mcc</code></td><td><code>within_gene_af_bin_variant_type</code></td><td>0.605</td><td>0.602</td><td>0.605</td><td>0.4554</td><td>54.1%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>within_gene_af_bin</code></td><td>0.959</td><td>0.971</td><td>0.972</td><td>1.0000</td><td>92.7%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>within_af_bin_variant_type</code></td><td>0.959</td><td>0.977</td><td>0.978</td><td>1.0000</td><td>99.5%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>within_specificity_bin_variant_type</code></td><td>0.959</td><td>0.975</td><td>0.976</td><td>1.0000</td><td>99.4%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>within_chromosome_af_bin</code></td><td>0.959</td><td>0.976</td><td>0.977</td><td>1.0000</td><td>99.3%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>within_chromosome_af_bin_variant_type</code></td><td>0.959</td><td>0.976</td><td>0.978</td><td>1.0000</td><td>99.3%</td></tr><tr><td><code>abraom_common_benign</code></td><td><code>specificity</code></td><td><code>within_gene_af_bin_variant_type</code></td><td>0.959</td><td>0.971</td><td>0.972</td><td>1.0000</td><td>92.6%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>within_gene_af_bin</code></td><td>0.436</td><td>0.445</td><td>0.454</td><td>1.0000</td><td>29.4%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>within_af_bin_variant_type</code></td><td>0.436</td><td>0.441</td><td>0.460</td><td>0.7525</td><td>97.6%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>within_specificity_bin_variant_type</code></td><td>0.436</td><td>0.434</td><td>0.454</td><td>0.5545</td><td>95.0%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>within_chromosome_af_bin</code></td><td>0.436</td><td>0.444</td><td>0.460</td><td>0.8515</td><td>73.3%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>within_chromosome_af_bin_variant_type</code></td><td>0.436</td><td>0.444</td><td>0.454</td><td>0.9010</td><td>73.6%</td></tr><tr><td><code>abraom_pathogenic_present</code></td><td><code>recall</code></td><td><code>within_gene_af_bin_variant_type</code></td><td>0.436</td><td>0.445</td><td>0.454</td><td>1.0000</td><td>30.0%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>within_gene_af_bin</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>88.9%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>within_af_bin_variant_type</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>97.9%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>within_specificity_bin_variant_type</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>97.9%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>within_chromosome_af_bin</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>96.8%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>within_chromosome_af_bin_variant_type</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>95.3%</td></tr><tr><td><code>global_nonbr_no_abraom</code></td><td><code>mcc</code></td><td><code>within_gene_af_bin_variant_type</code></td><td>0.512</td><td>0.512</td><td>0.512</td><td>1.0000</td><td>83.9%</td></tr></tbody></table></div>
+      <div class="callout warning">
+        <strong>Interpretação rigorosa:</strong> <code>br_only</code> ainda mostra ganho absoluto, mas controles dentro de gene/AF bin e outros estratos chegam muito perto ou superam o real em vários alvos. Portanto, a conclusão correta é “sinal útil para calibração regional”, não “prova fechada de aprendizado biológico específico do ABRAOM”.
+      </div>
+    </section>
+
+    <section id="erros">
+      <h2>Análise de Erro e Curadoria</h2>
+      <p>Após M5_v3, a principal barreira deixou de ser arquitetura e passou a ser evidência: ainda há P/LP ABRAOM-presentes chamados como benignos e benignas comuns ABRAOM chamadas como patogênicas.</p>
+      <div class="grid">
+        <div class="metric">
+          <div class="label">P/LP ABRAOM-presentes falso benignos</div>
+          <div class="value">92</div>
+          <div class="sub">60 em alta prioridade de revisão</div>
+        </div>
+        <div class="metric">
+          <div class="label">Benignas comuns ABRAOM falso patogênicas</div>
+          <div class="value">502</div>
+          <div class="sub">15 em alta prioridade de revisão</div>
+        </div>
+        <div class="metric">
+          <div class="label">Fila pública de alta prioridade</div>
+          <div class="value">75</div>
+          <div class="sub">70 precisam lookup público</div>
+        </div>
+        <div class="metric">
+          <div class="label">Prontas como sentinela pública</div>
+          <div class="value">1</div>
+          <div class="sub">4 conflitos públicos a resolver</div>
+        </div>
+      </div>
+      <h3>Categorias Críticas</h3>
+      <div class="table-wrap"><table><thead><tr><th>Tipo de auditoria</th><th>Categoria</th><th>Tier</th><th>n</th></tr></thead><tbody><tr><td><code>false_benign_plp</code></td><td><code>threshold_near_miss</code></td><td><code>P1_manual_review</code></td><td>40</td></tr><tr><td><code>false_benign_plp</code></td><td><code>weak_molecular_signal</code></td><td><code>P2_model_diagnostic</code></td><td>32</td></tr><tr><td><code>false_benign_plp</code></td><td><code>weak_molecular_signal</code></td><td><code>P1_manual_review</code></td><td>15</td></tr><tr><td><code>false_benign_plp</code></td><td><code>threshold_near_miss</code></td><td><code>P0_manual_review</code></td><td>2</td></tr><tr><td><code>false_benign_plp</code></td><td><code>weak_molecular_signal</code></td><td><code>P0_manual_review</code></td><td>2</td></tr><tr><td><code>false_benign_plp</code></td><td><code>common_plp_recessive_or_founder_review</code></td><td><code>P1_manual_review</code></td><td>1</td></tr><tr><td><code>false_pathogenic_common_benign</code></td><td><code>threshold_near_miss</code></td><td><code>P3_low_priority</code></td><td>273</td></tr><tr><td><code>false_pathogenic_common_benign</code></td><td><code>regional_discount_insufficient_common</code></td><td><code>P3_low_priority</code></td><td>151</td></tr><tr><td><code>false_pathogenic_common_benign</code></td><td><code>regional_discount_insufficient_common</code></td><td><code>P2_model_diagnostic</code></td><td>46</td></tr><tr><td><code>false_pathogenic_common_benign</code></td><td><code>unresolved_false_pathogenic</code></td><td><code>P3_low_priority</code></td><td>12</td></tr><tr><td><code>false_pathogenic_common_benign</code></td><td><code>regional_discount_insufficient_common</code></td><td><code>P1_manual_review</code></td><td>9</td></tr><tr><td><code>false_pathogenic_common_benign</code></td><td><code>molecular_score_overdominant</code></td><td><code>P1_manual_review</code></td><td>6</td></tr></tbody></table></div>
+      <h3>Genes Prioritários</h3>
+      <div class="table-wrap"><table><thead><tr><th>Tipo de auditoria</th><th>Gene</th><th>n</th><th>Prioridade média</th><th>AF ABRAOM mediana</th></tr></thead><tbody><tr><td><code>false_benign_plp</code></td><td><strong>FKTN</strong></td><td>12</td><td>4.252</td><td>0.0083</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>PCSK9</strong></td><td>8</td><td>4.692</td><td>0.0211</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>F2</strong></td><td>3</td><td>5.162</td><td>0.0171</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>DYSF</strong></td><td>3</td><td>5.043</td><td>0.0162</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>PAX6</strong></td><td>3</td><td>4.189</td><td>0.0078</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>TMC1</strong></td><td>3</td><td>4.426</td><td>0.0154</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>CFH</strong></td><td>2</td><td>5.671</td><td>0.4626</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>HIF1A</strong></td><td>2</td><td>5.548</td><td>0.0515</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>FECH</strong></td><td>2</td><td>5.621</td><td>0.1806</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>INS</strong></td><td>2</td><td>4.423</td><td>0.3215</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>FLCN</strong></td><td>2</td><td>4.999</td><td>0.5863</td></tr><tr><td><code>false_benign_plp</code></td><td><strong>SCN5A</strong></td><td>2</td><td>4.928</td><td>0.0102</td></tr></tbody></table></div>
+      <h3>Painel de Estresse de Alta Prioridade</h3>
+      <p>Este painel foi construído a partir de erros; ele serve para caracterizar falhas, não para estimar desempenho populacional.</p>
+      <div class="table-wrap"><table><thead><tr><th>Modelo</th><th>n</th><th>Recall</th><th>Specificity</th><th>MCC</th><th>FP</th><th>FN</th></tr></thead><tbody><tr><td><code>M0</code></td><td>75</td><td>0.250</td><td>0.133</td><td>-0.510</td><td>13</td><td>45</td></tr><tr><td><code>M7_dynamic_scrambled</code></td><td>75</td><td>0.117</td><td>0.133</td><td>-0.678</td><td>13</td><td>53</td></tr><tr><td><code>M5_v2_calibrated</code></td><td>75</td><td>0.000</td><td>0.000</td><td>-1.000</td><td>15</td><td>60</td></tr><tr><td><code>M5_v3_safety</code></td><td>75</td><td>0.000</td><td>0.000</td><td>-1.000</td><td>15</td><td>60</td></tr></tbody></table></div>
+      <h3>Status de Evidência Pública</h3>
+      <div class="table-wrap"><table><thead><tr><th>Categoria</th><th>n</th><th>Tipo</th></tr></thead><tbody><tr><td><code>needs_public_lookup</code></td><td>70</td><td>status</td></tr><tr><td><code>public_label_conflict</code></td><td>4</td><td>status</td></tr><tr><td><code>local_public_supports_label</code></td><td>1</td><td>status</td></tr><tr><td><code>no_local_variation_id_or_significance</code></td><td>70</td><td>decision</td></tr><tr><td><code>public_benign_conflicts_with_plp_label</code></td><td>4</td><td>decision</td></tr><tr><td><code>supports_plp_sentinel</code></td><td>1</td><td>decision</td></tr></tbody></table></div>
+    </section>
+
+    <section id="fontes">
+      <h2>Artefatos de Origem</h2>
+      <div class="sources">
+        <div><code>artifacts/clinvar_regional_eval/m5_v3_safety_calibrated/m0_m4_m5_m6_m5cal_m6cal_m7_m5v2cal_m5v3_summary.csv</code></div>
+        <div><code>artifacts/adapter_fusion_blueprint_completion/dynamic_fusion_regional_summary.csv</code></div>
+        <div><code>artifacts/clinvar_regional_eval/m5_v3_safety_calibrated/m5_v3_safety_summary.json</code></div>
+        <div><code>artifacts/clinvar_regional_eval/m5_v3_safety_calibrated/m5_v3_negative_control_comparison.csv</code></div>
+        <div><code>artifacts/clinvar_regional_eval/regional_signal_validation_next_step/strong_negative_control_comparison.csv</code></div>
+        <div><code>artifacts/adapter_fusion_error_analysis_deep/error_counts_by_model_dataset.csv</code></div>
+        <div><code>artifacts/clinvar_regional_eval/regional_signal_validation_next_step/critical_error_category_summary.csv</code></div>
+        <div><code>artifacts/clinvar_regional_eval/regional_signal_validation_next_step/critical_error_gene_summary.csv</code></div>
+        <div><code>artifacts/clinvar_regional_eval/public_abraom_validation/public_abraom_validation_summary.json</code></div>
+        <div><code>artifacts/clinvar_regional_eval/public_abraom_validation/public_validation_metrics_by_panel.csv</code></div>
+      </div>
+      <footer>
+        Relatório gerado por <code>scripts/compile_abraom_study_html_report.py</code>. A conclusão é científica e retrospectiva sobre os artefatos presentes; não substitui validação clínica, curadoria independente, nem avaliação prospectiva em coorte brasileira.
+      </footer>
+    </section>
+  </main>
+</body>
+</html>

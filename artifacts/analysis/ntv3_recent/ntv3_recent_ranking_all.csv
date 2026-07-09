@@ -1,0 +1,10 @@
+rank,experiment,model_name,model_version,functional_head_type,feature_source,test_mean_pearson,test_loss,best_val_metric,best_val_step,final_val_metric,training_tokens,running_time,effective_global_batch_size,world_size,num_tracks
+1,beat-v7-mlp-head-seed0,Lumina beat-v7 MLP-head,beat-v7,mlp,hidden,0.482298192417342,4.2645466690999765,0.51053382,17500,0.5047502,20900216832.0,24634.394881801003,32,8,34
+2,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,beat-v7,linear,,0.4614521841197114,4.270805176269677,0.48544754,19500,0.48160467,20900216832.0,25433.502506962,32,8,34
+3,beat-v7-official-hidden-repro-seed0,Lumina beat-v7 official-hidden repro,beat-v7,linear,hidden,0.4604545546372252,4.271587809477747,0.4852527,17500,0.47885327,20900216832.0,24589.90853179,32,8,34
+4,ntv3-beat-v6-official-human-functional-seed0-r2,Lumina beat-v6,beat-v6,linear,,0.42446572513952086,4.298349573025448,0.44691348,17500,0.44122053,20900216832.0,15277.199140055998,32,8,34
+5,beat-v5-dec-coupled,Lumina beat-v5 decoder-coupled stable-nosync,beat-v5,linear,decoder,0.24504309604462093,4.435894149476206,0.26156358,19932,0.26156358,20900216832.0,27645.683660352002,32,8,34
+6,ntv3-beat-v5-val-b12-seed42,Lumina beat-v5 22M,beat-v5,linear,,0.005834878395440791,1.9541656970977783,3.614e-05,10,3.614e-05,327680.0,31.528297444999907,1,1,34
+7,ntv3-beat-v5-val-13b-seed42,Lumina beat-v5 22M,beat-v5,linear,,0.0031054246526375827,1.8232341958926275,0.00388108,10,0.00388108,327680.0,34.10975230700001,1,1,34
+8,ntv3-beat-v5-val-13c-seed42,Lumina beat-v5 22M,beat-v5,linear,,0.0031054246526375827,1.8232341958926275,0.00388108,10,0.00388108,327680.0,33.711440133999986,1,1,34
+9,beat-v5-dec-coupled-smoke-nosync,Lumina beat-v5 decoder-coupled smoke,beat-v5,linear,decoder,-0.00035814797339413473,1.9235184788703918,-0.00444174,2,-0.00444174,2097152.0,30.263904032000028,32,8,34

@@ -1,0 +1,62 @@
+{
+  "alpha_vs_ntv3_pearson_ntv3_scaled_both": 0.2966213696686422,
+  "alpha_vs_ntv3_pearson_ntv3_target_only": 0.2926989879312156,
+  "alpha_vs_ntv3_pearson_raw": 0.2976471416096437,
+  "config": {
+    "alphagenome_model_version": "all_folds",
+    "alphagenome_output_type": "ATAC",
+    "alphagenome_source": "huggingface",
+    "dataset_root": "data/datasets/ntv3",
+    "dry_run": false,
+    "keep_target_center_fraction": 0.375,
+    "ontology_term": "UBERON:0000056",
+    "selected_windows": 10531,
+    "sequence_length": 32768,
+    "species": "human",
+    "split": "test",
+    "target_center_end": 22528,
+    "target_center_start": 10240,
+    "target_length": 12288,
+    "total_split_windows": 10531,
+    "track_info": {
+      "assay": "ATAC-seq",
+      "mean": 0.7250170204686959,
+      "path": "data/datasets/ntv3/human/functional_tracks/ENCSR814RGG.bigwig",
+      "std": 0.6537994463881371,
+      "track_id": "ENCSR814RGG"
+    },
+    "window_sampling": "uniform"
+  },
+  "evaluated_windows": 10531,
+  "lumina_context": {
+    "Metric": "0.6711599475840397",
+    "assay_type": "ATAC-seq",
+    "best_step": "19000.0",
+    "best_step_time": "0 days 06:37:54.455832",
+    "datasets": "ENCSR814RGG",
+    "metric_value": 0.6711599475840397,
+    "model_name": "Lumina beat-v7 20k aggressive moderate LR1.25e-4 LLRD0.85",
+    "run_id": "beat-v7-20k-aggressive-moderate-lr125-llrd085-seed0",
+    "running_time": "25089.691698925002",
+    "species": "human",
+    "track_name_clean": "ENCSR814RGG",
+    "training_tokens": "20900216832.0"
+  },
+  "mean_window_pearson_ntv3_scaled_both": 0.15059871883738055,
+  "mean_window_pearson_raw": 0.1504117665061325,
+  "num_positions": 129404928,
+  "public_ntv3_context": {
+    "assay_type": "ATAC-seq",
+    "dataset": "ENCSR814RGG",
+    "delta_vs_linear": "0.0186651707012343",
+    "delta_vs_mlp": "0.006211858241590651",
+    "gap_to_public_best": "0.15488746350444194",
+    "metric_value": 0.7984862526257833,
+    "public_best_model": "NTv3 650M (pos)",
+    "public_best_score": "0.7984862526257833",
+    "score": "0.6435987891213414",
+    "track_name_clean": "ENCSR814RGG"
+  },
+  "skipped_high_n_windows": 0,
+  "status": "completed"
+}

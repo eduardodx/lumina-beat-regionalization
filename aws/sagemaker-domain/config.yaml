@@ -1,0 +1,26 @@
+domain_name: lumina-studio
+bucket_name: ai4bio-lumina
+auth_mode: IAM
+
+tags:
+  environment: research
+  owner: ai4bio-lumina
+
+network:
+  vpc_cidr: 10.32.0.0/16
+  private_subnet_cidrs:
+    - 10.32.0.0/20
+    - 10.32.16.0/20
+  public_subnet_cidr: 10.32.240.0/24
+  availability_zone_count: 2
+  nat_enabled: true
+
+execution_role:
+  name: lumina-sagemaker-execution-role
+  managed_policies:
+    - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+  inline_bucket_access: true
+
+users:
+  - profile_name: eduardo
+  - profile_name: pedro

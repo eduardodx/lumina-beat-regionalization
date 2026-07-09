@@ -1,0 +1,24 @@
+_inherit: _base.yaml
+
+output_dir: outputs/lumina_beat_v9_smoke
+wandb_enabled: false
+seq_len: 1024
+batch_size: 2
+num_workers: 0
+max_steps: 10
+eval_every: 5
+save_every: 0
+log_every: 1
+lr_scheduler: cosine
+length_warmup_enabled: false
+memory_preflight_enabled: false
+
+model_config:
+  d_model: 128
+  depth: 2
+  d_state: 64
+  headdim: 32
+  local_attention_every: 0
+  hidden_tap_layers: [1, 2]
+  counterfactual_repr_dim: 64
+  multiscale_context_radii: [3, 16]

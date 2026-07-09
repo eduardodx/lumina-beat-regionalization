@@ -1,0 +1,12 @@
+_inherit: _base.yaml
+
+seq_len: 4096
+batch_size: 2
+num_workers: 0
+prefetch_factor: 2
+max_steps: 20
+eval_every: 10
+save_every: 0
+log_every: 5
+output_dir: outputs/lumina_beat_v7_smoke
+wandb_enabled: false

@@ -1,0 +1,300 @@
+{
+  "combined_ranking": [
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "NTv3 650M (pos)",
+      "kind": "rival",
+      "mean_score": 0.6192761148307837,
+      "rank": 1
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "NTv3 650M (pre)",
+      "kind": "rival",
+      "mean_score": 0.5793687233737871,
+      "rank": 2
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "NTv3 100M (pre)",
+      "kind": "rival",
+      "mean_score": 0.5303324224317775,
+      "rank": 3
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "Residual CNN 44M",
+      "kind": "rival",
+      "mean_score": 0.5156384896413952,
+      "rank": 4
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "NTv3 8M (pre)",
+      "kind": "rival",
+      "mean_score": 0.49823602712621873,
+      "rank": 5
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "Caduceus 7M",
+      "kind": "rival",
+      "mean_score": 0.48469278011836253,
+      "rank": 6
+    },
+    {
+      "details": "beat-v7, head=mlp",
+      "display_name": "Lumina beat-v7 MLP-head [beat-v7-mlp-head-seed0]",
+      "kind": "ours",
+      "mean_score": 0.482298192417342,
+      "rank": 7
+    },
+    {
+      "details": "beat-v7, head=linear",
+      "display_name": "Lumina beat-v7 [ntv3-beat-v7-official-human-functional-seed0-r2]",
+      "kind": "ours",
+      "mean_score": 0.4614521841197114,
+      "rank": 8
+    },
+    {
+      "details": "beat-v7, head=linear",
+      "display_name": "Lumina beat-v7 official-hidden repro [beat-v7-official-hidden-repro-seed0]",
+      "kind": "ours",
+      "mean_score": 0.4604545546372252,
+      "rank": 9
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "Residual CNN 700k",
+      "kind": "rival",
+      "mean_score": 0.43885703983844493,
+      "rank": 10
+    },
+    {
+      "details": "beat-v6, head=linear",
+      "display_name": "Lumina beat-v6 [ntv3-beat-v6-official-human-functional-seed0-r2]",
+      "kind": "ours",
+      "mean_score": 0.42446572513952086,
+      "rank": 11
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "Evo2 1B",
+      "kind": "rival",
+      "mean_score": 0.40909185085226507,
+      "rank": 12
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "BPNet arch. 6M",
+      "kind": "rival",
+      "mean_score": 0.3938671779983184,
+      "rank": 13
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "NTv2 500M",
+      "kind": "rival",
+      "mean_score": 0.3819580345469362,
+      "rank": 14
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "HyenaDNA 7M",
+      "kind": "rival",
+      "mean_score": 0.3584319529872314,
+      "rank": 15
+    },
+    {
+      "details": "public leaderboard, n=34 grouped tracks",
+      "display_name": "BPNet arch. 100k",
+      "kind": "rival",
+      "mean_score": 0.3062272822009582,
+      "rank": 16
+    },
+    {
+      "details": "beat-v5, head=linear",
+      "display_name": "Lumina beat-v5 decoder-coupled stable-nosync [beat-v5-dec-coupled]",
+      "kind": "ours",
+      "mean_score": 0.24504309604462093,
+      "rank": 17
+    },
+    {
+      "details": "beat-v5, head=linear",
+      "display_name": "Lumina beat-v5 22M [ntv3-beat-v5-val-b12-seed42]",
+      "kind": "ours",
+      "mean_score": 0.005834878395440791,
+      "rank": 18
+    },
+    {
+      "details": "beat-v5, head=linear",
+      "display_name": "Lumina beat-v5 22M [ntv3-beat-v5-val-13b-seed42]",
+      "kind": "ours",
+      "mean_score": 0.0031054246526375827,
+      "rank": 19
+    },
+    {
+      "details": "beat-v5, head=linear",
+      "display_name": "Lumina beat-v5 22M [ntv3-beat-v5-val-13c-seed42]",
+      "kind": "ours",
+      "mean_score": 0.0031054246526375827,
+      "rank": 20
+    },
+    {
+      "details": "beat-v5, head=linear",
+      "display_name": "Lumina beat-v5 decoder-coupled smoke [beat-v5-dec-coupled-smoke-nosync]",
+      "kind": "ours",
+      "mean_score": -0.00035814797339413473,
+      "rank": 21
+    }
+  ],
+  "human_functional_public_rivals": [
+    {
+      "mean_score": 0.6192761148307837,
+      "model_name": "NTv3 650M (pos)",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.5793687233737871,
+      "model_name": "NTv3 650M (pre)",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.5303324224317775,
+      "model_name": "NTv3 100M (pre)",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.5156384896413952,
+      "model_name": "Residual CNN 44M",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.49823602712621873,
+      "model_name": "NTv3 8M (pre)",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.48469278011836253,
+      "model_name": "Caduceus 7M",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.43885703983844493,
+      "model_name": "Residual CNN 700k",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.40909185085226507,
+      "model_name": "Evo2 1B",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.3938671779983184,
+      "model_name": "BPNet arch. 6M",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.3819580345469362,
+      "model_name": "NTv2 500M",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.3584319529872314,
+      "model_name": "HyenaDNA 7M",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    },
+    {
+      "mean_score": 0.3062272822009582,
+      "model_name": "BPNet arch. 100k",
+      "num_entries": 34,
+      "source": "public_ntv3_leaderboard"
+    }
+  ],
+  "our_recent_models": [
+    {
+      "experiment": "beat-v7-mlp-head-seed0",
+      "functional_head_type": "mlp",
+      "mean_score": 0.482298192417342,
+      "model_name": "Lumina beat-v7 MLP-head",
+      "model_version": "beat-v7",
+      "source": "lumina_recent_run"
+    },
+    {
+      "experiment": "ntv3-beat-v7-official-human-functional-seed0-r2",
+      "functional_head_type": "linear",
+      "mean_score": 0.4614521841197114,
+      "model_name": "Lumina beat-v7",
+      "model_version": "beat-v7",
+      "source": "lumina_recent_run"
+    },
+    {
+      "experiment": "beat-v7-official-hidden-repro-seed0",
+      "functional_head_type": "linear",
+      "mean_score": 0.4604545546372252,
+      "model_name": "Lumina beat-v7 official-hidden repro",
+      "model_version": "beat-v7",
+      "source": "lumina_recent_run"
+    },
+    {
+      "experiment": "ntv3-beat-v6-official-human-functional-seed0-r2",
+      "functional_head_type": "linear",
+      "mean_score": 0.42446572513952086,
+      "model_name": "Lumina beat-v6",
+      "model_version": "beat-v6",
+      "source": "lumina_recent_run"
+    },
+    {
+      "experiment": "beat-v5-dec-coupled",
+      "functional_head_type": "linear",
+      "mean_score": 0.24504309604462093,
+      "model_name": "Lumina beat-v5 decoder-coupled stable-nosync",
+      "model_version": "beat-v5",
+      "source": "lumina_recent_run"
+    },
+    {
+      "experiment": "ntv3-beat-v5-val-b12-seed42",
+      "functional_head_type": "linear",
+      "mean_score": 0.005834878395440791,
+      "model_name": "Lumina beat-v5 22M",
+      "model_version": "beat-v5",
+      "source": "lumina_recent_run"
+    },
+    {
+      "experiment": "ntv3-beat-v5-val-13b-seed42",
+      "functional_head_type": "linear",
+      "mean_score": 0.0031054246526375827,
+      "model_name": "Lumina beat-v5 22M",
+      "model_version": "beat-v5",
+      "source": "lumina_recent_run"
+    },
+    {
+      "experiment": "ntv3-beat-v5-val-13c-seed42",
+      "functional_head_type": "linear",
+      "mean_score": 0.0031054246526375827,
+      "model_name": "Lumina beat-v5 22M",
+      "model_version": "beat-v5",
+      "source": "lumina_recent_run"
+    },
+    {
+      "experiment": "beat-v5-dec-coupled-smoke-nosync",
+      "functional_head_type": "linear",
+      "mean_score": -0.00035814797339413473,
+      "model_name": "Lumina beat-v5 decoder-coupled smoke",
+      "model_version": "beat-v5",
+      "source": "lumina_recent_run"
+    }
+  ],
+  "public_url": "https://huggingface.co/spaces/InstaDeepAI/ntv3_benchmark/raw/main/data/ntv3_benchmark_results.csv"
+}

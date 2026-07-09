@@ -1,0 +1,7 @@
+# 8M BiMamba3-RC baseline.
+# All Mamba3 features (MIMO, full RoPE, outproj norm) are on by default.
+
+_inherit: _base.yaml
+
+output_dir: outputs/lumina_8m_bimamba3_rc
+wandb_run_name: bimamba3-rc-8m

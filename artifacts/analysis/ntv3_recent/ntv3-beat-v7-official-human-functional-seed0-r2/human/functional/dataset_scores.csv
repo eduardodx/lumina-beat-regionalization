@@ -1,0 +1,35 @@
+Metric,run_id,model_name,best_step,best_step_time,training_tokens,running_time,species,datasets,assay_type,track_name_clean
+0.33527610778335415,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR046BCI_M,PRO-cap,ENCSR046BCI_M
+0.30958112564191553,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR046BCI_P,PRO-cap,ENCSR046BCI_P
+0.3583346628333075,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR100LIJ_M,PRO-cap,ENCSR100LIJ_M
+0.35987361880747987,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR100LIJ_P,PRO-cap,ENCSR100LIJ_P
+0.2565886837847727,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR114HGS_M,PRO-cap,ENCSR114HGS_M
+0.2904228515687746,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR114HGS_P,PRO-cap,ENCSR114HGS_P
+0.4396301389653044,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR154HRN_M,eCLIP,ENCSR154HRN_M
+0.44757528591021833,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR154HRN_P,eCLIP,ENCSR154HRN_P
+0.5283959129265006,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR249ROI_M,eCLIP,ENCSR249ROI_M
+0.5131564757058149,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR249ROI_P,eCLIP,ENCSR249ROI_P
+0.5564656701145959,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR321PWZ_M,eCLIP,ENCSR321PWZ_M
+0.5906775650585779,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR321PWZ_P,eCLIP,ENCSR321PWZ_P
+0.6604988482690464,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR325NFE,ATAC-seq,ENCSR325NFE
+0.509239739471627,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR410DWV,ATAC-seq,ENCSR410DWV
+0.3895804196181035,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR484LTQ_M,eCLIP,ENCSR484LTQ_M
+0.40091141513417144,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR484LTQ_P,eCLIP,ENCSR484LTQ_P
+0.49572430307777554,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR487QSB,ATAC-seq,ENCSR487QSB
+0.40996611978622666,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR527JGN_M,polyA plus RNA-seq,ENCSR527JGN_M
+0.5927154160658527,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR527JGN_P,polyA plus RNA-seq,ENCSR527JGN_P
+0.5884133249680421,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR619DQO_M,total RNA-seq,ENCSR619DQO_M
+0.6104574984964976,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR619DQO_P,total RNA-seq,ENCSR619DQO_P
+0.4066308760781965,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR628PLS,ATAC-seq,ENCSR628PLS
+0.46255685154904014,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR682BFG,Histone ChIP-seq,ENCSR682BFG
+0.4768996472970263,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR701YIC,total RNA-seq,ENCSR701YIC
+0.43070652992499814,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR754DRC,Histone ChIP-seq,ENCSR754DRC
+0.3586754488058669,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR799DGV_M,PRO-cap,ENCSR799DGV_M
+0.3646226976042223,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR799DGV_P,PRO-cap,ENCSR799DGV_P
+0.6314782841031992,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR814RGG,ATAC-seq,ENCSR814RGG
+0.4353570743055308,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR862QCH_M,eCLIP,ENCSR862QCH_M
+0.44378347939037976,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR862QCH_P,eCLIP,ENCSR862QCH_P
+0.4944230792360045,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR863PSM,Histone ChIP-seq,ENCSR863PSM
+0.35590926340999307,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR935RNW_M,PRO-cap,ENCSR935RNW_M
+0.36381295695445864,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR935RNW_P,PRO-cap,ENCSR935RNW_P
+0.8210328874233132,ntv3-beat-v7-official-human-functional-seed0-r2,Lumina beat-v7,19500.0,0 days 06:53:54.045217,20900216832.0,25433.502506962,human,ENCSR962OTG,Histone ChIP-seq,ENCSR962OTG

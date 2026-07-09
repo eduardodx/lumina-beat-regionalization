@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NTv3 Benchmark — Scientific mini report and Lumina comparison</title>
+  <style>
+:root {
+  --bg: #eef2f7;
+  --ink: #0f172a;
+  --muted: #475569;
+  --line: #dbe4ef;
+  --panel: #ffffff;
+  --accent: #f59e0b;
+  --accent-2: #047857;
+  --code-bg: #f1f5f9;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: radial-gradient(circle at 10% 0%, #fff7ed 0, rgba(255,247,237,0) 28rem), var(--bg);
+  color: var(--ink);
+  font-family: Verdana, DejaVu Sans, Arial, sans-serif;
+  line-height: 1.55;
+}
+a { color: #0f766e; text-decoration-thickness: .08em; text-underline-offset: .18em; }
+.shell { width: min(1260px, calc(100vw - 36px)); margin: 28px auto 64px; }
+.hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 54%, #92400e 120%);
+  color: white;
+  border-radius: 28px;
+  padding: 34px 38px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .22);
+}
+.hero h1 { margin: 0 0 10px; font: 800 34px Georgia, serif; letter-spacing: -.02em; }
+.hero p { margin: 0; max-width: 960px; color: #dbeafe; font-size: 15px; }
+.nav { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 24px; }
+.nav a {
+  display: inline-flex; align-items: center; padding: 9px 13px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: rgba(255,255,255,.82); color: #334155;
+  font-size: 13px; font-weight: 700; text-decoration: none;
+}
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 24px;
+  padding: 24px; margin: 24px 0; box-shadow: 0 18px 48px rgba(15, 23, 42, .09);
+}
+.panel-head {
+  display: flex; justify-content: space-between; gap: 18px; align-items: flex-end;
+  border-bottom: 1px solid var(--line); padding-bottom: 14px; margin-bottom: 18px;
+}
+.panel h2 { margin: 0; font: 800 26px Georgia, serif; }
+.panel-head p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+.source-pill {
+  white-space: nowrap; border: 1px solid #fed7aa; background: #fff7ed; color: #9a3412;
+  border-radius: 999px; padding: 8px 11px; font-size: 12px; font-weight: 800;
+}
+.prose { max-width: 1080px; margin: 0 auto; font-size: 15px; }
+.prose h1 {
+  margin: 0 0 22px; padding-bottom: 14px; border-bottom: 2px solid var(--line);
+  font: 800 32px Georgia, serif;
+}
+.prose h2 { margin: 34px 0 12px; font: 800 23px Georgia, serif; color: #111827; }
+.prose h3 { margin: 24px 0 10px; font-size: 18px; color: #0f172a; }
+.prose p { margin: 10px 0; }
+.prose ul { padding-left: 22px; }
+.prose li { margin: 5px 0; }
+.prose code {
+  background: var(--code-bg); color: #0f172a; border: 1px solid #e2e8f0;
+  border-radius: 6px; padding: 1px 5px; font-size: .92em;
+}
+.prose table {
+  width: 100%; border-collapse: collapse; margin: 16px 0 24px; display: block;
+  overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: white;
+}
+.prose thead { background: #f8fafc; }
+.prose th, .prose td {
+  padding: 9px 10px; border-bottom: 1px solid #e2e8f0; text-align: left;
+  vertical-align: top; min-width: 120px; font-size: 13px;
+}
+.prose th { color: #334155; font-weight: 850; }
+.prose tr:last-child td { border-bottom: 0; }
+.prose img {
+  display: block; max-width: 100%; height: auto; border: 1px solid var(--line);
+  border-radius: 18px; background: white; margin: 18px auto;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, .10);
+}
+.comparison-pages { display: grid; gap: 22px; }
+.report-page { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 20px; overflow: hidden; }
+.report-page img { display: block; width: 100%; height: auto; background: white; }
+.footer { color: #64748b; font-size: 12px; text-align: center; margin: 28px 0 0; }
+@media print {
+  body { background: white; }
+  .shell { width: 100%; margin: 0; }
+  .hero, .panel { box-shadow: none; border-radius: 0; }
+  .nav { display: none; }
+  .panel { page-break-inside: avoid; }
+  #mini-report { page-break-after: always; }
+  .report-page { page-break-after: always; }
+}
+</style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <h1>NTv3 Benchmark — Scientific mini report and Lumina comparison</h1>
+      <p>Documento combinado em ordem científica: primeiro o mini report completo, incluindo a seção 10 com o status atual das runs Lumina; depois a visualização honesta Lumina beat-v7 best vs NTv3 8M pre e ranking global de contexto.</p>
+    </header>
+
+    <nav class="nav" aria-label="Seções do relatório">
+      <a href="#mini-report">Mini report</a>
+      <a href="#current-lumina-performance-status">Seção 10: status atual</a>
+      <a href="#comparison">Comparação visual</a>
+      <a href="ntv3_benchmark_scientific_mini_report.md">Markdown fonte</a>
+      <a href="best_vs_ntv3_8m_1page_honest/lumina_best_vs_ntv3_8m_honest_2page.html">HTML original da comparação</a>
+    </nav>
+
+    <section id="mini-report" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Mini report técnico-científico</h2>
+          <p>Versão HTML gerada a partir de <code>ntv3_benchmark_scientific_mini_report.md</code>. A seção 10 mantém o gráfico atual de desempenho de todas as runs Lumina.</p>
+        </div>
+        <div class="source-pill">scientific report first</div>
+      </div>
+      <article class="prose">
+<h1 id="mini-report-ntv3-benchmark-training-and-evaluation">Mini Report — NTv3 Benchmark Training and Evaluation</h1>
+<h2 id="benchmark-overview">1. Benchmark Overview</h2>
+<p>O NTv3 benchmark avalia modelos genômicos em tarefas de sequência-para-função. No recorte usado neste repositório, a tarefa principal é <strong>human functional</strong>: entrada é uma janela de DNA de <strong>32.768 bp</strong>; saída é um tensor denso por posição e por track, em resolução de nucleotídeo, para sinais BigWig funcionais. O notebook oficial de fine-tuning BigWig descreve esse setup com 34 tracks humanas, gradient accumulation, seleção do melhor checkpoint por validation Pearson e recomendação de múltiplas seeds para resultados robustos. Fonte: <a href="https://huggingface.co/spaces/InstaDeepAI/ntv3/raw/main/notebooks_tutorials/03_fine_tuning_posttrained_model_biwig.ipynb">notebook oficial NTv3 BigWig</a>.</p>
+<p>O dataset oficial contém FASTA, <code>splits.bed</code>, <code>functional_tracks/*.bigwig</code>, <code>genome_annotation/*.bed</code> e <code>benchmark_metadata.tsv</code>, organizado por espécie. Fonte: <a href="https://huggingface.co/datasets/InstaDeepAI/NTv3_benchmark_dataset">NTv3 benchmark dataset</a>. A métrica funcional central é <strong>Pearson correlation coefficient</strong>, reportada por track e agregada como mean Pearson.</p>
+<p>Para este repositório, o benchmark é usado como avaliação local controlada de variantes Lumina beat-v5/beat-v6/beat-v7 no slice <strong>human functional</strong>. O NTv3 8M pre aparece como baseline público comparativo, mas a comparação deve ser tratada como parcial se a origem dos números, seeds e protocolo de avaliação não forem idênticos.</p>
+<h2 id="what-is-allowed-restricted-or-invalid">2. What Is Allowed, Restricted, or Invalid</h2>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>Practice</th>
+<th>Status</th>
+<th>Validity impact</th>
+<th>Evidence/source</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Usar modelo pré-treinado</td>
+<td>Allowed with disclosure</td>
+<td>Comparável se checkpoint/dados forem declarados</td>
+<td>Notebook usa modelo NTv3 post-trained; paper compara pre/post</td>
+<td>Pretraining externo muda interpretação.</td>
+</tr>
+<tr>
+<td>Treinar nova task head</td>
+<td>Allowed with disclosure</td>
+<td>Compatível com fine-tuning</td>
+<td>Notebook adiciona prediction head BigWig</td>
+<td>Head deve ser declarada.</td>
+</tr>
+<tr>
+<td>Congelar encoder</td>
+<td>Allowed with disclosure</td>
+<td>Comparação direta fica parcial</td>
+<td>Inferência técnica</td>
+<td>Não altera splits/labels, mas altera protocolo.</td>
+</tr>
+<tr>
+<td>Fine-tuning completo</td>
+<td>Allowed</td>
+<td>Mais próximo do preset local</td>
+<td><code>eval/ntv3/config.py</code></td>
+<td>Preset local exige backbone treinável.</td>
+</tr>
+<tr>
+<td>LoRA/adapters</td>
+<td>Allowed with disclosure</td>
+<td>Comparável apenas se declarado</td>
+<td>Inferência técnica</td>
+<td>Não evidenciado nas runs atuais.</td>
+</tr>
+<tr>
+<td>Usar dados externos</td>
+<td>Allowed with disclosure / Invalid if leakage</td>
+<td>Pretraining é aceitável; labels de test/val no treino invalidam</td>
+<td>Paper compara modelos com diferentes pretraining corpora</td>
+<td>Precisa disclosure.</td>
+</tr>
+<tr>
+<td>Alterar splits</td>
+<td>Invalid</td>
+<td>Quebra comparação</td>
+<td>Dataset oficial fornece <code>splits.bed</code></td>
+<td>Risco direto de leakage.</td>
+</tr>
+<tr>
+<td>Usar test labels no treino</td>
+<td>Invalid</td>
+<td>Invalida avaliação</td>
+<td>Regra metodológica básica; inferência técnica</td>
+<td>Val pode selecionar checkpoint.</td>
+</tr>
+<tr>
+<td>Mudar métrica principal</td>
+<td>Not comparable</td>
+<td>Quebra benchmark</td>
+<td>Notebook usa Pearson</td>
+<td>Métricas extras são secundárias.</td>
+</tr>
+<tr>
+<td>Mudar head/pooling/tokenização</td>
+<td>Allowed with disclosure</td>
+<td>Comparável se input/output/splits/labels/métrica persistem</td>
+<td>Inferência técnica</td>
+<td>Arquitetura vira parte do método.</td>
+</tr>
+<tr>
+<td>Treinar por track/assay separado</td>
+<td>Weakly comparable</td>
+<td>Não equivale ao modelo multitask agregado</td>
+<td>Inferência técnica</td>
+<td>Útil como ablação, não claim direto.</td>
+</tr>
+</tbody>
+</table>
+<p>Comparações científicas são enfraquecidas por diferença não declarada de split, budget, seed, arquitetura, dados, checkpoint selection ou protocolo. São inválidas quando há leakage, uso do test set para treinamento/seleção iterativa, alteração oculta de labels/splits ou mudança da métrica principal.</p>
+<h2 id="what-this-repository-actually-did">3. What This Repository Actually Did</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Item</th>
+<th>Evidence in repository</th>
+<th>Scientific interpretation</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dataset oficial</td>
+<td><code>DEFAULT_DATASET_REPO_ID</code> aponta para <code>InstaDeepAI/NTv3_benchmark_dataset</code> em <code>eval/ntv3/config.py</code></td>
+<td>Fonte oficial do benchmark</td>
+<td>implemented and evidenced</td>
+</tr>
+<tr>
+<td>Splits oficiais</td>
+<td><code>splits.bed</code> carregado em <code>eval/ntv3/dataset.py</code></td>
+<td>Evita split customizado</td>
+<td>implemented and evidenced</td>
+</tr>
+<tr>
+<td>Train/val/test separados</td>
+<td>Construção explícita em <code>eval/ntv3/train.py</code></td>
+<td>Avaliação local rastreável</td>
+<td>implemented and evidenced</td>
+</tr>
+<tr>
+<td>Target transform</td>
+<td>Normalização por média + soft clipping em <code>eval/ntv3/dataset.py</code></td>
+<td>Reproduz transform usado no pipeline local auditado</td>
+<td>implemented and evidenced</td>
+</tr>
+<tr>
+<td>Loss funcional</td>
+<td>Poisson-multinomial em <code>eval/ntv3/losses.py</code></td>
+<td>Compatível com profile/scale tracks</td>
+<td>implemented and evidenced</td>
+</tr>
+<tr>
+<td>Gradient accumulation / 19.932 steps</td>
+<td>Preset em <code>eval/ntv3/config.py</code></td>
+<td>Aproxima protocolo oficial</td>
+<td>implemented and evidenced</td>
+</tr>
+<tr>
+<td>Heads experimentais</td>
+<td>Tipos listados em <code>eval/ntv3/config.py</code></td>
+<td>Exploração arquitetural local</td>
+<td>implemented and evidenced</td>
+</tr>
+<tr>
+<td>Métricas e artefatos</td>
+<td><code>metrics_test.json</code>, <code>metrics_val.csv</code>, <code>dataset_scores.csv</code> em <code>artifacts/analysis/ntv3_recent/...</code></td>
+<td>Resultados auditáveis</td>
+<td>implemented and evidenced</td>
+</tr>
+<tr>
+<td>Melhor resultado local</td>
+<td><code>beat-v7-20k-context-pyramid-lr125-llrd085-seed0</code>, mean Pearson <code>0.531973</code></td>
+<td>Melhor observação single-seed, não claim robusto</td>
+<td>implemented and evidenced</td>
+</tr>
+</tbody>
+</table>
+<h2 id="historical-experimental-progression">4. Historical Experimental Progression</h2>
+<p>Critério de inclusão: runs com <code>run_config.json</code> e <code>metrics_test.json</code>, dataset/split identificável e resultado auditável. Smokes de 2/10 steps foram excluídos como validação operacional. A classificação abaixo é <strong>exploratória</strong>, porque quase todas as runs são seed 0.</p>
+<table>
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+</colgroup>
+<thead>
+<tr>
+<th>Experiment / run</th>
+<th>Hypothesis tested</th>
+<th>Configuration</th>
+<th>Evidence artifact</th>
+<th>Result</th>
+<th>Interpretation</th>
+<th>Validated premise</th>
+<th>Limitation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>beat-v5-dec-coupled</code></td>
+<td>Beat-v5 poderia acoplar ao NTv3 functional</td>
+<td>beat-v5, full FT, 19.932 steps</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v5-dec-coupled/human/functional/metrics_test.json</code></td>
+<td>0.2450</td>
+<td>Baixo desempenho; indicou gargalo forte</td>
+<td>Evidência contra essa receita beat-v5</td>
+<td>Legacy; single seed</td>
+</tr>
+<tr>
+<td><code>ntv3-beat-v6-official...</code></td>
+<td>Beat-v6 melhora sobre v5</td>
+<td>beat-v6, full FT, 19.932 steps</td>
+<td><code>artifacts/analysis/ntv3_recent/ntv3-beat-v6-official-human-functional-seed0-r2/human/functional/metrics_test.json</code></td>
+<td>0.4245</td>
+<td>Efeito grande vs v5</td>
+<td>Forte evidência local de melhora</td>
+<td>Single seed</td>
+</tr>
+<tr>
+<td><code>beat-v7-official-hidden-repro</code> / <code>r2</code></td>
+<td>Beat-v7 é melhor backbone local</td>
+<td>beat-v7, hidden, full FT, 19.932 steps</td>
+<td><code>artifacts/analysis/ntv3_recent/ntv3-beat-v7-official-human-functional-seed0-r2/human/functional/metrics_test.json</code></td>
+<td>0.4605–0.4615</td>
+<td>Efeito grande vs v6</td>
+<td>Forte evidência local</td>
+<td>Ainda single seed</td>
+</tr>
+<tr>
+<td><code>beat-v7-mlp-head-seed0</code></td>
+<td>MLP melhora head inicial</td>
+<td>MLP, sem aux, 19.932 steps</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-mlp-head-seed0/human/functional/metrics_test.json</code></td>
+<td>0.4823</td>
+<td>Melhora observada vs ~0.461</td>
+<td>Tentative</td>
+<td>Comparação pode misturar detalhes legacy/head</td>
+</tr>
+<tr>
+<td><code>beat-v7-local-conv-head-k15</code></td>
+<td>Conv local melhora MLP</td>
+<td>local-conv, sem aux</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-local-conv-head-k15-seed0/human/functional/metrics_test.json</code></td>
+<td>0.4723</td>
+<td>Não melhorou nesta seed</td>
+<td>No evidence of improvement</td>
+<td>Não rejeita hipótese estatisticamente</td>
+</tr>
+<tr>
+<td><code>bio-readout-phylo-structure-mlp</code></td>
+<td>Aux phylo/structure ajudam</td>
+<td>MLP + aux</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-bio-readout-phylo-structure-mlp-seed0/human/functional/metrics_test.json</code></td>
+<td>0.4841</td>
+<td>Ganho pequeno vs MLP</td>
+<td>Tentative</td>
+<td>Delta pequeno; sem ablação multi-seed</td>
+</tr>
+<tr>
+<td><code>gated-hybrid-phylo-structure</code></td>
+<td>Gate aprenderia ramo local biologicamente útil</td>
+<td>gated-hybrid + aux</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-gated-hybrid-phylo-structure-seed0/human/functional/gate_analysis/gated_hybrid_gate_report.json</code></td>
+<td>0.4853; gate médio 0.022</td>
+<td>Mecanismo de gating não evidenciado</td>
+<td>Unsupported mechanism</td>
+<td>Uma seed/configuração</td>
+</tr>
+<tr>
+<td><code>recipe-a-bio-readout</code></td>
+<td>Receita forte melhora treinamento</td>
+<td>MLP + aux + EMA/LLRD/bias init, 39.864 steps</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-ft-recipe-a-bio-readout-seed0/human/functional/metrics_test.json</code></td>
+<td>0.5073</td>
+<td>Trajetória combinada melhora métrica</td>
+<td>Tentative combined recipe effect</td>
+<td>40k steps; weakly comparable</td>
+</tr>
+<tr>
+<td><code>multiscale-dilated-noresume</code></td>
+<td>Multi-scale dilated sem gate melhora</td>
+<td>multi-scale + aux, 19.932 steps</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-multiscale-dilated-noresume-seed0/human/functional/metrics_test.json</code></td>
+<td>0.4834</td>
+<td>Não melhorou nesta seed</td>
+<td>No evidence of improvement</td>
+<td>Receita diferente; sem seeds</td>
+</tr>
+<tr>
+<td><code>aggressive-backbone-ema</code></td>
+<td>Receita agressiva em 20k preserva ganhos</td>
+<td>MLP + aux + EMA/LLRD, 19.932 steps</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-20k-aggressive-backbone-ema-seed0/human/functional/metrics_test.json</code></td>
+<td>0.5081</td>
+<td>Ganho observado sem 40k</td>
+<td>Tentative</td>
+<td>Confunde aux/EMA/LLRD/bias</td>
+</tr>
+<tr>
+<td><code>aggressive-deep-llrd09</code></td>
+<td>LLRD 0.9 melhora adaptação</td>
+<td>MLP + aux + EMA/LLRD 0.9</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-20k-aggressive-deep-llrd09-seed0/human/functional/metrics_test.json</code></td>
+<td>0.5137</td>
+<td>Pequeno ganho observado</td>
+<td>Tentative</td>
+<td>Delta pequeno</td>
+</tr>
+<tr>
+<td><code>aggressive-moderate-lr125-llrd085</code></td>
+<td>LR backbone maior + LLRD 0.85 melhora</td>
+<td>MLP + aux + EMA/LLRD</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-20k-aggressive-moderate-lr125-llrd085-seed0/human/functional/metrics_test.json</code></td>
+<td>0.5142</td>
+<td>Melhor MLP recipe observado</td>
+<td>Tentative</td>
+<td>Possível tuning retrospectivo</td>
+</tr>
+<tr>
+<td><code>global-context-standalone</code></td>
+<td>Contexto global ajuda além de MLP</td>
+<td>global-context + mesma recipe aproximada</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-20k-global-context-standalone-lr125-llrd085-seed0/human/functional/metrics_test.json</code></td>
+<td>0.5227</td>
+<td>Ganho observado vs MLP recipe</td>
+<td>Tentative</td>
+<td>Delta=0.0084; sem 3 seeds</td>
+</tr>
+<tr>
+<td><code>context-pyramid-lr125-llrd085</code></td>
+<td>Head piramidal/global aproveita melhor beat-v7</td>
+<td>context-pyramid + aux + recipe</td>
+<td><code>artifacts/analysis/ntv3_recent/beat-v7-20k-context-pyramid-lr125-llrd085-seed0/human/functional/metrics_test.json</code></td>
+<td>0.5320</td>
+<td>Melhor observação local single-seed</td>
+<td>Candidate best</td>
+<td>Não prova causalidade arquitetural</td>
+</tr>
+</tbody>
+</table>
+<p>A leitura correta é: existe uma trajetória auditável que elevou o mean Pearson local de 0.245 para 0.532. A atribuição causal por componente ainda não está estabelecida. Em especial, <code>context-pyramid</code> é o melhor resultado observado, mas não está estatisticamente separado de alternativas próximas sem replicação.</p>
+<h2 id="validated-and-rejected-premises">5. Validated and Rejected Premises</h2>
+<h3 id="strong-local-evidence">Strong local evidence</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Premise</th>
+<th>Evidence</th>
+<th>Status</th>
+<th>Consequence for the research direction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O pipeline local usa dataset/splits oficiais</td>
+<td>Código carrega dataset oficial e <code>splits.bed</code></td>
+<td>Strong implementation evidence</td>
+<td>Avaliação local é auditável.</td>
+</tr>
+<tr>
+<td>Beat-v7 é melhor que beat-v5/v6 nesta configuração</td>
+<td>v5 0.2450, v6 0.4245, v7 ~0.4615</td>
+<td>Strong local effect, still single-seed</td>
+<td>Beat-v7 é backbone preferido.</td>
+</tr>
+<tr>
+<td>A trajetória experimental melhorou o score observado</td>
+<td>0.2450 → 0.5320</td>
+<td>Strong descriptive evidence</td>
+<td>Há progresso local real, mas não causalmente decomposto.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="partially-validated-tentative-premises">Partially validated / tentative premises</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Premise</th>
+<th>Evidence</th>
+<th>Status</th>
+<th>Consequence for the research direction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MLP melhora sobre head inicial</td>
+<td>0.4823 vs ~0.461</td>
+<td>Tentative</td>
+<td>Manter MLP como controle mínimo.</td>
+</tr>
+<tr>
+<td>Aux phylo/structure ajudam</td>
+<td>0.4841 vs 0.4823</td>
+<td>Weak/tentative</td>
+<td>Precisa ablação com e sem aux.</td>
+</tr>
+<tr>
+<td>LLRD/EMA/bias init melhoram treinamento</td>
+<td>recipes 0.508–0.514 vs MLP 0.482</td>
+<td>Tentative combined effect</td>
+<td>Testar receita fixa em 3 seeds.</td>
+</tr>
+<tr>
+<td>Global/context-pyramid melhora MLP recipe</td>
+<td>0.5227/0.5320 vs 0.5142</td>
+<td>Tentative</td>
+<td>Candidato a experimento confirmatório.</td>
+</tr>
+<tr>
+<td>Comparação com NTv3 8M é defensável</td>
+<td>Artifact local reporta 0.5320 vs 0.4982</td>
+<td>Conditional</td>
+<td>Depende da origem e protocolo do baseline.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="rejected-or-unsupported-premises">Rejected or unsupported premises</h3>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Premise</th>
+<th>Evidence</th>
+<th>Status</th>
+<th>Consequence for the research direction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gating biológico foi efetivo</td>
+<td>Gate médio 0.022 em uma run</td>
+<td>Unsupported mechanism</td>
+<td>Não narrar gate como mecanismo validado.</td>
+</tr>
+<tr>
+<td>Local conv simples foi refutado</td>
+<td>0.4723 vs MLP 0.4823</td>
+<td>Not established</td>
+<td>Apenas “sem evidência de melhora single-seed”.</td>
+</tr>
+<tr>
+<td>Multi-scale dilated foi refutado</td>
+<td>0.4834 vs MLP 0.4823</td>
+<td>Not established</td>
+<td>Não priorizar, mas não declarar refutação definitiva.</td>
+</tr>
+<tr>
+<td>Single-seed basta para claim forte</td>
+<td>Todas top runs são seed 0</td>
+<td>Unsupported</td>
+<td>Precisa replicação.</td>
+</tr>
+<tr>
+<td>Context-pyramid é causalmente superior</td>
+<td>Melhor single-seed, sem ablação cruzada</td>
+<td>Unsupported as causal claim</td>
+<td>Deve virar hipótese confirmatória.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="statistical-and-protocol-caveats">6. Statistical and Protocol Caveats</h2>
+<p>A principal limitação é estrutural: quase toda a progressão é <strong>single-seed</strong>. Para deltas pequenos, por exemplo 0.5142 → 0.5227 ou 0.5227 → 0.5320, não há como distinguir ganho real de ruído de seed, ordem de batches, checkpoint selection ou variância por track.</p>
+<p>Também existe um <strong>garden of forking paths</strong>: várias configurações foram tentadas e a narrativa tende a destacar a melhor. Isso não invalida a exploração, mas impede tratar o melhor run como confirmação independente.</p>
+<p>A Recipe A com 39.864 steps é <strong>weakly comparable</strong>, pois excede o orçamento nominal de 19.932 steps. As runs de 19.932 steps preservam o budget nominal, mas mudanças de EMA, LLRD, bias init e warmup alteram a dinâmica efetiva de treinamento; portanto exigem disclosure.</p>
+<p>Por fim, a comparação com NTv3 8M/100M só é forte se os números vierem do mesmo dataset, split, transform, métrica, número de seeds e política de checkpoint. Caso venham de leaderboard/artifact externo, devem ser apresentados como referência pública, não pareamento estatístico direto.</p>
+<h2 id="supported-claims">7. Supported Claims</h2>
+<h3 id="strongly-supported">Strongly supported</h3>
+<ul>
+<li>O repositório implementa avaliação local NTv3 human functional com artefatos auditáveis.</li>
+<li>O pipeline usa dataset oficial, <code>splits.bed</code>, Poisson-multinomial loss e Pearson.</li>
+<li>Beat-v7 apresentou efeito grande sobre beat-v5/v6 nas runs locais.</li>
+<li>A melhor observação local single-seed é <code>0.531973</code> com <code>beat-v7-20k-context-pyramid-lr125-llrd085-seed0</code>.</li>
+</ul>
+<h3 id="weakly-supported">Weakly supported</h3>
+<ul>
+<li>Context-pyramid pode ser melhor que MLP/global-context.</li>
+<li>Aux features podem ajudar.</li>
+<li>LLRD/EMA/bias init podem melhorar estabilidade.</li>
+<li>O resultado atual pode ser competitivo com NTv3 8M/100M pre em human functional.</li>
+</ul>
+<h3 id="not-supported">Not supported</h3>
+<ul>
+<li>Claim oficial de liderança no NTv3 benchmark.</li>
+<li>Superioridade robusta sem 3 seeds.</li>
+<li>Causalidade arquitetural do context-pyramid.</li>
+<li>Efetividade biológica do gated-hybrid.</li>
+<li>Generalização multi-espécie.</li>
+</ul>
+<h2 id="next-steps-for-scientific-rigor">8. Next Steps for Scientific Rigor</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th>Step</th>
+<th>Purpose</th>
+<th>Minimum implementation</th>
+<th>Outcome</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3 seeds da melhor run</td>
+<td>Medir variância</td>
+<td><code>context-pyramid + same recipe</code>, 19.932 steps</td>
+<td>Robustez do melhor resultado</td>
+</tr>
+<tr>
+<td>Controle MLP com mesma receita</td>
+<td>Isolar efeito da head</td>
+<td><code>MLP + same recipe</code>, 3 seeds</td>
+<td>Testar se context-pyramid agrega</td>
+</tr>
+<tr>
+<td>Ablation aux features</td>
+<td>Isolar phylo/structure</td>
+<td>context-pyramid com e sem aux</td>
+<td>Medir contribuição real das aux features</td>
+</tr>
+<tr>
+<td>Estatística por assay/track</td>
+<td>Evitar conclusão só por aggregate</td>
+<td>mean/std/CI por overall, assay e track</td>
+<td>Identificar ganhos/regressões reais</td>
+</tr>
+<tr>
+<td>Baseline NTv3 8M comparável</td>
+<td>Fortalecer comparação externa</td>
+<td>Reavaliar no mesmo pipeline ou declarar fonte</td>
+<td>Comparação menos frágil</td>
+</tr>
+<tr>
+<td>Test final congelado</td>
+<td>Reduzir seleção por test</td>
+<td>Escolher por val; avaliar test uma vez</td>
+<td>Claim mais limpo</td>
+</tr>
+</tbody>
+</table>
+<p>O mínimo defensável é: <strong>3 seeds para MLP+recipe vs context-pyramid+recipe, mesmo budget de 19.932 steps, mesma seleção por validation Pearson, e estatística por track/assay</strong>. Isso transforma a hipótese arquitetural em teste comparativo real.</p>
+<h2 id="final-scientific-assessment">9. Final Scientific Assessment</h2>
+<p>O uso atual do NTv3 neste repositório é cientificamente válido como <strong>avaliação local controlada e exploratória</strong>. A infraestrutura é auditável, os artefatos existem e a separação entre benchmark local e claim oficial está correta.</p>
+<p>A conclusão cientificamente segura é: o repositório construiu uma avaliação local do NTv3 human functional e identificou uma trajetória de configurações que elevou o mean Pearson observado de <code>0.245</code> para <code>0.532</code> em seed único. A conclusão que ainda <strong>não</strong> é segura é que <code>context-pyramid</code>, aux features ou LLRD/EMA sejam causalmente responsáveis por esse ganho.</p>
+<p>Antes de qualquer narrativa forte de arquitetura, o próximo passo deve ser replicação estatística e ablação controlada.</p>
+<h2 id="current-lumina-performance-status">10. Current Lumina Performance Status</h2>
+<p>O gráfico abaixo resume o status atual de desempenho de todas as runs Lumina com métrica auditável encontrada nos artefatos locais. Runs completas ou exploratórias longas aparecem coloridas por geração do Lumina; smokes/probes operacionais de poucos steps aparecem em cinza para evitar que sejam interpretados como experimentos científicos completos.</p>
+<figure>
+<img src="lumina_all_runs_status/lumina_ntv3_all_runs_status.png" alt="Lumina NTv3 human functional current run status" />
+<figcaption aria-hidden="true">Lumina NTv3 human functional current run status</figcaption>
+</figure>
+<p>Fonte auditável: <code>lumina_all_runs_status/lumina_ntv3_all_runs_status.csv</code>. A versão vetorial está em <code>lumina_all_runs_status/lumina_ntv3_all_runs_status.svg</code>.</p>
+
+      </article>
+    </section>
+
+    <section id="comparison" class="panel">
+      <div class="panel-head">
+        <div>
+          <h2>Visualização honesta: Lumina beat-v7 best vs NTv3 8M pre</h2>
+          <p>Conteúdo herdado de <code>best_vs_ntv3_8m_1page_honest/lumina_best_vs_ntv3_8m_honest_2page.html</code>, renderizado após o report para preservar a ordem solicitada.</p>
+        </div>
+        <div class="source-pill">comparison appendix</div>
+      </div>
+      <div class="comparison-pages">
+        <figure class="report-page">
+          <img src="best_vs_ntv3_8m_1page_honest/lumina_best_vs_ntv3_8m_honest_page1.svg" alt="Página 1 da comparação Lumina beat-v7 best vs NTv3 8M pre" />
+        </figure>
+        <figure class="report-page">
+          <img src="best_vs_ntv3_8m_1page_honest/lumina_best_vs_ntv3_8m_honest_page2.svg" alt="Página 2 com ranking global comparativo" />
+        </figure>
+      </div>
+    </section>
+
+    <p class="footer">Generated from local artifacts in <code>artifacts/analysis/ntv3_recent</code>. This HTML is a presentation artifact, not a new benchmark result.</p>
+  </main>
+</body>
+</html>

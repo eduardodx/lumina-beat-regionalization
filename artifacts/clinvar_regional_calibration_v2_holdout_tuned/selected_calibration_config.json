@@ -1,0 +1,30 @@
+{
+  "configs": {
+    "M5_calibrated": {
+      "af_log10_temperature": 0.25,
+      "af_midpoint": 0.05,
+      "max_down_margin": 4.0,
+      "scrambled_seed": 1729,
+      "specificity_protect_threshold": 0.05,
+      "specificity_temperature": 0.01
+    },
+    "M6_calibrated": {
+      "af_log10_temperature": 0.25,
+      "af_midpoint": 0.05,
+      "max_down_margin": 4.0,
+      "scrambled_seed": 1729,
+      "specificity_protect_threshold": 0.05,
+      "specificity_temperature": 0.01
+    },
+    "M7_scrambled": {
+      "af_log10_temperature": 0.25,
+      "af_midpoint": 0.05,
+      "max_down_margin": 4.0,
+      "scrambled_seed": 1729,
+      "specificity_protect_threshold": 0.05,
+      "specificity_temperature": 0.01
+    }
+  },
+  "evaluated_on_split": "test",
+  "selected_on_split": "holdout"
+}

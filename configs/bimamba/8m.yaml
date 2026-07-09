@@ -1,0 +1,6 @@
+# 8M BiMamba baseline with all multitask objectives enabled.
+# Cosine LR schedule, recommended first long run for the local L40S.
+
+_inherit: _base.yaml
+
+output_dir: outputs/lumina_8m

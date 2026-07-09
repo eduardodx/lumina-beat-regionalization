@@ -1,0 +1,23 @@
+# Shared defaults across all models and runs.
+# Leaf configs inherit these; any key can be overridden.
+# CLI flags passed after --config override any value here.
+
+fasta_path: data/hg38/hg38.fa
+phylo100_bw_path: data/phylo/hg38.phyloP100way.bw
+phylo470_bw_path: data/phylo/hg38.phyloP470way.bw
+gtf_path: data/gencode/gencode.v38.annotation.gtf.gz
+
+num_workers: 6
+prefetch_factor: 4
+mask_prob: 0.15
+mean_span_len: 3
+
+log_every: 10
+max_checkpoints_to_keep: 3
+
+seed: 42
+precision: auto
+allow_tf32: true
+
+wandb_enabled: true
+wandb_project: lumina-ssm

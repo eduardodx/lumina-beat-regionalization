@@ -1,0 +1,9 @@
+_inherit: _base.yaml
+
+abraom_dataset_arm: abraom_weighted
+max_steps: 100
+warmup_steps: 10
+eval_every: 50
+save_every: 100
+log_every: 10
+wandb_run_name: beat-v10-abraom-smoke-weighted

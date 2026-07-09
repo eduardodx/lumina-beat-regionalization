@@ -1,0 +1,48 @@
+{
+  "config": {
+    "alphagenome_model_version": "all_folds",
+    "alphagenome_output_type": "ATAC",
+    "alphagenome_source": "huggingface",
+    "dataset_root": "data/datasets/ntv3",
+    "dry_run": true,
+    "keep_target_center_fraction": 0.375,
+    "ontology_term": "UBERON:0000056",
+    "selected_windows": 1,
+    "sequence_length": 32768,
+    "species": "human",
+    "split": "test",
+    "target_center_end": 22528,
+    "target_center_start": 10240,
+    "target_length": 12288,
+    "total_split_windows": 10531,
+    "track_info": {
+      "assay": "ATAC-seq",
+      "mean": 0.7250170204686959,
+      "path": "data/datasets/ntv3/human/functional_tracks/ENCSR814RGG.bigwig",
+      "std": 0.6537994463881371,
+      "track_id": "ENCSR814RGG"
+    },
+    "window_sampling": "uniform"
+  },
+  "lumina_context": null,
+  "public_ntv3_context": {
+    "assay_type": "ATAC-seq",
+    "dataset": "ENCSR814RGG",
+    "delta_vs_linear": "0.0186651707012343",
+    "delta_vs_mlp": "0.006211858241590651",
+    "gap_to_public_best": "0.15488746350444194",
+    "metric_value": 0.7984862526257833,
+    "public_best_model": "NTv3 650M (pos)",
+    "public_best_score": "0.7984862526257833",
+    "score": "0.6435987891213414",
+    "track_name_clean": "ENCSR814RGG"
+  },
+  "status": "dry_run",
+  "target_summary": {
+    "evaluated_windows": 1,
+    "skipped_high_n_windows": 0,
+    "target_positions": 12288,
+    "target_raw_mean": 0.15190774202346802,
+    "target_raw_std": 0.3260940268603322
+  }
+}

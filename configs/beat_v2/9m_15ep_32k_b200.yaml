@@ -1,0 +1,18 @@
+# 9M Beat-v2, 15 epochs, 32k context, 8xA100.
+# Inherits all defaults from _base.yaml.
+# batch_size=2 x grad_accum=4 -> effective batch=8 per device (262,144 tokens/step/device).
+# 8xA100: 2,097,152 tokens/step global. 1 epoch ~ 480 steps.
+_inherit: _base.yaml
+
+seq_len: 32768
+batch_size: 8
+grad_accum_steps: 1
+
+max_steps: 7200
+eval_every: 240
+save_every: 480
+
+conservation_mix: 0.5
+
+output_dir: outputs/lumina_beat_v2_9m_15ep_32k_b200
+wandb_run_name: beat-v2-9m-15ep-32k-b200

@@ -1,0 +1,2 @@
+track_id,ntv3_assay_type,ntv3_track_name_clean,alphagenome_output_type,alphagenome_ontology_curie,alphagenome_biosample_name,alphagenome_assay_title,overlap_class,rationale,metadata_source
+ENCSR814RGG,ATAC-seq,ATAC_seq (ureter),ATAC,UBERON:0000056,ureter,ATAC-seq,exact_assay_tissue_match,AlphaGenome metadata matches the NTv3 assay and the NTv3 public track label tissue.,artifacts/analysis/alphagenome_ntv3_track_allfolds_full/alphagenome_track_metadata.csv

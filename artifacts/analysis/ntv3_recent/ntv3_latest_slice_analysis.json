@@ -1,0 +1,441 @@
+{
+  "assay_rows": [
+    {
+      "assay_type": "PRO-cap",
+      "delta_vs_linear": 0.01745144458107567,
+      "delta_vs_mlp": -0.02802264442378144,
+      "gap_to_public_best": 0.15945650184603388,
+      "linear_repro": 0.3309643459722969,
+      "local_conv": 0.3484157905533726,
+      "mlp": 0.376438434977154,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5078722923994065
+    },
+    {
+      "assay_type": "eCLIP",
+      "delta_vs_linear": 0.008581193872198134,
+      "delta_vs_mlp": -0.00740632637456029,
+      "gap_to_public_best": 0.09654870958598322,
+      "linear_repro": 0.4785193305188185,
+      "local_conv": 0.48710052439101664,
+      "mlp": 0.49450685076557693,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5836492339769999
+    },
+    {
+      "assay_type": "polyA plus RNA-seq",
+      "delta_vs_linear": 0.00421000832973617,
+      "delta_vs_mlp": -0.010292669430702839,
+      "gap_to_public_best": null,
+      "linear_repro": 0.5062855083040851,
+      "local_conv": 0.5104955166338213,
+      "mlp": 0.5207881860645242,
+      "public_best_model": "",
+      "public_best_score": null
+    },
+    {
+      "assay_type": "ATAC-seq",
+      "delta_vs_linear": 0.015463848433977523,
+      "delta_vs_mlp": 0.006277866551794742,
+      "gap_to_public_best": 0.20904056344802302,
+      "linear_repro": 0.5345928503415611,
+      "local_conv": 0.5500566987755386,
+      "mlp": 0.5437788322237439,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.7590972622235617
+    },
+    {
+      "assay_type": "Histone ChIP-seq",
+      "delta_vs_linear": 0.010040564254944484,
+      "delta_vs_mlp": 0.0032491990552154792,
+      "gap_to_public_best": 0.1579387111529057,
+      "linear_repro": 0.5494917330916131,
+      "local_conv": 0.5595322973465576,
+      "mlp": 0.5562830982913421,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.7174710084994633
+    },
+    {
+      "assay_type": "total RNA-seq",
+      "delta_vs_linear": 0.005000006013328173,
+      "delta_vs_mlp": -0.003655616079041968,
+      "gap_to_public_best": null,
+      "linear_repro": 0.5590386306906915,
+      "local_conv": 0.5640386367040197,
+      "mlp": 0.5676942527830616,
+      "public_best_model": "",
+      "public_best_score": null
+    }
+  ],
+  "largest_drops_vs_mlp": [
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR935RNW_P",
+      "delta_vs_linear": 0.020517021553888515,
+      "delta_vs_mlp": -0.04003251084338971,
+      "gap_to_public_best": 0.19097905969730178,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5636426011721293,
+      "score": 0.3726635414748275,
+      "track_name_clean": "ENCSR935RNW_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR799DGV_P",
+      "delta_vs_linear": 0.01994447768199209,
+      "delta_vs_mlp": -0.03891326674685913,
+      "gap_to_public_best": 0.19315351322871332,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5675735473632812,
+      "score": 0.3744200341345679,
+      "track_name_clean": "ENCSR799DGV_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR100LIJ_P",
+      "delta_vs_linear": 0.021125498103066798,
+      "delta_vs_mlp": -0.03791820307957633,
+      "gap_to_public_best": 0.1898097845286812,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5597943266232809,
+      "score": 0.3699845420945997,
+      "track_name_clean": "ENCSR100LIJ_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR935RNW_M",
+      "delta_vs_linear": 0.021017378631022543,
+      "delta_vs_mlp": -0.033239295706700756,
+      "gap_to_public_best": 0.16814924451516539,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.543726364771525,
+      "score": 0.37557712025635964,
+      "track_name_clean": "ENCSR935RNW_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR100LIJ_M",
+      "delta_vs_linear": 0.02144051501027283,
+      "delta_vs_mlp": -0.03320781323169175,
+      "gap_to_public_best": 0.18716916161134378,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5658169786135355,
+      "score": 0.37864781700219174,
+      "track_name_clean": "ENCSR100LIJ_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR046BCI_P",
+      "delta_vs_linear": 0.019901532820930934,
+      "delta_vs_mlp": -0.03237689672767613,
+      "gap_to_public_best": 0.17835251897412147,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.49562163154284156,
+      "score": 0.3172691125687201,
+      "track_name_clean": "ENCSR046BCI_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR799DGV_M",
+      "delta_vs_linear": 0.02238143436910167,
+      "delta_vs_mlp": -0.030599040367034924,
+      "gap_to_public_best": 0.1602665933902639,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5400119026501973,
+      "score": 0.3797453092599334,
+      "track_name_clean": "ENCSR799DGV_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR046BCI_M",
+      "delta_vs_linear": 0.022549605471217204,
+      "delta_vs_mlp": -0.029582701810103418,
+      "gap_to_public_best": 0.16097376653946377,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5162550707658131,
+      "score": 0.35528130422634935,
+      "track_name_clean": "ENCSR046BCI_M"
+    },
+    {
+      "assay_type": "eCLIP",
+      "dataset": "ENCSR321PWZ_M",
+      "delta_vs_linear": 0.01563546080458389,
+      "delta_vs_mlp": -0.02390835153729709,
+      "gap_to_public_best": 0.1315511372096131,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.7054780522982279,
+      "score": 0.5739269150886148,
+      "track_name_clean": "ENCSR321PWZ_M"
+    },
+    {
+      "assay_type": "polyA plus RNA-seq",
+      "dataset": "ENCSR527JGN_M",
+      "delta_vs_linear": 0.002143270395780661,
+      "delta_vs_mlp": -0.014094310075493999,
+      "gap_to_public_best": 0.32985911989010575,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.7401957114537557,
+      "score": 0.41033659156365,
+      "track_name_clean": "ENCSR527JGN_M"
+    }
+  ],
+  "largest_gaps_to_public_best": [
+    {
+      "assay_type": "polyA plus RNA-seq",
+      "dataset": "ENCSR527JGN_M",
+      "delta_vs_linear": 0.002143270395780661,
+      "delta_vs_mlp": -0.014094310075493999,
+      "gap_to_public_best": 0.32985911989010575,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.7401957114537557,
+      "score": 0.41033659156365,
+      "track_name_clean": "ENCSR527JGN_M"
+    },
+    {
+      "assay_type": "ATAC-seq",
+      "dataset": "ENCSR410DWV",
+      "delta_vs_linear": 0.014540300669755812,
+      "delta_vs_mlp": 0.010426422291839321,
+      "gap_to_public_best": 0.2792840053434671,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.7917909622192383,
+      "score": 0.5125069568757712,
+      "track_name_clean": "ENCSR410DWV"
+    },
+    {
+      "assay_type": "ATAC-seq",
+      "dataset": "ENCSR628PLS",
+      "delta_vs_linear": 0.01367976970007756,
+      "delta_vs_mlp": 0.004912499296723827,
+      "gap_to_public_best": 0.23645714624712794,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.6534032622973124,
+      "score": 0.41694611605018445,
+      "track_name_clean": "ENCSR628PLS"
+    },
+    {
+      "assay_type": "Histone ChIP-seq",
+      "dataset": "ENCSR682BFG",
+      "delta_vs_linear": 0.008881376445511402,
+      "delta_vs_mlp": 0.015290730169026823,
+      "gap_to_public_best": 0.22549687378691863,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.6920612255732218,
+      "score": 0.4665643517863032,
+      "track_name_clean": "ENCSR682BFG"
+    },
+    {
+      "assay_type": "ATAC-seq",
+      "dataset": "ENCSR487QSB",
+      "delta_vs_linear": 0.012736716283292426,
+      "delta_vs_mlp": 0.004256909631256356,
+      "gap_to_public_best": 0.2074911038788233,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.7122751077016195,
+      "score": 0.5047840038227962,
+      "track_name_clean": "ENCSR487QSB"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR799DGV_P",
+      "delta_vs_linear": 0.01994447768199209,
+      "delta_vs_mlp": -0.03891326674685913,
+      "gap_to_public_best": 0.19315351322871332,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5675735473632812,
+      "score": 0.3744200341345679,
+      "track_name_clean": "ENCSR799DGV_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR935RNW_P",
+      "delta_vs_linear": 0.020517021553888515,
+      "delta_vs_mlp": -0.04003251084338971,
+      "gap_to_public_best": 0.19097905969730178,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5636426011721293,
+      "score": 0.3726635414748275,
+      "track_name_clean": "ENCSR935RNW_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR100LIJ_P",
+      "delta_vs_linear": 0.021125498103066798,
+      "delta_vs_mlp": -0.03791820307957633,
+      "gap_to_public_best": 0.1898097845286812,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5597943266232809,
+      "score": 0.3699845420945997,
+      "track_name_clean": "ENCSR100LIJ_P"
+    },
+    {
+      "assay_type": "Histone ChIP-seq",
+      "dataset": "ENCSR863PSM",
+      "delta_vs_linear": 0.0006240775866171444,
+      "delta_vs_mlp": 0.004247660857547575,
+      "gap_to_public_best": 0.18717850333877334,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.6809060374895731,
+      "score": 0.4937275341507998,
+      "track_name_clean": "ENCSR863PSM"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR100LIJ_M",
+      "delta_vs_linear": 0.02144051501027283,
+      "delta_vs_mlp": -0.03320781323169175,
+      "gap_to_public_best": 0.18716916161134378,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5658169786135355,
+      "score": 0.37864781700219174,
+      "track_name_clean": "ENCSR100LIJ_M"
+    }
+  ],
+  "latest": {
+    "best_step": 17500,
+    "best_val": 0.49891078,
+    "experiment": "beat-v7-local-conv-head-k15-seed0",
+    "final_val": 0.49368727,
+    "head": "local-conv",
+    "model_name": "Lumina beat-v7 local-conv-head k15",
+    "test_loss": 4.265487138056003,
+    "test_mean": 0.47225537576728
+  },
+  "latest_delta_vs_mlp": {
+    "best_val": -0.011623040000000029,
+    "test_loss": 0.0009404689560268409,
+    "test_mean": -0.010042816650062014
+  },
+  "linear": {
+    "best_step": 17500,
+    "best_val": 0.4852527,
+    "experiment": "beat-v7-official-hidden-repro-seed0",
+    "final_val": 0.47885327,
+    "head": "linear",
+    "model_name": "Lumina beat-v7 official-hidden repro",
+    "test_loss": 4.271587809477747,
+    "test_mean": 0.4604545546372252
+  },
+  "mlp": {
+    "best_step": 17500,
+    "best_val": 0.51053382,
+    "experiment": "beat-v7-mlp-head-seed0",
+    "final_val": 0.5047502,
+    "head": "mlp",
+    "model_name": "Lumina beat-v7 MLP-head",
+    "test_loss": 4.2645466690999765,
+    "test_mean": 0.482298192417342
+  },
+  "weakest_tracks_by_latest_score": [
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR114HGS_M",
+      "delta_vs_linear": 0.004823255359296175,
+      "delta_vs_mlp": -0.0007891620542542221,
+      "gap_to_public_best": 0.10557987271645558,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.3726124366124471,
+      "score": 0.2670325638959915,
+      "track_name_clean": "ENCSR114HGS_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR114HGS_P",
+      "delta_vs_linear": 0.0008137268099678296,
+      "delta_vs_mlp": -0.0035675536705280786,
+      "gap_to_public_best": 0.06013150325882821,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.35366806387901306,
+      "score": 0.29353656062018485,
+      "track_name_clean": "ENCSR114HGS_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR046BCI_P",
+      "delta_vs_linear": 0.019901532820930934,
+      "delta_vs_mlp": -0.03237689672767613,
+      "gap_to_public_best": 0.17835251897412147,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.49562163154284156,
+      "score": 0.3172691125687201,
+      "track_name_clean": "ENCSR046BCI_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR046BCI_M",
+      "delta_vs_linear": 0.022549605471217204,
+      "delta_vs_mlp": -0.029582701810103418,
+      "gap_to_public_best": 0.16097376653946377,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5162550707658131,
+      "score": 0.35528130422634935,
+      "track_name_clean": "ENCSR046BCI_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR100LIJ_P",
+      "delta_vs_linear": 0.021125498103066798,
+      "delta_vs_mlp": -0.03791820307957633,
+      "gap_to_public_best": 0.1898097845286812,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5597943266232809,
+      "score": 0.3699845420945997,
+      "track_name_clean": "ENCSR100LIJ_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR935RNW_P",
+      "delta_vs_linear": 0.020517021553888515,
+      "delta_vs_mlp": -0.04003251084338971,
+      "gap_to_public_best": 0.19097905969730178,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5636426011721293,
+      "score": 0.3726635414748275,
+      "track_name_clean": "ENCSR935RNW_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR799DGV_P",
+      "delta_vs_linear": 0.01994447768199209,
+      "delta_vs_mlp": -0.03891326674685913,
+      "gap_to_public_best": 0.19315351322871332,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5675735473632812,
+      "score": 0.3744200341345679,
+      "track_name_clean": "ENCSR799DGV_P"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR935RNW_M",
+      "delta_vs_linear": 0.021017378631022543,
+      "delta_vs_mlp": -0.033239295706700756,
+      "gap_to_public_best": 0.16814924451516539,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.543726364771525,
+      "score": 0.37557712025635964,
+      "track_name_clean": "ENCSR935RNW_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR100LIJ_M",
+      "delta_vs_linear": 0.02144051501027283,
+      "delta_vs_mlp": -0.03320781323169175,
+      "gap_to_public_best": 0.18716916161134378,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5658169786135355,
+      "score": 0.37864781700219174,
+      "track_name_clean": "ENCSR100LIJ_M"
+    },
+    {
+      "assay_type": "PRO-cap",
+      "dataset": "ENCSR799DGV_M",
+      "delta_vs_linear": 0.02238143436910167,
+      "delta_vs_mlp": -0.030599040367034924,
+      "gap_to_public_best": 0.1602665933902639,
+      "public_best_model": "NTv3 650M (pos)",
+      "public_best_score": 0.5400119026501973,
+      "score": 0.3797453092599334,
+      "track_name_clean": "ENCSR799DGV_M"
+    }
+  ]
+}

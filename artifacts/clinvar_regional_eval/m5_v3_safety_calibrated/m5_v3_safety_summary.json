@@ -1,0 +1,38 @@
+{
+  "generated_at_utc": "2026-06-29T12:57:07.665701+00:00",
+  "output_dir": "artifacts/clinvar_regional_eval/m5_v3_safety_calibrated",
+  "decision": "conditional_candidate: M5_v3 is safe versus M5_v2 but regional specificity is not fully falsified.",
+  "selected_config": {
+    "discount_scale": 0.5,
+    "max_discount": 0.5,
+    "molecular_guard_threshold": 0.65,
+    "guarded_max_discount": 0.0,
+    "guard_score_floor": 0.35,
+    "regional_threshold": 0.35,
+    "global_threshold": 0.72
+  },
+  "test_metrics": {
+    "br_only.mcc": 0.6051392365837596,
+    "abraom_common_benign.specificity": 0.9585089676832796,
+    "abraom_pathogenic_present.recall": 0.43558282208588955,
+    "global_nonbr_no_abraom.mcc": 0.5118586737461549
+  },
+  "sentinel_audit": [
+    {
+      "audit": "plp_dangerous_regressions_vs_m5_v2",
+      "n": 0
+    },
+    {
+      "audit": "plp_rescued_vs_m5_v2",
+      "n": 0
+    },
+    {
+      "audit": "common_benign_fp_resolved_vs_m5_v2",
+      "n": 0
+    },
+    {
+      "audit": "common_benign_new_fp_vs_m5_v2",
+      "n": 0
+    }
+  ]
+}

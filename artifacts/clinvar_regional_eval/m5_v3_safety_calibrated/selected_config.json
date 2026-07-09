@@ -1,0 +1,9 @@
+{
+  "discount_scale": 0.5,
+  "max_discount": 0.5,
+  "molecular_guard_threshold": 0.65,
+  "guarded_max_discount": 0.0,
+  "guard_score_floor": 0.35,
+  "regional_threshold": 0.35,
+  "global_threshold": 0.72
+}

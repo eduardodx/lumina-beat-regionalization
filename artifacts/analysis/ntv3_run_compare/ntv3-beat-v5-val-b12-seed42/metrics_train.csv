@@ -1,0 +1,2 @@
+step,tokens_seen,elapsed_seconds,loss,learning_rate
+10,327680,30.944264,3.22094345,0.0

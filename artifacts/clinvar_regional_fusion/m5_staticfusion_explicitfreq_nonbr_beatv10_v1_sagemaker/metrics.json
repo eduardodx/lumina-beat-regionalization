@@ -1,0 +1,167 @@
+{
+  "metric": "clinvar_finetune_regime_A",
+  "value": 0.6058618898179605,
+  "regime": "A",
+  "model_family": "lumina",
+  "model_version": "beat-v10",
+  "context_size": 1024,
+  "loss_type": "focal",
+  "requested_precision": "auto",
+  "resolved_precision": "bf16",
+  "allow_tf32": true,
+  "auroc": 0.9185740112434683,
+  "auprc": 0.9219538861118493,
+  "mcc": 0.6058618898179605,
+  "f1": 0.8281007149518184,
+  "balanced_accuracy": 0.7691974788875405,
+  "precision": 0.715359828141783,
+  "recall": 0.9830258302583026,
+  "specificity": 0.5553691275167785,
+  "brier_score": 0.12287313255581779,
+  "log_loss": 0.39645510295058417,
+  "val_mcc": 0.6850973111896529,
+  "val_auprc": 0.9732204649500305,
+  "val_auroc": 0.9300208251984902,
+  "val_optimal_threshold": 0.3132096529006958,
+  "best_epoch": 3,
+  "test_at_val_threshold": {
+    "threshold": 0.3132096529006958,
+    "accuracy": 0.7828818217510797,
+    "balanced_accuracy": 0.7691974788875405,
+    "precision": 0.715359828141783,
+    "recall": 0.9830258302583026,
+    "specificity": 0.5553691275167785,
+    "f1": 0.8281007149518184,
+    "mcc": 0.6058618898179605,
+    "tp": 1332,
+    "tn": 662,
+    "fp": 530,
+    "fn": 23
+  },
+  "test_at_default_threshold": {
+    "threshold": 0.5,
+    "accuracy": 0.8476639183352964,
+    "balanced_accuracy": 0.8455236632903242,
+    "precision": 0.841696113074205,
+    "recall": 0.8789667896678967,
+    "specificity": 0.8120805369127517,
+    "f1": 0.859927797833935,
+    "mcc": 0.6939275550056552,
+    "tp": 1191,
+    "tn": 968,
+    "fp": 224,
+    "fn": 164
+  },
+  "test_at_test_optimal_threshold_LEAKY": {
+    "threshold": 0.48401427268981934,
+    "accuracy": 0.8488417746368276,
+    "balanced_accuracy": 0.8458737834022636,
+    "precision": 0.8349447513812155,
+    "recall": 0.8922509225092251,
+    "specificity": 0.799496644295302,
+    "f1": 0.8626471637531217,
+    "mcc": 0.696902926680972,
+    "tp": 1209,
+    "tn": 953,
+    "fp": 239,
+    "fn": 146
+  },
+  "cross_gene_diagnostic": {
+    "auroc": 0.9237248813220544,
+    "auprc": 0.9366885482983388,
+    "mcc_at_val_threshold": 0.6285702323783886,
+    "num_variants": 481,
+    "num_genes": 39
+  },
+  "swap_diagnostics": {
+    "swap_mean_abs_prob_sum_minus_one": 0.4345405101776123,
+    "swap_directional_fraction": 0.6580290537887711
+  },
+  "consequence_stratified_metrics": {
+    "indel": {
+      "count": 309.0,
+      "mcc": 0.759373498095351,
+      "f1": 0.9445585215605748,
+      "precision": 0.9019607843137255,
+      "recall": 0.9913793103448276,
+      "auroc": 0.9226936856247202
+    },
+    "mnv": {
+      "count": 10.0,
+      "mcc": 1.0,
+      "f1": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "auroc": 1.0
+    },
+    "snv": {
+      "count": 2228.0,
+      "mcc": 0.5860284008546517,
+      "f1": 0.8060471976401181,
+      "precision": 0.6839799749687109,
+      "recall": 0.981149012567325,
+      "auroc": 0.9127362215510767
+    }
+  },
+  "hyperparameters": {
+    "lora_rank": 8,
+    "lora_alpha": 16.0,
+    "lora_dropout": 0.05,
+    "lr_backbone": 0.001,
+    "lr_head": 0.0001,
+    "freeze_backbone_steps": 0,
+    "grad_clip": 0.5,
+    "warmup_fraction": 0.1,
+    "batch_size": 2,
+    "grad_accum_steps": 8,
+    "focal_gamma": 2.0,
+    "pairwise_rank_weight": 0.0,
+    "pairwise_rank_margin": 0.5,
+    "swap_consistency_weight": 0.0,
+    "swap_consistency_margin": 0.5,
+    "explicit_feature_columns": [
+      "af_abraom",
+      "af_gnomad",
+      "specificity",
+      "abraom_present",
+      "is_snv",
+      "af_abraom_missing",
+      "af_gnomad_missing",
+      "log10_af_abraom",
+      "log10_af_gnomad",
+      "af_delta",
+      "af_abs_delta",
+      "af_ratio_log10"
+    ],
+    "init_finetuned_checkpoint_path": "/opt/ml/input/data/init_model/_fusion_extracted/best_model.pt",
+    "fusion_mode": "static_lora",
+    "fusion_adapter_names": [
+      "abraom",
+      "gnomad"
+    ],
+    "freeze_backbone_for_fusion": true
+  },
+  "architecture": {
+    "proj_dim": 256,
+    "hidden_dim": 128,
+    "head_dropout": 0.2,
+    "d_model": 288,
+    "head_type": "regime_a_plus_features",
+    "explicit_feature_dim": 12,
+    "fusion_mode": "static_lora"
+  },
+  "trainable_params": {
+    "lora": 0,
+    "fusion": 108,
+    "layernorm": 0,
+    "head": 272705,
+    "other": 0,
+    "total": 272813
+  },
+  "data_summary": {
+    "train_size": 11673,
+    "val_size": 1297,
+    "test_size": 2547,
+    "pos_weight": 0.31630581867388363
+  }
+}

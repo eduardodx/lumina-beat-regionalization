@@ -1,0 +1,14 @@
+{
+  "generated_at_utc": "2026-07-06T14:05:28+00:00",
+  "markdown": "artifacts/clinvar_regional_eval/researcher_transfer_report/ABRAOM_RESEARCHER_TRANSFER_REPORT.md",
+  "html": "artifacts/clinvar_regional_eval/researcher_transfer_report/ABRAOM_RESEARCHER_TRANSFER_REPORT.html",
+  "docx": "artifacts/clinvar_regional_eval/researcher_transfer_report/ABRAOM_RESEARCHER_TRANSFER_REPORT.docx",
+  "pdf": null,
+  "compact_markdown": "artifacts/clinvar_regional_eval/researcher_transfer_report/ABRAOM_RESEARCHER_TRANSFER_REPORT_COMPACT.md",
+  "compact_html": "artifacts/clinvar_regional_eval/researcher_transfer_report/ABRAOM_RESEARCHER_TRANSFER_REPORT_COMPACT.html",
+  "compact_docx": "artifacts/clinvar_regional_eval/researcher_transfer_report/ABRAOM_RESEARCHER_TRANSFER_REPORT_COMPACT.docx",
+  "compact_pdf": null,
+  "s3_reuse_manifest": "artifacts/clinvar_regional_eval/researcher_transfer_report/s3_reuse_manifest.json",
+  "pdf_note": "no PDF engine found; use HTML or DOCX export",
+  "compact_pdf_note": "no PDF engine found; use HTML or DOCX export"
+}

@@ -1,0 +1,11 @@
+base_model,compare_model,dataset,metric,delta,ci95_low,ci95_high,iterations,cluster
+M0,M5_calibrated,br_only,mcc,0.2671369950359604,0.18206881102900177,0.35692254307829996,300,gene_symbol
+M0,M5_calibrated,abraom_common_benign,specificity,0.1495164889660302,0.13899667020186174,0.16107137391454676,300,gene_symbol
+M0,M5_calibrated,abraom_pathogenic_present,recall,-0.08588957055214724,-0.1375194178726188,-0.04556789401909215,300,gene_symbol
+M0,M5_calibrated,global_nonbr_no_abraom,mcc,0.0,0.0,0.0,300,gene_symbol
+M0,M6_calibrated,br_only,mcc,0.27362511578437093,0.18665049840941134,0.36559016103860287,300,gene_symbol
+M0,M6_calibrated,abraom_common_benign,specificity,0.15125216960079346,0.14083243375479929,0.1629865428926842,300,gene_symbol
+M0,M6_calibrated,abraom_pathogenic_present,recall,-0.09202453987730058,-0.14343637494999778,-0.04902524905530751,300,gene_symbol
+M0,M6_calibrated,global_nonbr_no_abraom,mcc,0.0,0.0,0.0,300,gene_symbol
+M7_scrambled,M5_calibrated,br_only,mcc,0.12920182415893217,0.0660170679850487,0.19098152382416816,300,gene_symbol
+M7_scrambled,M5_calibrated,abraom_common_benign,specificity,0.04950822382015041,0.04339464984704327,0.05581974051129923,300,gene_symbol
