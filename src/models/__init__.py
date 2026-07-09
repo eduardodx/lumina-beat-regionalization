@@ -1,3 +1,18 @@
+# --- tilelang/tvm workaround (SageMaker notebook conda env) ---------------------------------
+# The notebook's conda env ships a tilelang/tvm build that aborts on import under Python 3.12
+# (`tvm_ffi AttributeError: attribute '__dict__' of 'type' objects is not writable`). mamba_ssm
+# imports tilelang eagerly for the Mamba3 MIMO kernel, so importing the model stack crashes here
+# before any per-script shim can run. Poisoning sys.modules makes `import tilelang` raise
+# ImportError, which mamba_ssm catches to fall back to Triton (the r1 checkpoint is SISO, so the
+# MIMO/tilelang path is unused anyway). On the SageMaker training job tilelang is simply not
+# installed (INSTALL_TILELANG=0), where this is a harmless no-op. Remove once the env is fixed.
+import sys as _sys
+import types as _types
+
+if not isinstance(_sys.modules.get("tilelang"), _types.ModuleType):
+    _sys.modules["tilelang"] = None
+# --------------------------------------------------------------------------------------------
+
 from src.models.beat_v2 import BeatV2Config, DNAFoundationBeatV2
 from src.models.beat_v3 import BeatV3Config, DNAFoundationBeatV3
 from src.models.beat_v4 import BeatV4Config, DNAFoundationBeatV4
