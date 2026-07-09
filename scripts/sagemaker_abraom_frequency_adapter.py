@@ -96,9 +96,12 @@ def build_environment() -> dict[str, str]:
         "HF_HOME": "/tmp/huggingface",
         "HF_HUB_CACHE": "/tmp/huggingface/hub",
         "HF_MODULES_CACHE": "/tmp/huggingface/modules",
-        # BEAT-v10 release checkpoint is SISO (`is_mimo=false`) and uses the
-        # Triton Mamba3 path. TileLang/TVM is unnecessary here and currently
-        # aborts in the SageMaker DLC with duplicate TVM FFI type registration.
+        # The BEAT release checkpoints used here -- v10 and the v11 r1 -- are both
+        # SISO (`is_mimo=false`) and use the Triton Mamba3 path, so TileLang/TVM is
+        # unnecessary and currently aborts in the SageMaker DLC (duplicate TVM FFI
+        # type registration). Not installing it selects the Triton fallback (this is
+        # the real fix; the notebook uses a sys.modules shim). A future MIMO
+        # (`is_mimo=true`) checkpoint would need this revisited.
         "INSTALL_TILELANG": "0",
     }
 
