@@ -292,6 +292,8 @@ def normalize_finetune_model_family(model_family: str) -> str:
     family = model_family.strip().lower()
     if family == "dnabert-2":
         return "dnabert2"
+    if family in {"beat_v11", "beat-v11-bioprime", "beat_v11_bioprime", "beatv11"}:
+        return "beat-v11"
     return family
 
 
@@ -1170,10 +1172,26 @@ def build_finetune_adapter(
             native_feature_heads=native_feature_heads,
         )
 
+    if family == "beat-v11":
+        # Standalone Beat-v11 BioPrime package (vendored ``lumina_beat_v11``). The checkpoint's own
+        # config drives the architecture (e.g. r1: d_full=448), so ``model_version`` is advisory and
+        # the registry / native-head paths do not apply -- it loads via the package loader. Compute
+        # precision is left to the trainer's autocast, matching the other frozen-feature paths.
+        if checkpoint_path is None:
+            raise ValueError(
+                "beat-v11 requires a checkpoint, e.g. "
+                "s3://ai4bio-lumina/releases/lumina-beat-v11v5-r1-202607071631/ckpt/best_checkpoint.pt"
+            )
+        from eval.clinvar.beat_v11_adapter import FineTuneBeatV11Adapter
+
+        return FineTuneBeatV11Adapter(checkpoint_path, device)  # type: ignore[return-value]
+
     if family == "dnabert2":
         repo = DNABERT2_REPOS.get(model_version)
         if repo is None:
             raise ValueError(f"Unknown DNABERT-2 version {model_version!r}. Available: {list(DNABERT2_REPOS)}")
         return FineTuneDNABERT2Adapter(repo, device)  # type: ignore[return-value]
 
-    raise ValueError(f"Unknown model family {family!r}. Available: ntv3, caduceus, lumina, dnabert2")
+    raise ValueError(
+        f"Unknown model family {family!r}. Available: ntv3, caduceus, lumina, beat-v11, dnabert2"
+    )
