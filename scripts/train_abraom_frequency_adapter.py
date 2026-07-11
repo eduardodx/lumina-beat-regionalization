@@ -137,6 +137,9 @@ class TrainConfig:
     eval_only: bool = False
     adapter_checkpoint: str | None = None
     overwrite: bool = False
+    # bce = [0,1] frequency target (default, e.g. af_abraom). mse/huber = regression for
+    # unbounded targets like delta_logit (the ABRAOM-vs-gnomAD residual = direct regional test).
+    loss: str = "bce"
 
 
 @dataclass(frozen=True)
@@ -932,7 +935,12 @@ def run(config: TrainConfig) -> dict[str, Any]:
                         batch["alt_alleles"],
                         batch.get("scalar_features"),
                     )
-                loss = F.binary_cross_entropy_with_logits(logits.float(), batch["targets"])
+                if config.loss == "bce":
+                    loss = F.binary_cross_entropy_with_logits(logits.float(), batch["targets"])
+                elif config.loss == "huber":
+                    loss = F.smooth_l1_loss(logits.float(), batch["targets"])
+                else:  # mse
+                    loss = F.mse_loss(logits.float(), batch["targets"])
                 (loss / config.grad_accum_steps).backward()
                 batch_size = int(batch["targets"].shape[0])
                 step_loss_value += float(loss.detach().cpu()) * batch_size
@@ -1139,6 +1147,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--head-hidden-dim", type=int, default=256)
     parser.add_argument("--head-dropout", type=float, default=0.1)
     parser.add_argument("--precision", choices=["auto", "mxfp8", "bf16", "fp32"], default="auto")
+    parser.add_argument(
+        "--loss", choices=["bce", "mse", "huber"], default="bce",
+        help="bce: [0,1] frequency target (default). mse/huber: regression for unbounded "
+             "targets like delta_logit (the ABRAOM-vs-gnomAD residual). Spearman metric is "
+             "rank-based so it is unaffected; Brier/NLL are meaningless for non-bce runs.",
+    )
     parser.add_argument("--allow-tf32", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--seed", type=int, default=42)
@@ -1201,6 +1215,7 @@ def config_from_args(args: argparse.Namespace) -> TrainConfig:
         eval_only=args.eval_only,
         adapter_checkpoint=str(args.adapter_checkpoint) if args.adapter_checkpoint else None,
         overwrite=args.overwrite,
+        loss=args.loss,
     )
 
 
