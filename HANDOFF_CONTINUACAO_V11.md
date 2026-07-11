@@ -224,7 +224,7 @@ Leituras importantes:
 - **Verificado:** o `build_metrics` NÃO clipa o alvo (só a predição, que já é sigmoid∈[0,1]) → o `model_spearman` do `summary.json` sai **correto** mesmo pro alvo de resíduo (Spearman é rank-based; só Brier/NLL ficam sem sentido — ignorar).
 
 ### 8.2 CHECAGEM antes de lançar (risco de KeyError)
-O trainer agora lê `delta_logit`/`scrambled_delta_logit` do parquet. Confirme que o dataset deployado tem essas colunas:
+O trainer agora lê `delta_logit`/`scrambled_delta_logit` do parquet. Confirme que o dataset deployado tem essas colunas — **rode no SageMaker notebook** (onde o dataset local vive; o laptop clonado do GitHub NÃO tem `data/datasets/`, que é gitignored):
 ```bash
 python -c "import pyarrow.parquet as pq; c=pq.read_schema('data/datasets/abraom_frequency_adapter/abraom_frequency_val.parquet').names; print('TEM:', [x for x in c if x in ('delta_logit','scrambled_delta_logit')])"
 ```
