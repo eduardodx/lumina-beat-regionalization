@@ -73,6 +73,8 @@ FREQUENCY_COLUMNS = [
     "af_gnomad",
     "logit_af_gnomad",
     "scrambled_af_abraom",
+    "delta_logit",
+    "scrambled_delta_logit",
     "af_abraom_bin",
     "specificity_bin",
     "gnomad_zero",
@@ -154,6 +156,8 @@ class FrequencyExample:
     af_gnomad: float
     logit_af_gnomad: float
     scrambled_af_abraom: float
+    delta_logit: float
+    scrambled_delta_logit: float
     af_abraom_bin: str
     specificity_bin: str
     gnomad_zero: bool
@@ -314,6 +318,8 @@ def load_frequency_examples(
                 af_gnomad=float(row.af_gnomad),
                 logit_af_gnomad=float(row.logit_af_gnomad),
                 scrambled_af_abraom=float(row.scrambled_af_abraom),
+                delta_logit=float(row.delta_logit),
+                scrambled_delta_logit=float(row.scrambled_delta_logit),
                 af_abraom_bin=str(row.af_abraom_bin),
                 specificity_bin=str(row.specificity_bin),
                 gnomad_zero=bool(row.gnomad_zero),
@@ -360,6 +366,10 @@ class AbraomFrequencyDataset(Dataset):
             return example.scrambled_af_abraom
         if column == "af_gnomad":
             return example.af_gnomad
+        if column == "delta_logit":
+            return example.delta_logit
+        if column == "scrambled_delta_logit":
+            return example.scrambled_delta_logit
         raise ValueError(f"Unsupported frequency target column: {column!r}")
 
     def __getitem__(self, index: int) -> dict[str, Any] | None:
@@ -1114,12 +1124,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--context-size", type=int, default=4096)
     parser.add_argument(
         "--target-column",
-        choices=["af_abraom", "scrambled_af_abraom", "af_gnomad"],
+        choices=["af_abraom", "scrambled_af_abraom", "af_gnomad", "delta_logit", "scrambled_delta_logit"],
         default="af_abraom",
     )
     parser.add_argument(
         "--metric-target-column",
-        choices=["af_abraom", "scrambled_af_abraom", "af_gnomad"],
+        choices=["af_abraom", "scrambled_af_abraom", "af_gnomad", "delta_logit", "scrambled_delta_logit"],
         default="af_abraom",
     )
     parser.add_argument("--use-gnomad-prior", action="store_true")
