@@ -19,6 +19,11 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
     parser.add_argument("--dataset-file", default="nonbr_only.parquet")
     parser.add_argument("--fasta-file", default="hg38.fa")
     parser.add_argument("--checkpoint-file", default="best_checkpoint.pt")
+    # Model selection is parametrized (default = Pedro's v10 baseline) so the same job
+    # runs the Beat-v11 port via `--model-family beat-v11 --model-version r1`; without
+    # these the _upsert_arg calls below would hard-force v10 (see eval.clinvar.run dispatch).
+    parser.add_argument("--model-family", default="lumina")
+    parser.add_argument("--model-version", default="beat-v10")
     args, training_args = parser.parse_known_args(argv)
     if training_args and training_args[0] == "--":
         training_args = training_args[1:]
@@ -49,8 +54,8 @@ def main(argv: list[str] | None = None) -> int:
 
     runtime_args = list(training_args)
     runtime_args = _upsert_arg(runtime_args, "--regime", "A")
-    runtime_args = _upsert_arg(runtime_args, "--model-family", "lumina")
-    runtime_args = _upsert_arg(runtime_args, "--model-version", "beat-v10")
+    runtime_args = _upsert_arg(runtime_args, "--model-family", args.model_family)
+    runtime_args = _upsert_arg(runtime_args, "--model-version", args.model_version)
     runtime_args = _upsert_arg(runtime_args, "--checkpoint-path", str(checkpoint_path))
     runtime_args = _upsert_arg(runtime_args, "--dataset-path", str(dataset_path))
     runtime_args = _upsert_arg(runtime_args, "--fasta-path", str(fasta_path))

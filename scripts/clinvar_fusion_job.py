@@ -25,6 +25,11 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
     parser.add_argument("--checkpoint-file", default="best_checkpoint.pt")
     parser.add_argument("--fusion-mode", choices=["static_lora", "dynamic_lora"], default="static_lora")
     parser.add_argument("--fusion-adapter-names", nargs="*", default=["abraom", "gnomad"])
+    # Parametrized model selection (default = Pedro's v10 baseline); pass
+    # `--model-family beat-v11 --model-version r1` for the Beat-v11 port. Without these the
+    # _upsert_arg calls below would hard-force v10.
+    parser.add_argument("--model-family", default="lumina")
+    parser.add_argument("--model-version", default="beat-v10")
     parser.add_argument(
         "--freeze-backbone-for-fusion",
         action=argparse.BooleanOptionalAction,
@@ -88,8 +93,8 @@ def main(argv: list[str] | None = None) -> int:
 
     runtime_args = list(training_args)
     runtime_args = _upsert_arg(runtime_args, "--regime", "A")
-    runtime_args = _upsert_arg(runtime_args, "--model-family", "lumina")
-    runtime_args = _upsert_arg(runtime_args, "--model-version", "beat-v10")
+    runtime_args = _upsert_arg(runtime_args, "--model-family", args.model_family)
+    runtime_args = _upsert_arg(runtime_args, "--model-version", args.model_version)
     runtime_args = _upsert_arg(runtime_args, "--checkpoint-path", str(checkpoint_path))
     runtime_args = _upsert_arg(runtime_args, "--dataset-path", str(dataset_path))
     runtime_args = _upsert_arg(runtime_args, "--fasta-path", str(fasta_path))

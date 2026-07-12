@@ -62,6 +62,11 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
     parser.add_argument("--reference-s3-prefix", default=DEFAULT_REFERENCE_S3_PREFIX)
     parser.add_argument("--checkpoint-s3-prefix", default=DEFAULT_CHECKPOINT_S3_PREFIX)
     parser.add_argument("--dataset-file", default="nonbr_only.parquet")
+    # Default = Pedro's v10 baseline; pass `--model-family beat-v11 --model-version r1` for the port.
+    # These go to the job BEFORE the `--` so clinvar_m0_job.py's parser consumes them (a passthrough
+    # after `--` would be clobbered by the job's own _upsert_arg).
+    parser.add_argument("--model-family", default="lumina")
+    parser.add_argument("--model-version", default="beat-v10")
     parser.add_argument("--detach", action="store_true")
     return parser.parse_args(launcher_args), training_args
 
@@ -102,8 +107,14 @@ def build_environment() -> dict[str, str]:
     }
 
 
-def build_job_args(*, dataset_file: str, training_args: list[str]) -> list[str]:
-    job_args = ["--dataset-file", dataset_file]
+def build_job_args(
+    *, dataset_file: str, model_family: str, model_version: str, training_args: list[str]
+) -> list[str]:
+    job_args = [
+        "--dataset-file", dataset_file,
+        "--model-family", model_family,
+        "--model-version", model_version,
+    ]
     if training_args:
         job_args.extend(["--", *training_args])
     return job_args
@@ -145,7 +156,12 @@ def main(argv: list[str] | None = None) -> int:
             build_environment(),
             setup_extras="eval,sagemaker,tracking",
             job_script=JOB_ENTRYPOINT,
-            job_args=build_job_args(dataset_file=args.dataset_file, training_args=training_args),
+            job_args=build_job_args(
+                dataset_file=args.dataset_file,
+                model_family=args.model_family,
+                model_version=args.model_version,
+                training_args=training_args,
+            ),
             source_dir=source_dir,
         )
         stopping_kwargs: dict[str, Any] = {"max_runtime_in_seconds": args.max_run_hours * 3600}
