@@ -80,7 +80,12 @@ def parse_args(argv: list[str] | None = None) -> FineTuneConfig:
     p.add_argument(
         "--model-family",
         required=True,
-        choices=["lumina", "ntv3", "caduceus", "dnabert2", "dnabert-2"],
+        # beat-v11 aliases mirror normalize_finetune_model_family (adapters.py); argparse's
+        # choices is a separate gate that must also admit them or dispatch is never reached.
+        choices=[
+            "lumina", "ntv3", "caduceus", "dnabert2", "dnabert-2",
+            "beat-v11", "beat_v11", "beat-v11-bioprime", "beat_v11_bioprime", "beatv11",
+        ],
     )
     p.add_argument("--model-version", required=True)
     p.add_argument("--checkpoint-path", default=None)
