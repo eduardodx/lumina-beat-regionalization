@@ -97,6 +97,11 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
         action=argparse.BooleanOptionalAction,
         default=True,
     )
+    # Default = Pedro's v10 baseline; pass `--model-family beat-v11 --model-version r1` for the port.
+    # Threaded into build_job_args BEFORE the `--` so clinvar_fusion_job.py's parser consumes them
+    # (a passthrough after `--` would be clobbered by the job's own _upsert_arg).
+    parser.add_argument("--model-family", default="lumina")
+    parser.add_argument("--model-version", default="beat-v10")
     parser.add_argument("--detach", action="store_true")
     return parser.parse_args(launcher_args), training_args
 
@@ -162,6 +167,10 @@ def build_job_args(*, args: argparse.Namespace, training_args: list[str]) -> lis
     job_args = [
         "--dataset-file",
         args.dataset_file,
+        "--model-family",
+        args.model_family,
+        "--model-version",
+        args.model_version,
         "--fusion-mode",
         args.fusion_mode,
         "--fusion-adapter-names",
