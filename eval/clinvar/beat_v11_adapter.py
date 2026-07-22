@@ -145,3 +145,63 @@ class FineTuneBeatV11Adapter:
 
         _ = (ref_alleles, alt_alleles)  # two-tower path uses full ref/alt sequences
         return _extract_paired_variant_features(self, ref_seqs, alt_seqs, variant_offsets)
+
+    @torch.no_grad()
+    def extract_native_pathogenicity_features(
+        self,
+        ref_seqs: list[str],
+        variant_offsets: list[int],
+        alt_alleles: list[str],
+    ) -> dict[str, list[float]]:
+        """Per-variant conservation + ESM-2 missense-severity from the FROZEN v11 native token
+        heads, read at the variant site of the reference window.
+
+        These are backbone-only, pathogenicity-specific signals that are ORTHOGONAL to the
+        ABRAOM allele frequency -- a conserved / high-missense-severity variant is a genuine
+        P/LP candidate whose score the regional frequency discount must NOT erase, unlike a
+        common benign that the molecular head over-scores. Guarding the calibration discount on
+        THESE (instead of the frequency-confounded molecular probability) is the "A-guarda"
+        lever: it lets M5_v3 recover P/LP recall without the common-benign false-positives that
+        made it lose to M5_v2 on v11. The Beat-v10 backbone had no such heads.
+
+        Returns per-variant scalars (lists aligned with the inputs):
+        ``phylo100``, ``zoo241``, ``phylo470`` (conservation), and ``missense_severity`` (the
+        ESM-2 severity of the specific alternate allele; omitted if the head is absent).
+        """
+        from eval.clinvar.adapters import _nuc_offset_to_token_index
+        from src.constants import SNV_BASES  # (A, C, G, T) -- matches the missense head's alt axis
+
+        base_to_idx = {b: i for i, b in enumerate(SNV_BASES)}
+        model = self._model
+
+        batch = self.tokenize(ref_seqs)
+        hidden = self.forward_hidden_states(batch)  # [B, L, d_full]
+        conservation = model.conservation_scalar_head(hidden)  # [B, L, num_conservation_targets]
+        missense = (
+            model.missense_severity_head(hidden)  # [B, L, len(SNV_BASES)]
+            if getattr(model, "missense_severity_head", None) is not None
+            else None
+        )
+
+        device = hidden.device
+        n = hidden.shape[0]
+        rows = torch.arange(n, device=device)
+        token_idx = torch.tensor(
+            [_nuc_offset_to_token_index(self, batch, i, off) for i, off in enumerate(variant_offsets)],
+            dtype=torch.long, device=device,
+        )
+
+        cons_at = conservation[rows, token_idx].float()  # [B, num_conservation_targets]
+        names = ("phylo100", "zoo241", "phylo470")
+        out: dict[str, list[float]] = {
+            names[j]: cons_at[:, j].tolist()
+            for j in range(min(cons_at.shape[-1], len(names)))
+        }
+        if missense is not None:
+            alt_idx = torch.tensor(
+                [base_to_idx.get((a or "").upper(), 0) for a in alt_alleles],
+                dtype=torch.long, device=device,
+            )
+            miss_at = missense[rows, token_idx].float()  # [B, len(SNV_BASES)]
+            out["missense_severity"] = miss_at[rows, alt_idx].tolist()
+        return out
