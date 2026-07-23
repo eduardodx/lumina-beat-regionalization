@@ -244,12 +244,15 @@ def _guard_mask(predictions: pd.DataFrame, config: SafetyConfig) -> np.ndarray:
     the v11 native phyloP100 conservation >= it -- a founder P/LP is conserved (~1.0-1.4), a common
     benign is not (~0.05), and conservation is orthogonal to the ABRAOM frequency. Falls back to
     molecular-only if phylo100 is absent (so the script still runs without native features)."""
-    molecular = predictions["molecular_probability"].to_numpy(dtype=np.float64)
-    mask = molecular >= config.molecular_guard_threshold
     if config.conservation_guard_threshold > 0.0 and "phylo100" in predictions.columns:
+        # Conservation REPLACES the molecular gate (it does NOT and-with it). Measured on v11:
+        # the founder P/LP we must protect have LOW molecular probability (median 0.374) -- only
+        # 6/187 clear the 0.65 gate -- so and-ing it blocked 97% of them. phyloP is the signal
+        # they do carry (though weakly: medians overlap, so only high thresholds discriminate).
         conservation = np.nan_to_num(predictions["phylo100"].to_numpy(dtype=np.float64), nan=-1e9)
-        mask = mask & (conservation >= config.conservation_guard_threshold)
-    return mask
+        return conservation >= config.conservation_guard_threshold
+    molecular = predictions["molecular_probability"].to_numpy(dtype=np.float64)
+    return molecular >= config.molecular_guard_threshold
 
 
 def apply_safety_config(predictions: pd.DataFrame, config: SafetyConfig, dataset: str) -> pd.DataFrame:
@@ -462,9 +465,12 @@ def candidate_configs(global_threshold: float) -> list[SafetyConfig]:
     # signal); 1.01 = molecular guard effectively off, so conservation alone can gate.
     guard_thresholds = [0.65, 1.01]
     guarded_caps = [0.0, 0.10, 0.25, 0.50]
-    # A-guarda phyloP100 gate. 0.0 = molecular-only (reproduces the old v3); ~0.3-0.7 is the window
-    # that separates founder P/LP (phyloP ~1.0-1.4) from the common benigns (phyloP ~0.05).
-    conservation_guards = [0.0, 0.3, 0.5, 0.7, 1.0]
+    # A-guarda phyloP100 gate (replaces the molecular gate when > 0; 0.0 = old molecular-only v3).
+    # Range set from the MEASURED founder-vs-benign separation on holdout: the medians overlap
+    # (founders 0.357, benigns -0.183), so only HIGH thresholds discriminate -- enrichment climbs
+    # to 5.4x at 3.0, where only 5% of common benigns fire (vs 16% at 0.5). The 0-1.0 window tried
+    # first was the wrong range.
+    conservation_guards = [0.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
     regional_thresholds = np.round(np.linspace(0.25, 0.55, 31), 3)
     for discount_scale in discount_scales:
         for max_discount in max_discounts:
