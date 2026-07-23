@@ -67,6 +67,10 @@ class SafetyConfig:
     guard_score_floor: float
     regional_threshold: float
     global_threshold: float
+    # A-guarda (v11): additionally require phyloP100 conservation >= this to guard a variant.
+    # 0.0 = off (identical to Pedro's molecular-only guard). ~0.5 separates founder P/LP
+    # (phyloP ~1.0-1.4) from the common benigns the v11 molecular head over-scores (phyloP ~0.05).
+    conservation_guard_threshold: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -96,6 +100,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path("artifacts/clinvar_regional_eval/m5_v2_bounded_regional_eval_beatv10_v1_sagemaker/_extracted"),
     )
     parser.add_argument("--slice-dir", type=Path, default=Path("data/datasets/clinvar/regional_abraom/slices"))
+    parser.add_argument(
+        "--native-dir",
+        type=Path,
+        default=None,
+        help="dir with {slice}.{split}.native_features.parquet (A-guarda: enables the phyloP "
+             "conservation gate on the molecular guard). Omit to keep the original v11 molecular-only guard.",
+    )
     parser.add_argument("--model-root", type=Path, default=Path("artifacts/clinvar_regional_eval"))
     parser.add_argument(
         "--m5-v2-config",
@@ -184,7 +195,9 @@ def load_metadata(slice_dir: Path, dataset: str, split: str) -> pd.DataFrame:
     return frame[[column for column in keep if column in frame.columns]].copy()
 
 
-def read_m5_predictions(root: Path, slice_dir: Path, dataset: str, split: str) -> pd.DataFrame:
+def read_m5_predictions(
+    root: Path, slice_dir: Path, dataset: str, split: str, native_dir: Path | None = None
+) -> pd.DataFrame:
     path = root / f"{dataset}.{split}.predictions.parquet"
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -194,7 +207,16 @@ def read_m5_predictions(root: Path, slice_dir: Path, dataset: str, split: str) -
     if missing:
         raise ValueError(f"{path} is missing required columns: {', '.join(missing)}")
     metadata = load_metadata(slice_dir, dataset, split)
-    return predictions.merge(metadata, on="original_index", how="left", validate="one_to_one").reset_index(drop=True)
+    merged = predictions.merge(metadata, on="original_index", how="left", validate="one_to_one")
+    if native_dir is not None:
+        # A-guarda: attach the v11 native conservation/missense-severity for the guard
+        # (produced by scripts/extract_native_pathogenicity_features.py).
+        native_path = native_dir / f"{dataset}.{split}.native_features.parquet"
+        if native_path.is_file():
+            native = pd.read_parquet(native_path)
+            keep = ["original_index"] + [c for c in ("phylo100", "missense_severity") if c in native.columns]
+            merged = merged.merge(native[keep], on="original_index", how="left")
+    return merged.reset_index(drop=True)
 
 
 def read_raw_model_predictions(model_dir: Path, dataset: str, split: str) -> pd.DataFrame:
@@ -209,8 +231,25 @@ def read_raw_model_predictions(model_dir: Path, dataset: str, split: str) -> pd.
     return frame[["dataset", "split", "original_index", "label", "score_used", "threshold_used", "prediction_used"]]
 
 
-def load_m5_split(root: Path, slice_dir: Path, datasets: Iterable[str], split: str) -> dict[str, pd.DataFrame]:
-    return {dataset: read_m5_predictions(root, slice_dir, dataset, split) for dataset in datasets}
+def load_m5_split(
+    root: Path, slice_dir: Path, datasets: Iterable[str], split: str, native_dir: Path | None = None
+) -> dict[str, pd.DataFrame]:
+    return {dataset: read_m5_predictions(root, slice_dir, dataset, split, native_dir) for dataset in datasets}
+
+
+def _guard_mask(predictions: pd.DataFrame, config: SafetyConfig) -> np.ndarray:
+    """A-guarda: which variants the frequency discount must NOT erase. Baseline = high molecular
+    probability (Pedro's v10 signal). On v11 that alone over-protects the common benigns the
+    stronger molecular head over-scores; when ``conservation_guard_threshold > 0`` we ALSO require
+    the v11 native phyloP100 conservation >= it -- a founder P/LP is conserved (~1.0-1.4), a common
+    benign is not (~0.05), and conservation is orthogonal to the ABRAOM frequency. Falls back to
+    molecular-only if phylo100 is absent (so the script still runs without native features)."""
+    molecular = predictions["molecular_probability"].to_numpy(dtype=np.float64)
+    mask = molecular >= config.molecular_guard_threshold
+    if config.conservation_guard_threshold > 0.0 and "phylo100" in predictions.columns:
+        conservation = np.nan_to_num(predictions["phylo100"].to_numpy(dtype=np.float64), nan=-1e9)
+        mask = mask & (conservation >= config.conservation_guard_threshold)
+    return mask
 
 
 def apply_safety_config(predictions: pd.DataFrame, config: SafetyConfig, dataset: str) -> pd.DataFrame:
@@ -218,7 +257,7 @@ def apply_safety_config(predictions: pd.DataFrame, config: SafetyConfig, dataset
     molecular = output["molecular_probability"].to_numpy(dtype=np.float64)
     raw_discount = output["regional_discount"].to_numpy(dtype=np.float64) * config.discount_scale
     base_capped_discount = np.minimum(raw_discount, config.max_discount)
-    guard_mask = molecular >= config.molecular_guard_threshold
+    guard_mask = _guard_mask(output, config)
     guarded_discount = np.where(
         guard_mask,
         np.minimum(base_capped_discount, config.guarded_max_discount),
@@ -251,7 +290,7 @@ def scores_for_config(predictions: pd.DataFrame, config: SafetyConfig, dataset: 
     molecular = predictions["molecular_probability"].to_numpy(dtype=np.float64)
     raw_discount = predictions["regional_discount"].to_numpy(dtype=np.float64) * config.discount_scale
     base_capped_discount = np.minimum(raw_discount, config.max_discount)
-    guard_mask = molecular >= config.molecular_guard_threshold
+    guard_mask = _guard_mask(predictions, config)
     guarded_discount = np.where(
         guard_mask,
         np.minimum(base_capped_discount, config.guarded_max_discount),
@@ -419,8 +458,13 @@ def candidate_configs(global_threshold: float) -> list[SafetyConfig]:
     configs: list[SafetyConfig] = []
     discount_scales = [0.0, 0.25, 0.5, 0.75, 1.0, 1.25]
     max_discounts = [0.0, 0.25, 0.5, 0.75, 1.0]
-    guard_thresholds = [0.65, 0.75, 0.85, 0.95, 1.01]
+    # Shrunk from 5 to 2 (the A-guarda conservation gate is now the primary founder-vs-benign
+    # signal); 1.01 = molecular guard effectively off, so conservation alone can gate.
+    guard_thresholds = [0.65, 1.01]
     guarded_caps = [0.0, 0.10, 0.25, 0.50]
+    # A-guarda phyloP100 gate. 0.0 = molecular-only (reproduces the old v3); ~0.3-0.7 is the window
+    # that separates founder P/LP (phyloP ~1.0-1.4) from the common benigns (phyloP ~0.05).
+    conservation_guards = [0.0, 0.3, 0.5, 0.7, 1.0]
     regional_thresholds = np.round(np.linspace(0.25, 0.55, 31), 3)
     for discount_scale in discount_scales:
         for max_discount in max_discounts:
@@ -428,18 +472,20 @@ def candidate_configs(global_threshold: float) -> list[SafetyConfig]:
                 for guarded_cap in guarded_caps:
                     if guard_threshold > 1.0 and guarded_cap != 0.50:
                         continue
-                    for regional_threshold in regional_thresholds:
-                        configs.append(
-                            SafetyConfig(
-                                discount_scale=float(discount_scale),
-                                max_discount=float(max_discount),
-                                molecular_guard_threshold=float(guard_threshold),
-                                guarded_max_discount=float(min(guarded_cap, max_discount)),
-                                guard_score_floor=float(regional_threshold),
-                                regional_threshold=float(regional_threshold),
-                                global_threshold=float(global_threshold),
+                    for conservation_guard in conservation_guards:
+                        for regional_threshold in regional_thresholds:
+                            configs.append(
+                                SafetyConfig(
+                                    discount_scale=float(discount_scale),
+                                    max_discount=float(max_discount),
+                                    molecular_guard_threshold=float(guard_threshold),
+                                    guarded_max_discount=float(min(guarded_cap, max_discount)),
+                                    guard_score_floor=float(regional_threshold),
+                                    regional_threshold=float(regional_threshold),
+                                    global_threshold=float(global_threshold),
+                                    conservation_guard_threshold=float(conservation_guard),
+                                )
                             )
-                        )
     return configs
 
 
@@ -972,8 +1018,8 @@ def write_report(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    holdout = load_m5_split(args.holdout_dir, args.slice_dir, args.datasets, "holdout")
-    test = load_m5_split(args.test_dir, args.slice_dir, args.datasets, "test")
+    holdout = load_m5_split(args.holdout_dir, args.slice_dir, args.datasets, "holdout", args.native_dir)
+    test = load_m5_split(args.test_dir, args.slice_dir, args.datasets, "test", args.native_dir)
 
     m0_dir = args.model_root / "m0_nonbr_beatv10_v1_sagemaker"
     m7_dir = args.model_root / "m7_dynamic_scrambled_nonbr_beatv10_v1_sagemaker"
