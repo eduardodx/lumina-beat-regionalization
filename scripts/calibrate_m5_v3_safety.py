@@ -240,10 +240,16 @@ def load_m5_split(
 def _guard_mask(predictions: pd.DataFrame, config: SafetyConfig) -> np.ndarray:
     """A-guarda: which variants the frequency discount must NOT erase. Baseline = high molecular
     probability (Pedro's v10 signal). On v11 that alone over-protects the common benigns the
-    stronger molecular head over-scores; when ``conservation_guard_threshold > 0`` we ALSO require
-    the v11 native phyloP100 conservation >= it -- a founder P/LP is conserved (~1.0-1.4), a common
-    benign is not (~0.05), and conservation is orthogonal to the ABRAOM frequency. Falls back to
-    molecular-only if phylo100 is absent (so the script still runs without native features)."""
+    stronger molecular head over-scores; when ``conservation_guard_threshold > 0`` the v11 native
+    phyloP100 conservation REPLACES the molecular gate (see the comment below for why and-ing them
+    failed). Falls back to molecular-only if phylo100 is absent (so the script still runs without
+    native features).
+
+    NOTE (2026-07-23): the conservation guard was TESTED AND REFUTED on v11 -- tuning selects
+    ``conservation_guard_threshold = 0.0`` (i.e. no guard). The signals do not separate: median
+    phyloP100 is 0.357 for founder P/LP vs -0.183 for common benigns, and enrichment peaks at 5.4x
+    against a 61:1 base rate. Kept for reproducibility of that negative result; the shipped lead is
+    M5_v2 (no guard). Without ``--native-dir`` this is byte-for-byte the original v3 behaviour."""
     if config.conservation_guard_threshold > 0.0 and "phylo100" in predictions.columns:
         # Conservation REPLACES the molecular gate (it does NOT and-with it). Measured on v11:
         # the founder P/LP we must protect have LOW molecular probability (median 0.374) -- only
