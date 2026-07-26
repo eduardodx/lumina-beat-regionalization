@@ -79,6 +79,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--slice-dir", type=Path, default=home / "slices")
     p.add_argument("--m5-v2-config", type=Path, default=home / "v11eval/m5_v2_v11/selected_config.json")
     p.add_argument("--dataset", default="br_only")
+    p.add_argument("--splits", nargs="*", default=["test", "holdout", "all"],
+                   help="splits to evaluate; missing ones are skipped. 'all' (n=4163) is the "
+                        "definitive powered number once the all-split eval has produced it.")
     p.add_argument("--v10-reference", type=float, default=V10_REFERENCE_BR_ONLY)
     p.add_argument("--bootstrap", type=int, default=5000)
     p.add_argument("--seed", type=int, default=20260724)
@@ -174,10 +177,10 @@ def main(argv: list[str] | None = None) -> int:
           f"regional_threshold={threshold}")
 
     frames: dict[str, pd.DataFrame] = {}
-    for split in ("test", "holdout"):
+    for split in args.splits:
         frame = load_split(args.m5_dir, args.slice_dir, args.dataset, split)
         if frame is None:
-            print(f"[warn] missing {args.dataset}.{split} predictions in {args.m5_dir}", file=sys.stderr)
+            print(f"[warn] missing {args.dataset}.{split} predictions in {args.m5_dir} (skipping)", file=sys.stderr)
             continue
         frame = frame.copy()
         frame["_m5_v2_score"] = m5_v2_score(frame, discount_scale, max_discount)
@@ -187,8 +190,9 @@ def main(argv: list[str] | None = None) -> int:
         print("[error] no predictions loaded; check --m5-dir", file=sys.stderr)
         return 1
 
-    rows = [evaluate_split(name, frame, threshold, args, rng) for name, frame in frames.items()]
-    if {"test", "holdout"} <= frames.keys():
+    # Report each split in the order requested, then a test+holdout pool if 'all' is not yet available.
+    rows = [evaluate_split(name, frames[name], threshold, args, rng) for name in args.splits if name in frames]
+    if "all" not in frames and {"test", "holdout"} <= frames.keys():
         pooled = pd.concat([frames["test"], frames["holdout"]], ignore_index=True)
         rows.append(evaluate_split("test+holdout", pooled, threshold, args, rng))
 
