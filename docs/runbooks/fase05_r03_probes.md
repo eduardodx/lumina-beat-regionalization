@@ -103,6 +103,27 @@ cd "$WORK" && PYTHONPATH="$WORK" "$PY" scripts/r03_chr8_population_probe.py --ch
 
 ---
 
+## 5. Sonda (a1) — poder do endpoint clínico (LOCAL, CPU, sem GPU/checkpoint)
+
+Estima se `ΔMCC_BR-específico` tem poder dado o n real do br_only. Só precisa de pandas+numpy + a
+slice — não usa o modelo. Roda em minutos:
+
+```bash
+cd "$WORK" && "$PY" scripts/estimate_br_clinical_power.py --slice ~/slices/br_only.parquet --nonbr-slice ~/slices/nonbr_only.parquet --out ~/artifacts/fase05/a1_power.json
+```
+
+**Ler:** primeiro a tabela de counts (n_pos/n_neg do br_only: total, main sem chr8, chr8,
+BRCA1/BRCA2/TP53). Depois o `[self-check]` (deve dar meia-largura de IC de UM MCC compatível/menor
+que o anchor v11 ~0.05–0.09 → simulador calibrado). Depois o `poder@ΔMCC=0.05` por cobertura/AUC:
+- poder < 0.5 → endpoint clínico **sub-potente**; priorizar representacional/AMR + BR-associated.
+- 0.5–0.8 → marginal; decidir com o Eduardo.
+- ≥ 0.8 (teto) → pode ter poder; confirmar no nível 2 (pós-matcher, gene-clustered).
+
+Lembrar: o poder é **teto** (bootstrap variant-level subestima vs gene-clustered ~1.7×). E chr8/genes
+com n_pos<20 ou n_neg<20 são descritivos (regra do Eduardo).
+
+---
+
 ## O que me trazer de volta
 
 Os JSONs de `~/artifacts/fase05/` (`r03_lora_surface.json`, `r03_chr8_probe_*.json`) + o resultado
