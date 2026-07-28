@@ -179,13 +179,20 @@ def parse_variant_key(key: str) -> tuple[str, int, str, str] | None:
     return chrom, pos, ref.upper(), alt.upper()
 
 
+def _norm_chrom(value: str) -> str:
+    """Normaliza o campo de cromossomo: 'chr8'/'CHR8'/'8' -> '8' (robusto aos dois formatos de key)."""
+    c = str(value).strip().lower()
+    return c[3:] if c.startswith("chr") else c
+
+
 def load_chrom_subset(
     df: pd.DataFrame, af_col: str, chrom: str, max_variants: int, rng: np.random.Generator
 ) -> pd.DataFrame:
     """Filtra o cromossomo pedido, SNV bialelico, AF positiva; amostra ate max_variants."""
     keyed = df["variant_key"].astype(str)
-    chrom_prefixed = chrom if chrom.lower().startswith("chr") else f"chr{chrom}"
-    sub = df[keyed.str.startswith(f"{chrom_prefixed}:")].copy()
+    # A key das slices regionais usa o chrom cru do ClinVar (ex.: '8:...'), nao 'chr8:'. Normaliza os dois.
+    key_chrom = keyed.str.split(":").str[0].map(_norm_chrom)
+    sub = df[key_chrom == _norm_chrom(chrom)].copy()
     sub["_af"] = pd.to_numeric(sub[af_col], errors="coerce")
     sub = sub[sub["_af"] > 0]
     # SNV bialelico: ref/alt de 1 base. Usa is_snv se existir, senao deriva do variant_key.

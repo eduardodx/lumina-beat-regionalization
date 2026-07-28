@@ -87,11 +87,12 @@ ls ~/hg38/hg38.fa; ls ~/slices
 cd "$WORK" && PYTHONPATH="$WORK" "$PY" scripts/r03_chr8_population_probe.py --checkpoint "$R03_CKPT" --variants ~/slices/br_only.parquet --af-col af_gnomad --fasta ~/hg38/hg38.fa --eval-chrom chr8 --indomain-chrom chr1 --context-size 4096 --batch-size 8 --max-variants 4000 --out ~/artifacts/fase05/r03_chr8_probe_slices.json
 ```
 
-**4b. Medição com poder** (índice ABraOM v2, ~17.8M variantes; o script sintetiza `variant_key` de
-chrom/pos/ref/alt e lê só as colunas necessárias). Aponte `--variants` pro parquet do índice:
+**4b. Medição com poder** — o índice ABraOM cru (17.8M) não está em disco, mas o dataset do freq
+adapter (`data/datasets/abraom_frequency_adapter/abraom_frequency_train.parquet`) é derivado do
+ABraOM, tem `af_gnomad`, e inclui chr8. O filtro de cromossomo é robusto a `chr8:`/`8:`:
 
 ```bash
-cd "$WORK" && PYTHONPATH="$WORK" "$PY" scripts/r03_chr8_population_probe.py --checkpoint "$R03_CKPT" --variants <PARQUET_INDICE_ABRAOM> --af-col af_gnomad --fasta ~/hg38/hg38.fa --eval-chrom chr8 --indomain-chrom chr1 --context-size 4096 --batch-size 8 --max-variants 20000 --out ~/artifacts/fase05/r03_chr8_probe_abraom.json
+cd "$WORK" && PYTHONPATH="$WORK" "$PY" scripts/r03_chr8_population_probe.py --checkpoint "$R03_CKPT" --variants "$WORK/data/datasets/abraom_frequency_adapter/abraom_frequency_train.parquet" --af-col af_gnomad --fasta ~/hg38/hg38.fa --eval-chrom chr8 --indomain-chrom chr1 --context-size 4096 --batch-size 8 --max-variants 20000 --out ~/artifacts/fase05/r03_chr8_probe_abraom.json
 ```
 
 **Ler o JSON:** compare `results[].gnomad_af_pred.spearman` (+ `ci95`) entre `set: eval` (chr8) e
