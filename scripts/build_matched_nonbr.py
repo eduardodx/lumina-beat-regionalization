@@ -163,8 +163,8 @@ def match(br, nonbr, exact_cols, features, rng):
 
 def _assemble_pairs(matches):
     rows = []
-    carry = ["variant_key", "GeneSymbol", "label", "variant_type", "consequence", "review_star_rank",
-             "af_gnomad", "_af_bin"] + PRESERVE_COLS
+    carry = ["variant_key", "GeneSymbol", "label", "variant_type", "consequence", "consequence_class",
+             "review_star_rank", "af_gnomad", "_af_bin"] + PRESERVE_COLS
     for i, (br_row, nb_row, dist) in enumerate(matches):
         rec = {"match_set_id": i, "match_distance": dist}
         for c in carry:
@@ -206,11 +206,13 @@ def coverage_report(br, pairs, unmatched, n_before_chr, exclude_chrom, exact_col
             "label": dist_by(pairs.rename(columns={"br_label": "label"}), "label"),
             "af_bin": dist_by(pairs.rename(columns={"br__af_bin": "af_bin"}), "af_bin"),
             "consequence": dist_by(pairs.rename(columns={"br_consequence": "consequence"}), "consequence"),
+            "consequence_class": dist_by(pairs.rename(columns={"br_consequence_class": "consequence_class"}), "consequence_class"),
         },
         "unmatched_distribution": {
             "label": dist_by(unmatched, "label"),
             "af_bin": dist_by(unmatched, "_af_bin"),
             "consequence": dist_by(unmatched, "consequence"),
+            "consequence_class": dist_by(unmatched, "consequence_class"),
         },
     }
 

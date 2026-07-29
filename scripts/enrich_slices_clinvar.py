@@ -63,6 +63,17 @@ CONSEQUENCE_SEVERITY: list[tuple[str, str]] = [
 _TERM_RANK = {term: i for i, (term, _cat) in enumerate(CONSEQUENCE_SEVERITY)}
 _TERM_CAT = {term: cat for term, cat in CONSEQUENCE_SEVERITY}
 
+# Coarsening -> CLASSES FUNCIONAIS (o confounder de consequencia mora nas diferencas ENTRE classes).
+# Gera a coluna `consequence_class` ao lado da `consequence` fina; o matcher escolhe a granularidade.
+CONSEQUENCE_CLASS: dict[str, str] = {
+    "nonsense": "LoF", "frameshift": "LoF", "splice": "LoF", "start_stop_lost": "LoF",
+    "missense": "missense",
+    "inframe_indel": "inframe", "protein_altering": "inframe",
+    "synonymous": "synonymous",
+    "utr": "noncoding", "intron": "noncoding", "noncoding": "noncoding", "splice_region": "noncoding",
+    "other": "other", "unknown": "unknown", "no_mc": "unknown",
+}
+
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -141,17 +152,19 @@ def enrich(slice_path: Path, consequence_map, stars_map, out_dir: Path) -> dict:
     df = pd.read_parquet(slice_path)
     vk = df["variant_key"].astype(str)
     df["consequence"] = vk.map(consequence_map).fillna("unknown")
+    df["consequence_class"] = df["consequence"].map(CONSEQUENCE_CLASS).fillna("other")
     df["review_star_rank"] = vk.map(stars_map)
     out_path = out_dir / slice_path.name.replace(".parquet", ".enriched.parquet")
     df.to_parquet(out_path, index=False)
     cons_cov = float((df["consequence"] != "unknown").mean())
     star_cov = float(df["review_star_rank"].notna().mean())
-    log.info("%s -> %s | consequencia cobertura=%.3f | estrelas cobertura=%.3f | consequencias=%s",
+    log.info("%s -> %s | consequencia cobertura=%.3f | estrelas cobertura=%.3f | classes=%s",
              slice_path.name, out_path.name, cons_cov, star_cov,
-             dict(df["consequence"].value_counts().head(12)))
+             dict(df["consequence_class"].value_counts()))
     return {"slice": slice_path.name, "out": str(out_path), "n": len(df),
             "consequence_coverage": cons_cov, "star_coverage": star_cov,
-            "consequence_counts": {str(k): int(v) for k, v in df["consequence"].value_counts().items()}}
+            "consequence_counts": {str(k): int(v) for k, v in df["consequence"].value_counts().items()},
+            "consequence_class_counts": {str(k): int(v) for k, v in df["consequence_class"].value_counts().items()}}
 
 
 def main(argv=None):
