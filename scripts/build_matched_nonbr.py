@@ -96,19 +96,27 @@ def load_slice(path, exclude_chrom, exact_cols, af_col, submitter_col):
     submitters = df[submitter_col] if submitter_col in df.columns else pd.Series(0.0, index=df.index)
     df["_submitters"] = np.log1p(pd.to_numeric(submitters, errors="coerce").fillna(0.0))
     df["_indel_len"] = _indel_length(df)
+    # estrelas: feature aproximada CONDICIONAL (so nas slices enriquecidas). Missing = 0 (sem estrelas).
+    if "review_star_rank" in df.columns:
+        df["_star"] = pd.to_numeric(df["review_star_rank"], errors="coerce").fillna(0.0)
     missing_exact = [c for c in exact_cols if c not in df.columns]
     if missing_exact:
         raise SystemExit(f"{path}: colunas de match exato ausentes: {missing_exact}")
     return df, n_before_chr
 
 
-APPROX_FEATURES = ["_af_log", "_submitters", "_indel_len"]
+BASE_APPROX = ["_af_log", "_submitters", "_indel_len"]
 
 
-def _standardize(br, nonbr):
+def active_approx_features(df) -> list[str]:
+    """Features aproximadas ativas: as base + estrelas se a slice foi enriquecida."""
+    return BASE_APPROX + (["_star"] if "_star" in df.columns else [])
+
+
+def _standardize(br, nonbr, features):
     """z-score de cada feature aproximada usando media/desvio do POOL nonBR (mesma escala p/ os dois)."""
     stats = {}
-    for f in APPROX_FEATURES:
+    for f in features:
         mu = float(nonbr[f].mean())
         sd = float(nonbr[f].std(ddof=0)) or 1.0
         stats[f] = (mu, sd)
@@ -117,9 +125,9 @@ def _standardize(br, nonbr):
     return stats
 
 
-def match(br, nonbr, exact_cols, rng):
+def match(br, nonbr, exact_cols, features, rng):
     """Guloso 1:1 sem reuso, por estrato exato. Retorna (pares_df, unmatched_df)."""
-    zcols = [f + "_z" for f in APPROX_FEATURES]
+    zcols = [f + "_z" for f in features]
     # estrato = tupla das colunas exatas
     br = br.assign(_stratum=list(zip(*[br[c] for c in exact_cols])))
     nonbr = nonbr.assign(_stratum=list(zip(*[nonbr[c] for c in exact_cols])))
@@ -155,7 +163,8 @@ def match(br, nonbr, exact_cols, rng):
 
 def _assemble_pairs(matches):
     rows = []
-    carry = ["variant_key", "GeneSymbol", "label", "variant_type", "af_gnomad", "_af_bin"] + PRESERVE_COLS
+    carry = ["variant_key", "GeneSymbol", "label", "variant_type", "consequence", "review_star_rank",
+             "af_gnomad", "_af_bin"] + PRESERVE_COLS
     for i, (br_row, nb_row, dist) in enumerate(matches):
         rec = {"match_set_id": i, "match_distance": dist}
         for c in carry:
@@ -167,7 +176,7 @@ def _assemble_pairs(matches):
     return pd.DataFrame(rows)
 
 
-def coverage_report(br, pairs, unmatched, n_before_chr, exclude_chrom, exact_cols, af_col, submitter_col):
+def coverage_report(br, pairs, unmatched, n_before_chr, exclude_chrom, exact_cols, features, submitter_col):
     n_raw = len(br)
     n_matched = len(pairs)
 
@@ -175,6 +184,12 @@ def coverage_report(br, pairs, unmatched, n_before_chr, exclude_chrom, exact_col
         if col not in frame.columns:
             return {}
         return {str(k): int(v) for k, v in frame[col].value_counts().items()}
+
+    _feat_label = {"_af_log": "af_gnomad(log)", "_submitters": f"{submitter_col}(log1p)",
+                   "_indel_len": "indel_length", "_star": "review_star_rank"}
+    missing_exact = [] if "consequence" in exact_cols else ["consequencia_molecular (rode o enriquecimento + --exact-cols consequence)"]
+    missing_approx = [] if "_star" in features else ["estrelas/review_status_rank (rode o enriquecimento)"]
+    missing_approx.append("ano/LastEvaluated (so no XML VCV/RCV -- nao anotado)")
 
     return {
         "n_br_rows_deduped": n_before_chr,
@@ -184,19 +199,18 @@ def coverage_report(br, pairs, unmatched, n_before_chr, exclude_chrom, exact_col
         "matching_coverage": (n_matched / n_raw) if n_raw else None,
         "exclude_chrom": str(exclude_chrom),
         "exact_cols_used": exact_cols,
-        "approx_features_used": ["af_gnomad(log)", f"{submitter_col}(log1p)", "indel_length"],
-        "missing_vs_spec": {
-            "exact": ["consequencia_molecular (so variant_type disponivel -> decisao B1)"],
-            "approx": ["estrelas/review_status_rank (so no master)", "ano/LastEvaluated (nao disponivel)"],
-        },
+        "approx_features_used": [_feat_label.get(f, f) for f in features],
+        "missing_vs_spec": {"exact": missing_exact, "approx": missing_approx},
         "not_matched_on_preserved_6_7": [c for c in PRESERVE_COLS if c in br.columns],
         "included_distribution": {
             "label": dist_by(pairs.rename(columns={"br_label": "label"}), "label"),
             "af_bin": dist_by(pairs.rename(columns={"br__af_bin": "af_bin"}), "af_bin"),
+            "consequence": dist_by(pairs.rename(columns={"br_consequence": "consequence"}), "consequence"),
         },
         "unmatched_distribution": {
             "label": dist_by(unmatched, "label"),
             "af_bin": dist_by(unmatched, "_af_bin"),
+            "consequence": dist_by(unmatched, "consequence"),
         },
     }
 
@@ -209,11 +223,16 @@ def main(argv=None):
     nonbr, _ = load_slice(args.nonbr, args.exclude_chrom, args.exact_cols, args.af_col, args.submitter_col)
     log.info("br_main=%d (dedup %d) | nonbr_pool_main=%d", len(br), n_br_dedup, len(nonbr))
 
-    _standardize(br, nonbr)
-    pairs, unmatched = match(br, nonbr, args.exact_cols, rng)
+    features = active_approx_features(br)
+    if "_star" in features and "_star" not in nonbr.columns:
+        features = [f for f in features if f != "_star"]
+        log.warning("nonbr sem review_star_rank -> feature 'estrelas' desativada")
+    log.info("match exato=%s | features aproximadas=%s", args.exact_cols, features)
+    _standardize(br, nonbr, features)
+    pairs, unmatched = match(br, nonbr, args.exact_cols, features, rng)
 
     report = coverage_report(br, pairs, unmatched, n_br_dedup, args.exclude_chrom,
-                             args.exact_cols, args.af_col, args.submitter_col)
+                             args.exact_cols, features, args.submitter_col)
     log.info("MATCHED=%d / %d  cobertura=%.3f  (unmatched=%d)",
              report["n_br_matched"], report["n_br_main_raw"], report["matching_coverage"] or 0.0, report["n_br_unmatched"])
     log.info("distribuicao label incluidas=%s | unmatched=%s",
