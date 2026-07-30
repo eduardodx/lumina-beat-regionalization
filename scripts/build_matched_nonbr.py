@@ -63,6 +63,11 @@ def parse_args(argv=None):
     p.add_argument("--af-col", default="af_gnomad", help="coluna de AF global p/ distancia + bins")
     p.add_argument("--submitter-col", default="regional_submission_rows", help="proxy de nº de submitters")
     p.add_argument("--exclude-chrom", default="8", help="cromossomo excluido do conjunto main (chr8 = holdout)")
+    p.add_argument("--consequence-dist-col", default=None,
+                   help="coluna de consequencia p/ PREFERENCIA forte na distancia (ex.: consequence_class). "
+                        "Nao e trava exata -> mantem cobertura, reduz desbalanco.")
+    p.add_argument("--consequence-penalty", type=float, default=100.0,
+                   help="penalidade por mismatch de consequencia na distancia (alta = prefere fortemente)")
     p.add_argument("--seed", type=int, default=1234)
     p.add_argument("--out", type=Path, required=True, help="parquet dos pares pareados")
     p.add_argument("--report", type=Path, default=None, help="json do relatorio de cobertura")
@@ -125,22 +130,29 @@ def _standardize(br, nonbr, features):
     return stats
 
 
-def match(br, nonbr, exact_cols, features, rng):
-    """Guloso 1:1 sem reuso, por estrato exato. Retorna (pares_df, unmatched_df)."""
+def match(br, nonbr, exact_cols, features, rng, cons_col=None, cons_penalty=100.0):
+    """Guloso 1:1 sem reuso, por estrato exato. Retorna (pares_df, unmatched_df).
+
+    Se `cons_col` for dado, a consequencia entra como PREFERENCIA FORTE na distancia (penalidade alta
+    por mismatch) -- prefere controle da mesma consequencia, cai num diferente so quando nao ha outro
+    livre. Mantem a cobertura (soft) e reduz o desbalanco de consequencia (decisao Eduardo)."""
     zcols = [f + "_z" for f in features]
+    use_cons = bool(cons_col) and cons_col in br.columns and cons_col in nonbr.columns
     # estrato = tupla das colunas exatas
     br = br.assign(_stratum=list(zip(*[br[c] for c in exact_cols])))
     nonbr = nonbr.assign(_stratum=list(zip(*[nonbr[c] for c in exact_cols])))
-    # pre-computa por estrato: array z (numpy), as linhas (posicional) e a mascara de uso
+    # pre-computa por estrato: array z (numpy), as linhas (posicional), mascara de uso e consequencia
     pool = {}
     for k, g in nonbr.groupby("_stratum", sort=False):
         pool[k] = {"z": g[zcols].to_numpy(dtype=float),
                    "rows": g.reset_index(drop=True),
-                   "used": np.zeros(len(g), dtype=bool)}
+                   "used": np.zeros(len(g), dtype=bool),
+                   "cons": g[cons_col].astype(str).to_numpy() if use_cons else None}
 
     matches, unmatched_idx = [], []
     br_sorted = br.sort_values("variant_key", kind="stable")  # ordem estavel + determinista
     br_z_all = br_sorted[zcols].to_numpy(dtype=float)
+    br_cons_all = br_sorted[cons_col].astype(str).to_numpy() if use_cons else None
     for pos, (idx, row) in enumerate(br_sorted.iterrows()):
         entry = pool.get(row["_stratum"])
         if entry is None:
@@ -151,6 +163,8 @@ def match(br, nonbr, exact_cols, features, rng):
             unmatched_idx.append(idx)
             continue
         dist = np.abs(entry["z"][free] - br_z_all[pos]).sum(axis=1)
+        if use_cons:
+            dist = dist + cons_penalty * (entry["cons"][free] != br_cons_all[pos])
         pick_local = int(np.argmin(dist))
         pick = free[pick_local]
         entry["used"][pick] = True
@@ -249,8 +263,12 @@ def main(argv=None):
         features = [f for f in features if f != "_star"]
         log.warning("nonbr sem review_star_rank -> feature 'estrelas' desativada")
     log.info("match exato=%s | features aproximadas=%s", args.exact_cols, features)
+    if args.consequence_dist_col:
+        log.info("consequencia como PREFERENCIA na distancia: col=%s penalidade=%.0f",
+                 args.consequence_dist_col, args.consequence_penalty)
     _standardize(br, nonbr, features)
-    pairs, unmatched = match(br, nonbr, args.exact_cols, features, rng)
+    pairs, unmatched = match(br, nonbr, args.exact_cols, features, rng,
+                             cons_col=args.consequence_dist_col, cons_penalty=args.consequence_penalty)
 
     report = coverage_report(br, pairs, unmatched, n_br_dedup, args.exclude_chrom,
                              args.exact_cols, features, args.submitter_col)
