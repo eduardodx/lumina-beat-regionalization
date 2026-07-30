@@ -30,6 +30,10 @@ DEFAULT_LABEL_COLUMN = "label"
 DEFAULT_SPLIT_COLUMN = "split_within_gene"
 TRAIN_SPLIT_VALUE = "train"
 TEST_SPLIT_VALUE = "test"
+# Splits explicitos §7 (campanha R03): quando o dataset declara estes, o train.py usa o validation
+# para early-stopping e o calibration como set de scoring (Platt), em vez de carvar val do train.
+VALIDATION_SPLIT_VALUE = "validation"
+CALIBRATION_SPLIT_VALUE = "calibration"
 EXPLICIT_FEATURE_EPS = 1e-8
 
 
@@ -270,49 +274,62 @@ def build_variant_cache(
     return cache_path
 
 
+def _cached_variant_from_row(row: pd.Series, regime: str, has_bio: bool) -> CachedVariant:
+    bio: list[float] | None = None
+    if has_bio:
+        raw = row["bio_features"]
+        if isinstance(raw, str):
+            bio = json.loads(raw)
+        elif isinstance(raw, list):
+            bio = [float(v) for v in raw]
+    elif regime == "B":
+        bio = zero_bio_features()
+    return CachedVariant(
+        ref_seq=str(row["ref_seq"]),
+        alt_seq=str(row["alt_seq"]),
+        variant_offset=int(row["variant_offset"]),
+        label=int(row["label"]),
+        index=int(row["original_index"]),
+        ref_allele=_get_optional_str(row, ["ref_allele"], default=str(row["ref_seq"])[int(row["variant_offset"])]),
+        alt_allele=_get_optional_str(row, ["alt_allele"], default=str(row["alt_seq"])[int(row["variant_offset"])]),
+        bio_features=bio,
+        consequence_bucket=str(row["consequence_bucket"]) if "consequence_bucket" in row else "unknown",
+        gene_symbol=str(row["gene_symbol"]) if "gene_symbol" in row else "",
+    )
+
+
+def load_variant_cache_by_split(
+    cache_path: Path,
+    regime: str,
+    *,
+    split_column: str = DEFAULT_SPLIT_COLUMN,
+) -> dict[str, list[CachedVariant]]:
+    """Carrega o cache agrupado pelo valor de split (train/validation/calibration/test).
+
+    Suporta os splits explicitos §7 (validation/calibration) alem de train/test. O caller usa
+    validation p/ early-stopping e calibration p/ scoring quando presentes; senao carva val do train."""
+    df = pd.read_parquet(cache_path)
+    log.info("Loaded %d cached variants from %s", len(df), cache_path)
+    has_bio = "bio_features" in df.columns
+    by_split: dict[str, list[CachedVariant]] = {}
+    for _, row in df.iterrows():
+        variant = _cached_variant_from_row(row, regime, has_bio)
+        split_val = str(row[split_column]).strip().lower()
+        by_split.setdefault(split_val, []).append(variant)
+    log.info("Cache splits: %s", {k: len(v) for k, v in sorted(by_split.items())})
+    return by_split
+
+
 def load_variant_cache(
     cache_path: Path,
     regime: str,
     *,
     split_column: str = DEFAULT_SPLIT_COLUMN,
 ) -> tuple[list[CachedVariant], list[CachedVariant]]:
-    """Load cached variants and split into train/test."""
-    df = pd.read_parquet(cache_path)
-    log.info("Loaded %d cached variants from %s", len(df), cache_path)
-
-    has_bio = "bio_features" in df.columns
-    train_variants: list[CachedVariant] = []
-    test_variants: list[CachedVariant] = []
-
-    for _, row in df.iterrows():
-        bio: list[float] | None = None
-        if has_bio:
-            raw = row["bio_features"]
-            if isinstance(raw, str):
-                bio = json.loads(raw)
-            elif isinstance(raw, list):
-                bio = [float(v) for v in raw]
-        elif regime == "B":
-            bio = zero_bio_features()
-
-        variant = CachedVariant(
-            ref_seq=str(row["ref_seq"]),
-            alt_seq=str(row["alt_seq"]),
-            variant_offset=int(row["variant_offset"]),
-            label=int(row["label"]),
-            index=int(row["original_index"]),
-            ref_allele=_get_optional_str(row, ["ref_allele"], default=str(row["ref_seq"])[int(row["variant_offset"])]),
-            alt_allele=_get_optional_str(row, ["alt_allele"], default=str(row["alt_seq"])[int(row["variant_offset"])]),
-            bio_features=bio,
-            consequence_bucket=str(row["consequence_bucket"]) if "consequence_bucket" in row else "unknown",
-            gene_symbol=str(row["gene_symbol"]) if "gene_symbol" in row else "",
-        )
-        split_val = str(row[split_column]).strip().lower()
-        if split_val == TRAIN_SPLIT_VALUE:
-            train_variants.append(variant)
-        elif split_val == TEST_SPLIT_VALUE:
-            test_variants.append(variant)
-
+    """Load cached variants and split into train/test (2-tupla; backward-compat)."""
+    by_split = load_variant_cache_by_split(cache_path, regime, split_column=split_column)
+    train_variants = by_split.get(TRAIN_SPLIT_VALUE, [])
+    test_variants = by_split.get(TEST_SPLIT_VALUE, [])
     log.info("Split: %d train, %d test", len(train_variants), len(test_variants))
     return train_variants, test_variants
 

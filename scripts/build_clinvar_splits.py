@@ -146,6 +146,17 @@ def main(argv=None):
                  name, len(sub), int((lab_sub == 1).sum()), int((lab_sub == 0).sum()),
                  manifest["splits"][name]["sha256"][:12])
 
+    # Parquet COMBINADO com a coluna `split_within_gene` (o que o harness de treino le: dataset.py
+    # DEFAULT_SPLIT_COLUMN). Valores train/validation/calibration -> train.py usa validation p/
+    # early-stopping e calibration p/ scoring (Platt), via load_variant_cache_by_split.
+    combined = pool.drop(columns=["split"]).copy()
+    combined["split_within_gene"] = pool["split"].to_numpy()
+    combined_path = args.out_dir / "clinvar_splits_combined.parquet"
+    combined.to_parquet(combined_path, index=False)
+    manifest["combined_dataset"] = {"path": str(combined_path), "n": int(len(combined)),
+                                    "split_column": "split_within_gene"}
+    log.info("Escrito combinado %s (n=%d, coluna split_within_gene)", combined_path, len(combined))
+
     manifest["test_sets"]["T_BR"] = {"n": len(br_keys), "sha256": sha256_keys(br_keys)}
     manifest["test_sets"]["T_nonBR_matched"] = {"n": len(nonbr_keys), "sha256": sha256_keys(nonbr_keys)}
     manifest["note"] = ("chr8 benchmarks + BRCA/BRCA2/TP53 sao fatias dos test sets ja congelados (§12.1); "

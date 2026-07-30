@@ -25,10 +25,14 @@ from torch.utils.data import DataLoader, DistributedSampler
 from eval.clinvar.adapters import build_finetune_adapter
 from eval.clinvar.config import FineTuneConfig
 from eval.clinvar.dataset import (
+    CALIBRATION_SPLIT_VALUE,
+    TEST_SPLIT_VALUE,
+    TRAIN_SPLIT_VALUE,
+    VALIDATION_SPLIT_VALUE,
     ClinVarFineTuneDataset,
     build_variant_cache,
     clinvar_collate_fn,
-    load_variant_cache,
+    load_variant_cache_by_split,
     resolve_variant_cache_path,
     stratified_val_split,
 )
@@ -626,8 +630,19 @@ def run_finetune(config: FineTuneConfig) -> dict[str, Any]:
     if distributed:
         dist.barrier()
 
-    train_variants, test_variants = load_variant_cache(cache_path, config.regime)
-    train_variants, val_variants = stratified_val_split(train_variants, config.val_fraction, config.seed)
+    by_split = load_variant_cache_by_split(cache_path, config.regime)
+    train_variants = by_split.get(TRAIN_SPLIT_VALUE, [])
+    explicit_val = by_split.get(VALIDATION_SPLIT_VALUE)
+    # Set de scoring/eval: calibration explicito (§7, campanha R03) se declarado, senao o "test" legado.
+    test_variants = by_split.get(CALIBRATION_SPLIT_VALUE) or by_split.get(TEST_SPLIT_VALUE, [])
+    if explicit_val:
+        val_variants = explicit_val
+        log.info(
+            "Splits explicitos §7: train=%d validation(early-stop)=%d calibration/scoring=%d",
+            len(train_variants), len(val_variants), len(test_variants),
+        )
+    else:  # backward-compat (v10/v11): carva o val do train por val_fraction
+        train_variants, val_variants = stratified_val_split(train_variants, config.val_fraction, config.seed)
 
     train_dataset = ClinVarFineTuneDataset(train_variants)
     val_dataset = ClinVarFineTuneDataset(val_variants)
