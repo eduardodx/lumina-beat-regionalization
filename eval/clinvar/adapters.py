@@ -294,6 +294,8 @@ def normalize_finetune_model_family(model_family: str) -> str:
         return "dnabert2"
     if family in {"beat_v11", "beat-v11-bioprime", "beat_v11_bioprime", "beatv11"}:
         return "beat-v11"
+    if family in {"lumina_r03", "lumina-r03", "r03", "luminar03", "lumina-inference"}:
+        return "lumina-r03"
     return family
 
 
@@ -1186,6 +1188,19 @@ def build_finetune_adapter(
 
         return FineTuneBeatV11Adapter(checkpoint_path, device)  # type: ignore[return-value]
 
+    if family == "lumina-r03":
+        # Backbone R03 (LUM-20260719-001-R03) via o pacote inference-only ``lumina``. O config do
+        # checkpoint dita a arquitetura (d_full=448); model_version e advisory. Precision fica com o
+        # autocast do trainer, como os outros caminhos frozen-feature. RODAR SOB setup-gpu.sh/env.sh.
+        if checkpoint_path is None:
+            raise ValueError(
+                "lumina-r03 requires a checkpoint, e.g. s3://croma-bioai-lumina-artifacts-us-east-2/"
+                "experiments/LUM-20260719-001/runs/R03/checkpoints/final/best_checkpoint.pt"
+            )
+        from eval.clinvar.r03_adapter import FineTuneR03Adapter
+
+        return FineTuneR03Adapter(checkpoint_path, device)  # type: ignore[return-value]
+
     if family == "dnabert2":
         repo = DNABERT2_REPOS.get(model_version)
         if repo is None:
@@ -1193,5 +1208,5 @@ def build_finetune_adapter(
         return FineTuneDNABERT2Adapter(repo, device)  # type: ignore[return-value]
 
     raise ValueError(
-        f"Unknown model family {family!r}. Available: ntv3, caduceus, lumina, beat-v11, dnabert2"
+        f"Unknown model family {family!r}. Available: ntv3, caduceus, lumina, beat-v11, lumina-r03, dnabert2"
     )
