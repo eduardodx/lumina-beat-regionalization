@@ -85,6 +85,7 @@ def parse_args(argv: list[str] | None = None) -> FineTuneConfig:
         choices=[
             "lumina", "ntv3", "caduceus", "dnabert2", "dnabert-2",
             "beat-v11", "beat_v11", "beat-v11-bioprime", "beat_v11_bioprime", "beatv11",
+            "lumina-r03", "lumina_r03", "r03", "luminar03", "lumina-inference",
         ],
     )
     p.add_argument("--model-version", required=True)
