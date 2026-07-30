@@ -185,9 +185,21 @@ def coverage_report(br, pairs, unmatched, n_before_chr, exclude_chrom, exact_col
             return {}
         return {str(k): int(v) for k, v in frame[col].value_counts().items()}
 
+    # Check de balanco post-hoc (§ decisao Eduardo): a consequencia NAO entrou no match exato, entao
+    # confirmamos se os controles sairam com a MESMA mistura de consequencia dos casos (via gene+tipo).
+    def _prop(counts):
+        tot = sum(counts.values()) or 1
+        return {k: v / tot for k, v in counts.items()}
+
+    br_cc = dist_by(pairs.rename(columns={"br_consequence_class": "c"}), "c")
+    nb_cc = dist_by(pairs.rename(columns={"nonbr_consequence_class": "c"}), "c")
+    br_p, nb_p = _prop(br_cc), _prop(nb_cc)
+    max_abs_prop_diff = max((abs(br_p.get(k, 0.0) - nb_p.get(k, 0.0)) for k in set(br_p) | set(nb_p)), default=0.0)
+
     _feat_label = {"_af_log": "af_gnomad(log)", "_submitters": f"{submitter_col}(log1p)",
                    "_indel_len": "indel_length", "_star": "review_star_rank"}
-    missing_exact = [] if "consequence" in exact_cols else ["consequencia_molecular (rode o enriquecimento + --exact-cols consequence)"]
+    missing_exact = [] if any(c in exact_cols for c in ("consequence", "consequence_class")) else \
+        ["consequencia_molecular (rode o enriquecimento + --exact-cols consequence|consequence_class)"]
     missing_approx = [] if "_star" in features else ["estrelas/review_status_rank (rode o enriquecimento)"]
     missing_approx.append("ano/LastEvaluated (so no XML VCV/RCV -- nao anotado)")
 
@@ -214,6 +226,13 @@ def coverage_report(br, pairs, unmatched, n_before_chr, exclude_chrom, exact_col
             "consequence": dist_by(unmatched, "consequence"),
             "consequence_class": dist_by(unmatched, "consequence_class"),
         },
+        "consequence_balance_matched": {
+            "br_consequence_class": br_cc,
+            "nonbr_consequence_class": nb_cc,
+            "max_abs_prop_diff": max_abs_prop_diff,
+            "verdict": "balanceado (consequencia controlada de graca via gene+tipo)" if max_abs_prop_diff < 0.05
+                       else "desbalanceado -> usar DiD estratificada por consequencia na Fase 4",
+        },
     }
 
 
@@ -239,6 +258,9 @@ def main(argv=None):
              report["n_br_matched"], report["n_br_main_raw"], report["matching_coverage"] or 0.0, report["n_br_unmatched"])
     log.info("distribuicao label incluidas=%s | unmatched=%s",
              report["included_distribution"]["label"], report["unmatched_distribution"]["label"])
+    bal = report["consequence_balance_matched"]
+    log.info("BALANCO consequencia (BR vs nonBR nos pares): max_diff=%.3f -> %s",
+             bal["max_abs_prop_diff"], bal["verdict"])
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     pairs.to_parquet(args.out, index=False)
