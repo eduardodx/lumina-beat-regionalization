@@ -24,6 +24,8 @@ def parse_args(argv: list[str] | None = None) -> tuple[argparse.Namespace, list[
     # these the _upsert_arg calls below would hard-force v10 (see eval.clinvar.run dispatch).
     parser.add_argument("--model-family", default="lumina")
     parser.add_argument("--model-version", default="beat-v10")
+    # DDP: 'auto' = usa torch.cuda.device_count() (1 GPU -> processo unico, como antes; N>1 -> torchrun).
+    parser.add_argument("--nproc-per-node", default="auto")
     args, training_args = parser.parse_known_args(argv)
     if training_args and training_args[0] == "--":
         training_args = training_args[1:]
@@ -63,10 +65,29 @@ def main(argv: list[str] | None = None) -> int:
     if "--overwrite" not in runtime_args:
         runtime_args.append("--overwrite")
 
-    command = [sys.executable, "-m", "eval.clinvar.run", *runtime_args]
-    print("command=" + " ".join(command), flush=True)
+    nproc = _resolve_nproc(args.nproc_per_node)
+    if nproc > 1:  # multi-GPU (ex.: ml.p5.48xlarge = 8x H100) -> DDP via torchrun single-node
+        command = [
+            sys.executable, "-m", "torch.distributed.run",
+            f"--nproc_per_node={nproc}", "--standalone",
+            "-m", "eval.clinvar.run", *runtime_args,
+        ]
+    else:  # 1 GPU -> processo unico (comportamento v10/v11 inalterado)
+        command = [sys.executable, "-m", "eval.clinvar.run", *runtime_args]
+    print(f"nproc_per_node={nproc} command=" + " ".join(command), flush=True)
     subprocess.run(command, check=True)
     return 0
+
+
+def _resolve_nproc(value: str) -> int:
+    if str(value).strip().lower() == "auto":
+        try:
+            import torch
+
+            return max(1, int(torch.cuda.device_count()))
+        except Exception:  # noqa: BLE001 -- sem torch/CUDA -> processo unico
+            return 1
+    return max(1, int(value))
 
 
 if __name__ == "__main__":

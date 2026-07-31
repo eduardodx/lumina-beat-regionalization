@@ -13,11 +13,12 @@ Fase 1 da campanha de regionalizacao R03: expoe o backbone R03 (LUM-20260719-001
   * **encode() sem ``variant_edit_mask``:** le a representacao da janela de REFERENCIA limpa (o
     variant-residual boost do R03 fica desligado); o efeito da variante vem do two-tower ref/alt,
     igual ao v11. As janelas ref/alt tem tamanho fixo (context_size) => sem padding no batch.
-  * **SEM o shim de tilelang do v11:** aquele era workaround pra uma imagem SageMaker cuja
-    tilelang/tvm quebrava no import. O R03 roda sob ``scripts/setup-gpu.sh`` (tilelang 0.1.11 fixado,
-    mamba_ssm.Mamba3 construido do source). Envenenar ``tilelang`` aqui poderia MASCARAR um env
-    quebrado, caindo num kernel de fallback que nao e o SISO contra o qual o R03 foi treinado.
-    => M0 deve rodar sob ``source scripts/env.sh`` (NUNCA ``uv sync`` no host GPU).
+  * **Shim de tilelang CONDICIONAL:** o job SageMaker roda com ``INSTALL_TILELANG=0`` (sem tilelang no
+    container) e ``mamba_ssm.Mamba3`` importa tilelang avidamente. O shim so envenena ``tilelang`` se
+    ele estiver AUSENTE/quebrado (container) -> mamba cai no triton; se tilelang funciona (notebook sob
+    setup-gpu.sh), NAO mexe. Seguro pro R03 porque o checkpoint e SISO: o forward usa
+    ``selective_scan_cuda`` (construido pelo mamba_ssm), nao o kernel MIMO/tilelang -- o fallback afeta
+    so o import do MIMO (nunca executado), nao a numerica.
 
 O backbone fica CONGELADO (§4.1 do Eduardo): quem treina e a LoRA (aplicada pelo train.py, exclusion-
 based, ja verificada no R03) + a classification head. Este adapter so expoe as primitivas.
@@ -26,6 +27,8 @@ based, ja verificada no R03) + a classification head. Este adapter so expoe as p
 from __future__ import annotations
 
 import logging
+import sys
+import types
 from typing import Any
 
 import torch
@@ -34,6 +37,25 @@ from torch import Tensor, nn
 log = logging.getLogger(__name__)
 
 TokenizedBatch = dict[str, Any]
+
+
+def install_tilelang_fallback_shim() -> bool:
+    """Força o mamba_ssm.Mamba3 pro fallback triton QUANDO tilelang está ausente/quebrado.
+
+    O container do job roda com ``INSTALL_TILELANG=0`` -> ``import tilelang`` (que o mamba_ssm faz
+    avidamente) falha, quebrando o load do R03 antes de escolher backend. Registrar um ``None`` em
+    ``sys.modules['tilelang']`` faz ``import tilelang`` virar ImportError, que o mamba_ssm captura pra
+    cair no triton. CONDICIONAL: se tilelang importa limpo (notebook sob setup-gpu.sh), NAO mexe. Seguro
+    pro R03 SISO (o forward usa selective_scan_cuda; tilelang so serve pro MIMO, nunca executado).
+    Deve rodar ANTES do primeiro import de mamba_ssm (i.e. antes de ``import lumina``). Idempotente."""
+    if isinstance(sys.modules.get("tilelang"), types.ModuleType):
+        return False  # ja importado limpo -> deixa quieto
+    try:
+        import tilelang  # noqa: F401
+        return False  # tilelang real disponivel (notebook) -> nao envenena
+    except Exception:  # noqa: BLE001 -- ausente OU quebrado (tvm_ffi AttributeError etc.)
+        sys.modules["tilelang"] = None  # veneno: import tilelang -> ImportError -> triton fallback
+        return True
 
 
 class FineTuneR03Adapter:
@@ -46,6 +68,7 @@ class FineTuneR03Adapter:
         *,
         dtype: torch.dtype | None = None,
     ) -> None:
+        install_tilelang_fallback_shim()  # antes do primeiro import de mamba_ssm (via lumina)
         # Import tardio: so puxa o lumina (e mamba_ssm/tilelang, sob setup-gpu.sh) quando de fato usado.
         from lumina import batch_encode_dna, load_model_from_checkpoint
         from lumina.constants import DNA_VOCAB, PAD_ID, UNK_ID
