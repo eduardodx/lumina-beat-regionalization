@@ -62,6 +62,9 @@ class FineTuneConfig:
     fusion_adapter_paths: list[str] = field(default_factory=list)
     fusion_adapter_names: list[str] = field(default_factory=list)
     freeze_backbone_for_fusion: bool = False
+    # §4.1 (campanha R03): congela o backbone INTEIRO (so LoRA + head treinam). Sem isso, os params
+    # nao-Linear do backbone (embeddings/convs/SSM) ficam treinaveis (comportamento v10/v11).
+    freeze_backbone: bool = False
     fusion_gate_hidden_dim: int = 64
     fusion_gate_dropout: float = 0.0
 

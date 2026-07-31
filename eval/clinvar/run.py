@@ -192,6 +192,11 @@ def parse_args(argv: list[str] | None = None) -> FineTuneConfig:
         action="store_true",
         help="Train only fusion gate parameters plus the ClinVar head.",
     )
+    p.add_argument(
+        "--freeze-backbone",
+        action="store_true",
+        help="§4.1 (R03): freeze the ENTIRE backbone; train only LoRA + head (no backbone/norm tuning).",
+    )
     p.add_argument("--fusion-gate-hidden-dim", type=int, default=FineTuneConfig.fusion_gate_hidden_dim)
     p.add_argument("--fusion-gate-dropout", type=float, default=FineTuneConfig.fusion_gate_dropout)
 
@@ -301,6 +306,7 @@ def parse_args(argv: list[str] | None = None) -> FineTuneConfig:
         fusion_adapter_paths=list(args.fusion_adapter_paths or []),
         fusion_adapter_names=list(args.fusion_adapter_names or []),
         freeze_backbone_for_fusion=bool(args.freeze_backbone_for_fusion),
+        freeze_backbone=bool(args.freeze_backbone),
         fusion_gate_hidden_dim=args.fusion_gate_hidden_dim,
         fusion_gate_dropout=args.fusion_gate_dropout,
         **native_feature_heads_kwargs,

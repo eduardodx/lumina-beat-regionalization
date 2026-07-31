@@ -664,12 +664,24 @@ def run_finetune(config: FineTuneConfig) -> dict[str, Any]:
     )
     model.to(device)
 
+    # -- §4.1 (R03): backbone congelado -> so LoRA (+ head) treina. Congela ANTES do apply_lora, que
+    # adiciona os LoRA treinaveis por cima. Sem isso, os params nao-Linear do backbone (embeddings,
+    # convs, SSM do Mamba) e os LayerNorms ficariam treinaveis (comportamento v10/v11 = 7.5M "other").
+    if config.freeze_backbone:
+        frozen = 0
+        for p in model.backbone.parameters():
+            if p.requires_grad:
+                p.requires_grad_(False)
+                frozen += p.numel()
+        log.info("§4.1 freeze_backbone: congelados %d params do backbone (so LoRA + head treinam).", frozen)
+
     # -- Apply LoRA --
     lora_summary = apply_lora(
         model.backbone, rank=config.lora_rank,
         alpha=config.lora_alpha, dropout=config.lora_dropout,
     )
-    enable_layernorm_training(model.backbone)
+    if not config.freeze_backbone:  # v10/v11: destrava LayerNorms (lora_plus_norm). §4.1 mantem congelado.
+        enable_layernorm_training(model.backbone)
 
     native_selection = getattr(adapter, "native_variant_head_selection", None)
     if native_selection:
