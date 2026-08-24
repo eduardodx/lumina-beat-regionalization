@@ -29,9 +29,12 @@ from pathlib import Path
 from typing import Any
 
 # Janelas generosas em torno dos genes em GRCh38 (prefixo "chr" ajustado ao naming do fasta).
-BRCA_REGIONS = {
+# TP53 incluído porque o piloto revelou que o Nanopore é amplicon de TP53 (não BRCA) — sondar os três
+# em toda amostra confirma o padrão Ion=BRCA / Nanopore=TP53.
+GENE_REGIONS = {
     "BRCA1": ("17", 43_000_000, 43_180_000),
     "BRCA2": ("13", 32_310_000, 32_410_000),
+    "TP53": ("17", 7_660_000, 7_695_000),
 }
 
 
@@ -116,7 +119,7 @@ def probe_platform(name: str, fastq: Path, ref: Path, preset: str, out_bam: Path
     res["platform"] = name
     res["fastq"] = str(fastq)
     res["top_chroms"] = coverage_by_chrom(out_bam)
-    res["brca"] = {g: coverage_region(out_bam, f"{pref}{c}:{s}-{e}") for g, (c, s, e) in BRCA_REGIONS.items()}
+    res["genes"] = {g: coverage_region(out_bam, f"{pref}{c}:{s}-{e}") for g, (c, s, e) in GENE_REGIONS.items()}
     return res
 
 
@@ -171,15 +174,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[{r['platform']}] mapeados={r.get('mapped_reads','?')} ({r.get('mapped_pct','?')}%)")
         tops = ", ".join(f"{c['chrom']}:{c['numreads']}rd/{c['meandepth']:.0f}x" for c in r["top_chroms"][:6])
         print(f"  onde caem (top): {tops}")
-        for g, cov in r["brca"].items():
+        for g, cov in r["genes"].items():
             if "error" in cov:
                 print(f"  {g} {cov['region']}: ERRO {cov['error']}")
             else:
                 print(f"  {g} {cov['region']}: {cov['numreads']} reads | breadth {cov['coverage_pct']:.1f}% | meandepth {cov['meandepth']:.1f}x")
     print("-" * 72)
     print(f"JSON: {out}")
-    print("Leitura: Nanopore concentrado em 13/17 = targeted-BRCA; espalhado = WGS. meandepth BRCA = "
-          "viabilidade do calling (Clair3 gosta de >=20-30x).")
+    print("Leitura esperada: Ion cobre BRCA1/BRCA2 (nao TP53); Nanopore cobre TP53 (nao BRCA). "
+          "meandepth no gene-alvo = viabilidade do calling (Clair3 gosta de >=20-30x).")
     return 0
 
 
