@@ -20,12 +20,21 @@
 > 494k–700k reads, 130–186 MB (9 amostras: 353, 358, 361, 362, 370, 674, 1005, 1016, 1036). (4) **Nanopore**
 > = os `_final_clean.fastq` (long reads ~8.2 kb; `Amostra21/36_sarcoma` ~1.6 kb), **MAS profundidade
 > baixíssima: 389–880 reads** (8 amostras: 353, 358, 361, 362, 370, 674 + Amostra21/36_sarcoma).
-> (5) **6 amostras têm AS DUAS plataformas** (353, 358, 361, 362, 370, 674) → "parear" quase certamente =
-> **comparar Ion × Nanopore na mesma amostra**. Correções ao texto abaixo: os `_final_clean` são
-> **Nanopore** (não Ion) e é tudo **FASTQ** (não BAM). **Resolvido pelos dados:** #2 (painel BRCA), #4 (6
-> pares), #5 (FASTQ), #6 (sem build a herdar). **Ainda aberto:** escopo do **Nanopore** (targeted-BRCA vs
-> WGS — só o alinhamento diz) + a cobertura Nanopore real na região BRCA; e as perguntas de intenção pro
-> Eduardo (§5: o que "parear" entrega, somático vs germinativo, entregável).
+> (5) **6 amostras têm AS DUAS plataformas** (353, 358, 361, 362, 370, 674). Correções ao texto abaixo:
+> os `_final_clean` são **Nanopore** (não Ion) e é tudo **FASTQ** (não BAM).
+>
+> **★★ QUADRO DEFINITIVO (2026-08-24 — alinhamento-piloto das 6 + respostas do Eduardo):**
+> **(A)** O **Ion** (Oncomine BRCA Expanded) cobre **BRCA1, BRCA2 E TP53** (+ genes HRR em chr11/16/3/8),
+> ~99% mapeado, 29–100× nos alvos. **(B)** O **Nanopore** = **amplicon longo de TP53** (chr17:7.66–7.69 Mb),
+> profundidade **80–186×**, breadth ~72%, **ZERO em BRCA** — cada `_final_clean` tem só ~400–980 reads mas
+> quase todos em TP53, então a cobertura de TP53 é ótima (minha leitura anterior de "profundidade
+> baixíssima" estava medindo contra a régua errada). **(C) Alvo em comum = TP53** nas duas plataformas;
+> BRCA1/2 só no Ion. **(D) "Parear" do Eduardo = ALINHAR ao hg38** (não comparar plataformas).
+> **OBJETIVO do Eduardo, em 3 passos:** (1) alinhar Nanopore↔hg38 [**FEITO** — `seq_pipeline/pilot_align_probe.py`];
+> (2) **chamar variantes do Nanopore em TP53** [próximo — Clair3]; (3) **ver se essas variantes também
+> estão no Ion** (viável porque o Ion cobre TP53). Amostras avulsas a inventariar: só-Ion 1005/1016/1036;
+> só-Nanopore `Amostra21/36_sarcoma` (avg ~1.6 kb — confirmar se também é TP53). As perguntas antigas do
+> §5 (somático/germinativo, entregável) ficam secundárias diante do objetivo em 3 passos.
 
 ---
 
