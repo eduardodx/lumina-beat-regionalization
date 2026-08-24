@@ -11,6 +11,21 @@
 > hg38**. Este handoff traduz isso num **pipeline de bioinformática concreto**, marca o que é
 > **interpretação a validar com o Eduardo** vs. fato, e define o primeiro passo (inventário + QC).
 > **Nada foi executado ainda** — este é o ponto de partida.
+>
+> **★ ACHADOS DA CARACTERIZAÇÃO (2026-08-24 — FATOS, prevalecem sobre as inferências das seções abaixo):**
+> rodado `seq_pipeline/characterize_seq_data.py` sobre 17 arquivos / 11 amostras. (1) **Tudo é FASTQ**,
+> nenhum BAM → **sem build pré-existente** (o risco hg19 sumiu; nós definimos hg38 no alinhamento).
+> (2) **O painel Ion está explícito no nome dos arquivos: `Oncomine BRCA Expanded` (Thermo), chip Ion
+> 530** — painel-alvo de **BRCA1/BRCA2**, com IonCode barcodes (germline/HRD). (3) **Ion** = ~120 bp/read,
+> 494k–700k reads, 130–186 MB (9 amostras: 353, 358, 361, 362, 370, 674, 1005, 1016, 1036). (4) **Nanopore**
+> = os `_final_clean.fastq` (long reads ~8.2 kb; `Amostra21/36_sarcoma` ~1.6 kb), **MAS profundidade
+> baixíssima: 389–880 reads** (8 amostras: 353, 358, 361, 362, 370, 674 + Amostra21/36_sarcoma).
+> (5) **6 amostras têm AS DUAS plataformas** (353, 358, 361, 362, 370, 674) → "parear" quase certamente =
+> **comparar Ion × Nanopore na mesma amostra**. Correções ao texto abaixo: os `_final_clean` são
+> **Nanopore** (não Ion) e é tudo **FASTQ** (não BAM). **Resolvido pelos dados:** #2 (painel BRCA), #4 (6
+> pares), #5 (FASTQ), #6 (sem build a herdar). **Ainda aberto:** escopo do **Nanopore** (targeted-BRCA vs
+> WGS — só o alinhamento diz) + a cobertura Nanopore real na região BRCA; e as perguntas de intenção pro
+> Eduardo (§5: o que "parear" entrega, somático vs germinativo, entregável).
 
 ---
 
