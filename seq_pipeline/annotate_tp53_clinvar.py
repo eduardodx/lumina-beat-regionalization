@@ -25,7 +25,21 @@ from pathlib import Path
 import pysam
 
 TP53 = ("17", 7_660_000, 7_695_000)  # GRCh38, janela do amplicon
-PLP = ("pathogenic", "likely_pathogenic")
+
+
+def clnsig_category(clnsig: str) -> str:
+    """Categoriza o CLNSIG do ClinVar. CUIDADO: 'Conflicting_classifications_of_pathogenicity' contem a
+    substring 'pathogenicity' mas NAO e P/LP — por isso o check de 'conflicting' vem primeiro."""
+    s = clnsig.lower()
+    if "conflicting" in s:
+        return "CONFLICTING"
+    if s.startswith("pathogenic") or s.startswith("likely_pathogenic") or "pathogenic/likely_pathogenic" in s:
+        return "P/LP"
+    if "uncertain" in s or "risk_factor" in s or "drug_response" in s:
+        return "VUS/OUTRO"
+    if "benign" in s:
+        return "BENIGN"
+    return "OUTRO"
 
 
 def norm_chrom(c: str) -> str:
@@ -92,23 +106,25 @@ def main(argv: list[str] | None = None) -> int:
     rows = sorted(hits.items(), key=lambda kv: (kv[0][0], kv[0][1]))
     header = ["variante", "clnsig", "clndn", "n_amostras", "amostras(AF)"]
     print("\t".join(header))
-    plp_rows = []
+    cats: dict[str, list] = defaultdict(list)
     for (chrom, pos, ref, alt), info in rows:
         variante = f"chr{chrom}:{pos} {ref}>{alt}"
         samps = ",".join(f"{s}({af},{fl})" for s, (af, fl) in info["samples"].items())
         line = [variante, info["clnsig"], info["clndn"], str(len(info["samples"])), samps]
         print("\t".join(line))
-        if any(p in info["clnsig"].lower() for p in PLP):
-            plp_rows.append(line)
+        cats[clnsig_category(info["clnsig"])].append(line)
 
     print(f"\n# {len(rows)} variantes das amostras têm classificação ClinVar em TP53.")
-    if plp_rows:
-        print(f"# ⚠ {len(plp_rows)} PATHOGENIC/LIKELY_PATHOGENIC encontradas:")
-        for line in plp_rows:
+    print("# por categoria: " + ", ".join(f"{k}={len(v)}" for k, v in sorted(cats.items())))
+    if cats["P/LP"]:
+        print(f"# ⚠ {len(cats['P/LP'])} PATHOGENIC/LIKELY_PATHOGENIC (acionáveis):")
+        for line in cats["P/LP"]:
             print("#   " + " | ".join(line[:4]))
     else:
-        print("# Nenhuma Pathogenic/Likely_pathogenic — as classificadas são benignas/VUS "
-              "(consistente com polimorfismos germinativos).")
+        print("# Nenhuma Pathogenic/Likely_pathogenic consensual (as classificadas são benignas — "
+              "polimorfismos germinativos).")
+    for line in cats["CONFLICTING"]:
+        print("# ~ CONFLITANTE (não-consensual, merece revisão manual): " + " | ".join(line[:4]))
 
     if args.out is not None:
         args.out.parent.mkdir(parents=True, exist_ok=True)
