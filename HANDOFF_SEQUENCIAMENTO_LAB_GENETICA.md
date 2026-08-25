@@ -33,8 +33,26 @@
 > **OBJETIVO do Eduardo, em 3 passos:** (1) alinhar Nanopore↔hg38 [**FEITO** — `seq_pipeline/pilot_align_probe.py`];
 > (2) **chamar variantes do Nanopore em TP53** [próximo — Clair3]; (3) **ver se essas variantes também
 > estão no Ion** (viável porque o Ion cobre TP53). Amostras avulsas a inventariar: só-Ion 1005/1016/1036;
-> só-Nanopore `Amostra21/36_sarcoma` (avg ~1.6 kb — confirmar se também é TP53). As perguntas antigas do
-> §5 (somático/germinativo, entregável) ficam secundárias diante do objetivo em 3 passos.
+> só-Nanopore `Amostra21/36_sarcoma` (avg ~1.6 kb — confirmar se também é TP53).
+>
+> **★★★ RESULTADO FINAL (2026-08-24 — pipeline completo nas 6 pareadas):** os 3 passos do Eduardo estão
+> FEITOS. Envs conda: `seqlab` (samtools/seqkit/minimap2/bcftools); `clair3` (Clair3 2.0.2 + pysam).
+> Pipeline: (1) alinhamento minimap2 `-ax map-ont`/`sr` (`pilot_align_probe.py`); (2) **Clair3** ONT modelo
+> **`r1041_e82_400bps_sup_v520`** — o header do FASTQ confirmou química r10.4.1 sup v5.2.0 e
+> **`sample_id=TP53_DDC`** (prova independente de que o Nanopore é ensaio de TP53); BED
+> `~/seqlab/tp53.bed` = chr17:7660000-7695000; (3) **genotipagem direcionada** Nanopore→Ion
+> (`compare_tp53_ont_vs_ion.py`), NÃO calling independente do Ion (o Clair3 `ilmn` quebra por lib
+> `realigner` ausente no pacote, e o painel Ion cobre TP53 só nos éxons). **Achados:** concordância
+> **100% onde o Ion cobre** e **0 falsos** (NAO_CONFIRMADA=0) nas 6; mas ~85–100% das variantes do
+> Nanopore caem FORA do amplicon Ion (na 358, 100%) → o Ion valida só parcialmente (é painel focado; o
+> Nanopore vê TP53 inteiro). **Anotação ClinVar** (`annotate_tp53_clinvar.py` × `clinvar_20260606.vcf.gz`):
+> **0 patogênicas/LP**, 27 benignas (polimorfismos germinativos, incl. rs1042522/P72R), 1 conflitante
+> (chr17:7674889 A>C na 674, het, confirmada nas 2 plataformas → revisão manual). **Perfil GERMINATIVO**
+> (AF~0.5/1.0); se o Eduardo quiser SOMÁTICO tumoral, refazer com caller somático (ClairS/Mutect2) + AF
+> baixo. **Gotcha:** `Conflicting_classifications_of_pathogenicity` contém a substring "pathogenicity" —
+> não é P/LP (corrigido no `clnsig_category`). Artefatos em `~/seqlab/` no notebook (BAMs/VCFs/TSVs), NÃO
+> versionados. **Pendências:** decidir germinativo-vs-somático com o Eduardo; amostras avulsas
+> (1005/1016/1036 só-Ion BRCA; Amostra21/36_sarcoma só-Nanopore); consolidar relatório pro Eduardo.
 
 ---
 
