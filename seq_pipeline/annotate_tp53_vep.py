@@ -88,13 +88,20 @@ def parse(item: dict) -> tuple[str, str, float | None, list[str]]:
 
 
 def verdict(impact: str, gnomad: float | None, clin: list[str]) -> str:
+    """Veredito por variante. CHAVE: gnomAD AF >= 1% => polimorfismo comum, NUNCA candidata patogenica
+    (variantes patogenicas de TP53/Li-Fraumeni sao raras) — descarta HIGH-impact e 'pathogenic' espurios
+    em homopolimero/borda de gene e o proprio rs1042522 (P72R, AF ~72%)."""
     cl = " ".join(clin).lower()
-    if ("pathogenic" in cl) and ("conflicting" not in cl):
+    if gnomad is not None and gnomad >= 0.01:
+        return "ok"  # comum na populacao -> benigno, independe de impacto/clin_sig
+    if ("pathogenic" in cl) and ("conflicting" not in cl) and ("benign" not in cl):
         return "⚠ CLINVAR_P/LP"
     if impact == "HIGH":
         return "⚠ ALTO_IMPACTO"
-    if impact == "MODERATE" and (gnomad is None or gnomad < 0.001):
+    if impact == "MODERATE" and (gnomad is None or gnomad < 0.001) and ("benign" not in cl):
         return "⚠ MISSENSE_RARO"
+    if ("uncertain" in cl or "conflicting" in cl) and "pathogenic" not in cl:
+        return "~ VUS/revisar"
     return "ok"
 
 
@@ -133,15 +140,18 @@ def main(argv: list[str] | None = None) -> int:
     for row in sorted(rows, key=lambda r: (r[6] == "ok", r[0])):
         print("\t".join(row))
 
-    print(f"\n# {len(variants)} variantes; ATENCAO={len(attention)} (nao-'ok')")
-    if any("ALTO_IMPACTO" in r[6] or "CLINVAR_P/LP" in r[6] for r in attention):
-        print("# ⚠⚠ HA candidata(s) patogenica(s) — REVISAR:")
-        for r in attention:
-            if "ALTO_IMPACTO" in r[6] or "CLINVAR_P/LP" in r[6]:
-                print("#   " + " | ".join([r[0], r[1], r[2], r[5], r[6]]))
+    candidatas = [r for r in rows if r[6].startswith("⚠")]
+    vus = [r for r in rows if r[6].startswith("~")]
+    print(f"\n# {len(variants)} variantes; candidatas patogênicas={len(candidatas)}; VUS/revisar={len(vus)}")
+    if candidatas:
+        print("# ⚠⚠ REVISAR (rara + alto impacto / P-LP):")
+        for r in candidatas:
+            print("#   " + " | ".join([r[0], r[1], r[2], f"gnomAD={r[3]}", r[5]]))
     else:
-        print("# ✓ Nenhuma variante de alto impacto nem P/LP — consequencias sao sinonima/intronica/UTR "
-              "ou missense comum. Confirma '0 patogenicas de TP53' com base funcional (nao so ClinVar).")
+        print("# ✓ Nenhuma candidata patogênica (0 P/LP, 0 alto-impacto raro). '0 patogênicas de TP53' "
+              "confirmado por 3 eixos: consequência funcional + frequência populacional (gnomAD) + ClinVar.")
+    for r in vus:
+        print("# ~ VUS/revisão manual: " + " | ".join([r[0], r[1], f"gnomAD={r[3]}", r[4], r[5]]))
 
     if args.out is not None:
         args.out.parent.mkdir(parents=True, exist_ok=True)
