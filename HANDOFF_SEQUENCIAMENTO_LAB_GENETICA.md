@@ -45,9 +45,11 @@
 > `realigner` ausente no pacote, e o painel Ion cobre TP53 só nos éxons). **Achados:** concordância
 > **100% onde o Ion cobre** e **0 falsos** (NAO_CONFIRMADA=0) nas 6; mas ~85–100% das variantes do
 > Nanopore caem FORA do amplicon Ion (na 358, 100%) → o Ion valida só parcialmente (é painel focado; o
-> Nanopore vê TP53 inteiro). **Anotação ClinVar** (`annotate_tp53_clinvar.py` × `clinvar_20260606.vcf.gz`):
-> **0 patogênicas/LP**, 27 benignas (polimorfismos germinativos, incl. rs1042522/P72R), 1 conflitante
-> (chr17:7674889 A>C na 674, het, confirmada nas 2 plataformas → revisão manual). **Perfil GERMINATIVO**
+> Nanopore vê TP53 inteiro). **Anotação TRIANGULADA** (ClinVar `annotate_tp53_clinvar.py` + funcional VEP+gnomAD `annotate_tp53_vep.py`):
+> **0 patogênicas/LP por 3 eixos** (catálogo + consequência + freq. populacional); 104 variantes, maioria
+> intrônica/UTR comum; **1 VUS** (chr17:7674889 A>C na 674, missense rara gnomAD 3e-5). VEP-gotcha: o
+> veredito PRECISA do gnomAD (AF≥1% = polimorfismo) senão frameshift-homopolímero e P72R viram falso-P/LP.
+> Relatório final: `seq_pipeline/RELATORIO_TP53_NANOPORE_ION.md`. **Perfil GERMINATIVO**
 > (AF~0.5/1.0); se o Eduardo quiser SOMÁTICO tumoral, refazer com caller somático (ClairS/Mutect2) + AF
 > baixo. **Gotcha:** `Conflicting_classifications_of_pathogenicity` contém a substring "pathogenicity" —
 > não é P/LP (corrigido no `clnsig_category`). Artefatos em `~/seqlab/` no notebook (BAMs/VCFs/TSVs), NÃO
