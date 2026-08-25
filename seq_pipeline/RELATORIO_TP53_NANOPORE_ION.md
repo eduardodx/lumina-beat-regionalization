@@ -20,8 +20,10 @@ nas **6 amostras que possuem as duas plataformas** (353, 358, 361, 362, 370, 674
   BRCA1, BRCA2 **e TP53**; o **Nanopore** é um **amplicon focado em TP53**.
 - Onde as duas se sobrepõem (TP53 exônico), a concordância é **100%** e não houve nenhum falso-positivo do
   Nanopore — o pipeline é confiável.
-- **Nenhuma variante patogênica de TP53** foi encontrada nas 6 amostras. As variantes são **polimorfismos
-  germinativos benignos**; uma única variante (amostra 674) tem classificação *conflitante* no ClinVar.
+- **Nenhuma variante patogênica de TP53** foi encontrada nas 6 amostras — confirmado por **três fontes
+  independentes** (catálogo ClinVar, consequência funcional/VEP e frequência populacional/gnomAD). As
+  variantes são **polimorfismos germinativos benignos**; há **uma variante de significado incerto (VUS)**
+  na amostra 674, registrada para eventual revisão.
 
 ---
 
@@ -63,6 +65,7 @@ O conteúdo não estava documentado; foi **inferido dos próprios dados e confir
 | Chamada de variantes (Nanopore) | `Clair3` 2.0.2, modelo `r1041_e82_400bps_sup_v520` | restrito a TP53 (BED chr17:7660000-7695000) |
 | Verificação no Ion | genotipagem direcionada (pysam) | conta o suporte do Ion em cada variante do Nanopore |
 | Anotação clínica | `ClinVar` (release 2026-06-06) | classificação de significância (CLNSIG) |
+| Anotação funcional | `VEP` (Ensembl REST) + `gnomAD` | consequência (missense/frameshift/intron/UTR…) + frequência populacional |
 
 **Decisão metodológica importante (passo 3).** Em vez de chamar variantes no Ion de forma independente e
 cruzar os VCFs, fizemos **genotipagem direcionada**: para cada variante do Nanopore, medimos diretamente o
@@ -93,16 +96,21 @@ separa três situações: **CONFIRMADA**, **NÃO-COBERTA** (fora do alcance do p
   Nanopore vê o gene inteiro). Logo, **o Ion valida apenas parcialmente** o Nanopore — na 358, não há
   sobreposição alguma. Isso é uma característica de desenho dos ensaios, não uma falha de qualidade.
 
-### 5.2 Significância clínica (ClinVar, TP53)
+### 5.2 Significância clínica (TP53) — triangulada por três fontes
 
-28 variantes das amostras têm classificação no ClinVar:
+As 104 variantes únicas (só `PASS`) das 6 amostras foram avaliadas por **catálogo (ClinVar)**,
+**consequência funcional (VEP)** e **frequência populacional (gnomAD)**:
 
-- **Patogênicas / provavelmente patogênicas: 0.**
-- **Benignas / provavelmente benignas: 27** — polimorfismos germinativos comuns, incluindo o
-  **rs1042522 (p.Pro72Arg)**, explicitamente rotulado como *TP53 polymorphism*.
-- **Classificação conflitante: 1** — chr17:7674889 A>C, na **amostra 674** (heterozigota, confirmada nas
-  duas plataformas). No ClinVar há submissões divergentes; **não é patogênica consensual**, mas fica
-  registrada para eventual revisão manual.
+- **Patogênicas / provavelmente patogênicas: 0** — confirmado pelos três eixos.
+- A esmagadora maioria é **intrônica, UTR ou não-codificante**, com frequência populacional **alta**
+  (gnomAD tipicamente 5–90%) — **polimorfismos germinativos comuns**. Inclui o **rs1042522 (p.Pro72Arg)**
+  (gnomAD ~72%, benigno; rotulado *TP53 polymorphism*).
+- **Nenhuma variante de alto impacto real.** Três chamadas de *frameshift* (chr17:7667260) apareceram na
+  triagem, mas são **artefatos de homopolímero**: têm frequência populacional de **33–41%** (uma frameshift
+  patogênica não teria essa frequência) e caem fora dos éxons codificantes canônicos. Descartadas pelo gnomAD.
+- **1 variante de significado incerto (VUS):** chr17:7674889 A>C (missense) na **amostra 674** — rara
+  (gnomAD 3×10⁻⁵), confirmada nas duas plataformas, ClinVar predominantemente *benign/likely_benign* com
+  uma submissão *uncertain*. **Não é patogênica**, mas fica registrada para eventual revisão manual.
 
 ---
 
@@ -110,7 +118,9 @@ separa três situações: **CONFIRMADA**, **NÃO-COBERTA** (fora do alcance do p
 
 1. O pipeline reproduz corretamente o fluxo pedido: **Nanopore → hg38 → variantes → verificação no Ion**.
 2. As variantes do Nanopore em TP53 são **confiáveis** (100% de concordância onde o Ion pode confirmar; nenhum falso-positivo).
-3. **Nenhuma mutação patogênica de TP53** nas 6 amostras — apenas polimorfismos germinativos benignos.
+3. **Nenhuma mutação patogênica de TP53** nas 6 amostras — confirmado por **três fontes independentes**
+   (ClinVar + consequência funcional/VEP + frequência populacional/gnomAD). Apenas polimorfismos
+   germinativos benignos; uma única **VUS** (amostra 674) registrada para revisão.
 
 ---
 
@@ -122,6 +132,9 @@ separa três situações: **CONFIRMADA**, **NÃO-COBERTA** (fora do alcance do p
   como ClairS/Mutect2 e limiares de FA baixos). **Esta é a principal decisão a confirmar.**
 - **Sobreposição parcial das plataformas.** O Ion (painel focado) não serve como validador amplo do
   Nanopore (que cobre TP53 inteiro). Uma validação completa exigiria uma referência independente.
+- **A concordância Nanopore×Ion é verificação pontual, não estatística.** A confirmação cruzada recai
+  sobre as poucas posições exônicas cobertas pelo painel Ion (~10 SNVs no total das 6); é 100%, mas o n é
+  pequeno — vale como checagem de qualidade, não como medida de sensibilidade/especificidade.
 - **Indels em homopolímero.** Tanto Nanopore quanto Ion têm erro nesse contexto; indels foram tratados com
   cautela e a leitura forte é sobre os SNVs.
 - **Amostras não analisadas:** `1005/1016/1036` (só Ion, painel BRCA) e `Amostra21/36_sarcoma` (só
@@ -133,5 +146,5 @@ separa três situações: **CONFIRMADA**, **NÃO-COBERTA** (fora do alcance do p
 
 Ambientes conda: `seqlab` (samtools, seqkit, minimap2, bcftools) e `clair3` (Clair3 2.0.2 + pysam).
 Scripts (branch `seq-lab-pipeline`, diretório `seq_pipeline/`):
-`characterize_seq_data.py` · `pilot_align_probe.py` · `compare_tp53_ont_vs_ion.py` · `annotate_tp53_clinvar.py`.
-Referência hg38; ClinVar release 2026-06-06.
+`characterize_seq_data.py` · `pilot_align_probe.py` · `compare_tp53_ont_vs_ion.py` · `annotate_tp53_clinvar.py` · `annotate_tp53_vep.py`.
+Referência hg38; ClinVar release 2026-06-06; VEP Ensembl REST + gnomAD.
