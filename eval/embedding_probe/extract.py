@@ -38,6 +38,16 @@ from eval.embedding_probe.profile import ProfileBin, profile_bins
 
 BASES: tuple[str, ...] = ("A", "C", "G", "T")
 
+# INVARIANTE QUE CARREGA PESO: todo forward da sonda usa batch de exatamente 4 (as 4 bases do
+# sitio). Medido em scripts/probe_batch_diagnostic.py: nao ha cross-talk entre linhas do batch
+# (invariancia de conteudo = 0.0 exato), mas cuBLAS/cuDNN/Mamba escolhem algoritmo em funcao da
+# dimensao de batch, e como soma em float nao e associativa o resultado muda ~2e-3 (pre-norm)
+# entre B=1/2/4/8. Isso e inofensivo AQUI porque ref e alt vao no MESMO forward e o vies cancela
+# na diferenca (Delta estavel a 0.4%; sinal/ruido = 426x). Deixa de ser inofensivo se alguem
+# agrupar varios sitios num batch maior: as comparacoes ENTRE janelas (E4) passariam a carregar
+# esse ruido. Por isso o tamanho e travado, nao apenas documentado.
+PROBE_BATCH_SIZE = 4
+
 
 @dataclass(frozen=True)
 class PairMetrics:
@@ -220,6 +230,8 @@ def extract_site(
     if ref_base not in BASES:
         raise ValueError(f"base focal {ref_base!r} nao e ACGT")
     seqs = [ref_seq[:focal_index] + b + ref_seq[focal_index + 1 :] for b in BASES]
+    if len(seqs) != PROBE_BATCH_SIZE:  # ver PROBE_BATCH_SIZE: invariante, nao conveniencia
+        raise RuntimeError(f"batch da sonda tem que ser {PROBE_BATCH_SIZE}, veio {len(seqs)}")
 
     pre, post = probe.encode(seqs)  # [4, L, 448]
     ref_row = BASES.index(ref_base)

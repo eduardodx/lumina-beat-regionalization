@@ -166,18 +166,30 @@ def main(argv: list[str] | None = None) -> int:
           f"{'OK' if hook['ok'] else 'FALHOU'}")
     report["checks"]["hook"] = hook
 
-    print("[2] independencia de batch (ref sozinho vs dentro do batch de 4)")
+    print("[2] invariancia de CONTEUDO a batch fixo (o que o pipeline exige)")
     def as_np(pair):
         return [t.detach().float().cpu().numpy().copy() for t in pair]
 
-    pre_alone, post_alone = as_np(probe.encode([ref_seq]))
-    pre_batch, post_batch = as_np(probe.encode(four))
+    # A linha do `ref` tem que ser identica independentemente do CONTEUDO das outras linhas do
+    # batch. E isso que autoriza extrair as 4 bases juntas. O efeito de TAMANHO de batch (B=1 vs
+    # B=4) e outra coisa -- numerico, medido abaixo e em probe_batch_diagnostic.py -- e NAO e
+    # bloqueante, porque a sonda usa batch fixo de 4 e compara ref/alt dentro do mesmo forward.
+    pre_mixed, post_mixed = as_np(probe.encode([ref_seq] + four[1:]))
+    pre_same, post_same = as_np(probe.encode([ref_seq] * 4))
+    d_pre = float(np.abs(pre_mixed[0] - pre_same[0]).max())
+    d_post = float(np.abs(post_mixed[0] - post_same[0]).max())
+    print(f"    linha do ref, conteudo vizinho diferente: pre={d_pre:.3e} post={d_post:.3e} -> "
+          f"{'OK (sem cross-talk)' if max(d_pre, d_post) == 0.0 else 'HA cross-talk entre linhas'}")
+    report["checks"]["batch_content_invariance"] = {
+        "pre": d_pre, "post": d_post, "ok": max(d_pre, d_post) == 0.0
+    }
+
+    pre_alone, _ = as_np(probe.encode([ref_seq]))
     row = BASES.index(ref_seq[focal])
-    d_pre = float(np.abs(pre_alone[0] - pre_batch[row]).max())
-    d_post = float(np.abs(post_alone[0] - post_batch[row]).max())
-    print(f"    max|diff| pre={d_pre:.3e} post={d_post:.3e} -> "
-          f"{'OK' if max(d_pre, d_post) < 1e-4 else 'ATENCAO: ha interacao entre linhas do batch'}")
-    report["checks"]["batch_independence"] = {"pre": d_pre, "post": d_post, "ok": max(d_pre, d_post) < 1e-4}
+    size_effect = float(np.linalg.norm(pre_alone[0, focal] - pre_mixed[row, focal]))
+    print(f"    [informativo] efeito de TAMANHO de batch (B=1 vs B=4) no focal: "
+          f"||diff||={size_effect:.3e}")
+    report["checks"]["batch_size_numerical_effect"] = {"focal_l2_b1_vs_b4": size_effect}
 
     print("[3] determinismo intra-batch (4 copias identicas)")
     pre_rep = as_np(probe.encode([ref_seq] * 4))[0]
@@ -294,7 +306,7 @@ def main(argv: list[str] | None = None) -> int:
     args.out.write_text(json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
     print(f"\n[smoke] relatorio: {args.out}")
 
-    hard = ["hook", "batch_independence", "intra_batch_determinism"]
+    hard = ["hook", "batch_content_invariance", "intra_batch_determinism"]
     failed = [k for k in hard if not report["checks"][k].get("ok", False)]
     if not inv["off_focal_ok"] or not inv["substitution_ok"]:
         failed.append("hpure_invariant")
