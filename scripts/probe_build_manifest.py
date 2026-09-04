@@ -107,6 +107,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--fasta-check-n", type=int, default=5000, help="variantes amostradas no cross-check")
     p.add_argument("--n-curated-sites", type=int, default=20, help="sitios multialelicos para o braco curated")
     p.add_argument("--n-statistical", type=int, default=2000, help="variantes gold do braco statistical")
+    p.add_argument("--n-consensus-pb-sites", type=int, default=0,
+                   help="sitios consensus com P e B para replicacao do braco pareado "
+                        "(0 = so gold; ligar depois de medir o custo por forward)")
     p.add_argument("--seed", type=int, default=SEED)
     return p.parse_args(argv)
 
@@ -114,6 +117,62 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 # ------------------------------------------------------------------------------------------------
 # 1. Preflight / carga (unica parte que fala pandas)
 # ------------------------------------------------------------------------------------------------
+
+
+# O ADR 0006 do Mosaic renomeou `bundle*` -> `release*`, e o passo 3 da migracao (§7.2 de
+# specs/PLAN-release-migration.md) renomeia o proprio arquivo. O prefixo plano publicado em
+# `benchmarks/mosaic/v1/` ainda traz o nome ANTIGO, entao aceitamos os dois e registramos qual
+# apareceu -- os Parquets sao byte-identicos entre as duas versoes (a migracao e um `mv`, nao um
+# rebuild), so a identidade declarada difere.
+MANIFEST_CANDIDATES = ("release.manifest.json", "bundle.manifest.json")
+IDENTITY_KEYS = (
+    "release_id", "release_identity_hash", "release_identity_version",
+    "bundle_id", "bundle_identity_hash", "bundle_identity_version",
+    "version", "window_bp_max", "k", "seed", "n_examples", "n_gold", "n_consensus",
+)
+
+
+def read_release_identity(release_root: Path) -> dict:
+    """Le a identidade declarada pelo release, seja qual for o nome do manifest."""
+    for name in MANIFEST_CANDIDATES:
+        path = release_root / name
+        if not path.is_file():
+            continue
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        identity = {k: payload[k] for k in IDENTITY_KEYS if k in payload}
+        identity["_manifest_file"] = name
+        print(f"  [ok] identidade do release ({name}):")
+        for key in ("release_id", "bundle_id", "release_identity_hash", "bundle_identity_hash"):
+            if key in identity:
+                print(f"       {key} = {identity[key]}")
+        if name == "bundle.manifest.json":
+            print("  [!!] manifest com o nome PRE-migracao (ADR 0006 renomeou para "
+                  "release.manifest.json).")
+            print("       Os Parquets nao mudam com a migracao; so a identidade declarada. "
+                  "Vale conferir com o Eduardo se o prefixo plano do S3 esta defasado.")
+        return identity
+    print(f"  [!!] nenhum de {MANIFEST_CANDIDATES} em {release_root} -- proveniencia nao registrada")
+    return {}
+
+
+def check_declared_counts(identity: dict, n_examples: int, tiers: Counter) -> dict:
+    """Cruza o que lemos com o que o release declara. Divergencia = download incompleto ou
+    manifest de outro release."""
+    declared = {k: identity[k] for k in ("n_examples", "n_gold", "n_consensus") if k in identity}
+    if not declared:
+        print("  [--] manifest sem contagens declaradas; cross-check pulado")
+        return {"checked": False}
+    observed = {"n_examples": n_examples, "n_gold": tiers.get("gold", 0),
+                "n_consensus": tiers.get("consensus", 0)}
+    bad = {k: (declared[k], observed[k]) for k in declared if declared[k] != observed[k]}
+    if bad:
+        raise SystemExit(
+            "contagens divergem do manifest do release (declarado vs lido): "
+            + ", ".join(f"{k}: {d} != {o}" for k, (d, o) in bad.items())
+            + "\n  download incompleto, ou o manifest e de outro release."
+        )
+    print(f"  [ok] contagens batem com o manifest: {observed}")
+    return {"checked": True, **observed}
 
 
 def preflight(release_root: Path) -> tuple[list[Variant], dict]:
@@ -140,23 +199,19 @@ def preflight(release_root: Path) -> tuple[list[Variant], dict]:
         frames[name] = df
         print(f"  [ok] {name:<26} {len(df):>8,} linhas")
 
-    identity: dict = {}
-    manifest_path = release_root / "release.manifest.json"
-    if manifest_path.is_file():
-        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-        identity = {k: v for k, v in payload.items() if k in ("release_id", "release_hash", "clinvar_release")}
-        print(f"  [ok] release identity: {identity or '(campos esperados ausentes)'}")
-    else:
-        print("  [!!] release.manifest.json ausente -- proveniencia do release nao registrada")
+    identity = read_release_identity(release_root)
 
     df = frames["pb_examples.parquet"]
     for name in ("pb_panels.parquet", "pb_annotations.parquet", "pb_partitions.parquet"):
         df = df.merge(frames[name], on="variant_id", validate="one_to_one")
     assert df["variant_id"].is_unique, "variant_id duplicado apos os joins"
     print(f"  [ok] universo unificado: {len(df):,} variantes")
+    identity["_counts_check"] = check_declared_counts(identity, len(df), Counter(df["label_tier"]))
 
     eligible_df = df[df["sequence_eligible"]]
-    print(f"  [ok] sequence_eligible:   {len(eligible_df):,} ({len(eligible_df) / len(df):.1%})")
+    dropped = Counter(df.loc[~df["sequence_eligible"], "label_tier"])
+    print(f"  [ok] sequence_eligible:   {len(eligible_df):,} "
+          f"({len(eligible_df) / len(df):.3%}; {len(df) - len(eligible_df):,} fora, por tier {dict(dropped)})")
     print(f"       por tier: {dict(Counter(eligible_df['label_tier']))}")
     if eligible_df.empty:
         raise SystemExit("nenhuma variante sequence_eligible")
@@ -284,6 +339,30 @@ def census(by_site: dict[SiteKey, list[Variant]], *, verbose: bool = True) -> di
 # ------------------------------------------------------------------------------------------------
 
 
+def pb_sites(
+    by_site: dict[SiteKey, list[Variant]], *, tier: str, budget: int | None = None, seed: int = SEED
+) -> list[tuple[SiteKey, list[Variant]]]:
+    """Sitios com um ALT patogenico e outro benigno DENTRO do mesmo tier.
+
+    E o contraste mais controlado que o release permite: mesma posicao, mesmo contexto, mesma
+    janela -- muda so o alelo, e um e P e o outro e B. Sustenta um teste PAREADO (dentro do
+    sitio), que nao depende de a escala de ||Delta|| ser comparavel entre loci.
+
+    Retorna so os ALTs do tier pedido, para a pareacao ficar limpa (um sitio pode ter tambem
+    alelos de outro tier). Ordem estavel; a amostragem, quando ha `budget`, e semeada.
+    """
+    out = [
+        (key, kept)
+        for key, rows in by_site.items()
+        if len(kept := [r for r in rows if r.label_tier == tier]) >= 2
+        and {0, 1} <= {int(r.binary_label) for r in kept}
+    ]
+    out.sort(key=lambda kv: kv[0])
+    if budget is not None and len(out) > budget:
+        out = sorted(random.Random(seed).sample(out, budget), key=lambda kv: kv[0])
+    return out
+
+
 def site_priority(rows_at_site: list[Variant]) -> tuple:
     """Ordem do braco `curated`. Menor e melhor."""
     tiers = {r.label_tier for r in rows_at_site}
@@ -371,6 +450,26 @@ def select(
     say(f"  curated:     {len(chosen_sites)} sitios, {sum(len(v) for _, v in chosen_sites)} alelos"
         f"  (paineis: {curated_panels})")
 
+    # Braco pareado: TODOS os sitios gold com P e B juntos (sao poucos e valiosos demais para
+    # amostrar), mais uma replicacao opcional em consensus.
+    pb_report: dict = {}
+    for tier, budget, arm in (
+        ("gold", None, "paired_pb_gold"),
+        ("consensus", args.n_consensus_pb_sites, "paired_pb_consensus"),
+    ):
+        if budget == 0:
+            continue
+        sites = pb_sites(by_site, tier=tier, budget=budget, seed=args.seed)
+        for rank, (key, rows_at_site) in enumerate(sites):
+            site_key = f"{key[0]}:{key[1]}:{key[2]}"
+            for v in rows_at_site:
+                emit(v, arm, site_key, rank)
+        n = sum(len(v) for _, v in sites)
+        pb_report[arm] = {"n_sites": len(sites), "n_alleles": n}
+        say(f"  {arm:<21} {len(sites):>4} sitios, {n:>4} alelos "
+            f"({sum(1 for _, rs in sites for r in rs if int(r.binary_label) == 1)} P / "
+            f"{sum(1 for _, rs in sites for r in rs if int(r.binary_label) == 0)} B)")
+
     strata: dict[tuple[str, int], list[Variant]] = defaultdict(list)
     for v in records:
         if v.label_tier == "gold":
@@ -382,8 +481,13 @@ def select(
         for v in bucket[:per]:
             emit(v, "statistical", f"{v.chrom}:{v.pos_1based}:{v.ref}")
     n_stat = sum(1 for r in rows if r["arm"] == "statistical")
+    strata_sizes = {f"{panel}/{label}": len(bucket) for (panel, label), bucket in sorted(strata.items())}
     say(f"  statistical: {n_stat} variantes gold em {len(strata)} estratos (painel x label, "
         f"alvo {per}/estrato)")
+    say("    disponivel por estrato (gold no release) -- estratos abaixo do alvo limitam o n:")
+    for key, size in strata_sizes.items():
+        flag = "  <- limitante" if size < per else ""
+        say(f"      {key:<24} {size:>6,}{flag}")
 
     # O controle "mesma troca, loci diferentes" e ANALISE POST-HOC do braco statistical -- nao
     # precisa de forward extra. Aqui so conferimos que ele vai ter poder.
@@ -396,8 +500,10 @@ def select(
     return rows, {
         "n_curated_sites": len(chosen_sites),
         "curated_panels": curated_panels,
+        "paired_pb": pb_report,
         "n_statistical": n_stat,
         "n_strata": len(strata),
+        "strata_available": strata_sizes,
         "substitution_counts": dict(subs),
         "substitutions_underpowered": thin,
     }

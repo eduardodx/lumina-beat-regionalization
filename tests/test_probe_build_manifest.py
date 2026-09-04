@@ -20,6 +20,7 @@ from scripts.probe_build_manifest import (  # noqa: E402
     census,
     choose_curated_sites,
     group_by_site,
+    pb_sites,
     select,
     site_priority,
     validate_windows,
@@ -176,7 +177,89 @@ def test_choose_curated_sites_is_deterministic():
 
 def _args(**kw) -> Namespace:
     return Namespace(seed=1, n_curated_sites=kw.get("n_curated_sites", 4),
-                     n_statistical=kw.get("n_statistical", 40))
+                     n_statistical=kw.get("n_statistical", 40),
+                     n_consensus_pb_sites=kw.get("n_consensus_pb_sites", 0))
+
+
+# --------------------------------------------------------------------------------------------
+# Braco pareado P-vs-B
+# --------------------------------------------------------------------------------------------
+
+
+def test_pb_sites_keeps_only_requested_tier():
+    """Um sitio com gold-P + consensus-B NAO e par gold: a pareacao tem que ser dentro do tier."""
+    a, b, c = _alts_for(50_000)
+    records = [
+        _variant(50_000, a, label=1, tier="gold"),
+        _variant(50_000, b, label=0, tier="consensus"),
+        _variant(50_000, c, label=1, tier="gold"),
+    ]
+    assert pb_sites(group_by_site(records), tier="gold") == []
+    # com um gold-B no lugar do gold-P extra, vira par gold valido
+    records[2] = _variant(50_000, c, label=0, tier="gold")
+    sites = pb_sites(group_by_site(records), tier="gold")
+    assert len(sites) == 1
+    kept = sites[0][1]
+    assert {r.label_tier for r in kept} == {"gold"}, "consensus vazou para o par gold"
+    assert {int(r.binary_label) for r in kept} == {0, 1}
+    assert len(kept) == 2
+
+
+def test_pb_sites_requires_both_classes():
+    a, b = _alts_for(50_000)[:2]
+    same = [_variant(50_000, a, label=1), _variant(50_000, b, label=1)]
+    assert pb_sites(group_by_site(same), tier="gold") == []
+
+
+def test_pb_sites_budget_samples_deterministically_and_keeps_order():
+    records = []
+    for i in range(30):
+        pos = 10_000 + i * 47
+        alts = _alts_for(pos)
+        records += [_variant(pos, alts[0], label=1), _variant(pos, alts[1], label=0)]
+    by_site = group_by_site(records)
+    assert len(pb_sites(by_site, tier="gold")) == 30
+    picked = pb_sites(by_site, tier="gold", budget=7, seed=42)
+    assert len(picked) == 7
+    assert [k for k, _ in picked] == sorted(k for k, _ in picked), "ordem tem que ser estavel"
+    assert picked == pb_sites(by_site, tier="gold", budget=7, seed=42)
+    assert picked != pb_sites(by_site, tier="gold", budget=7, seed=43)
+
+
+def test_select_emits_paired_pb_gold_arm():
+    a, b = _alts_for(50_000)[:2]
+    records = [_variant(50_000, a, label=1), _variant(50_000, b, label=0)]
+    for i in range(10):  # enche o braco statistical
+        pos = 70_000 + i * 53
+        records.append(_variant(pos, _alts_for(pos)[0], label=i % 2))
+    rows, stats = select(records, group_by_site(records), _args(), verbose=False)
+    pb_rows = [r for r in rows if r["arm"] == "paired_pb_gold"]
+    assert len(pb_rows) == 2
+    assert {r["binary_label"] for r in pb_rows} == {0, 1}
+    assert len({r["site_key"] for r in pb_rows}) == 1, "o par tem que compartilhar o site_key"
+    assert stats["paired_pb"]["paired_pb_gold"] == {"n_sites": 1, "n_alleles": 2}
+    assert "paired_pb_consensus" not in stats["paired_pb"], "consensus e opt-in (default 0)"
+
+
+def test_select_consensus_pb_arm_is_opt_in():
+    a, b = _alts_for(50_000)[:2]
+    records = [_variant(50_000, a, label=1, tier="consensus"),
+               _variant(50_000, b, label=0, tier="consensus"),
+               _variant(70_000, _alts_for(70_000)[0], label=1)]
+    by_site = group_by_site(records)
+    _, off = select(records, by_site, _args(), verbose=False)
+    assert "paired_pb_consensus" not in off["paired_pb"]
+    rows, on = select(records, by_site, _args(n_consensus_pb_sites=5), verbose=False)
+    assert on["paired_pb"]["paired_pb_consensus"]["n_sites"] == 1
+    assert {r["label_tier"] for r in rows if r["arm"] == "paired_pb_consensus"} == {"consensus"}
+
+
+def test_select_reports_available_strata():
+    records = [_variant(10_000 + i * 61, _alts_for(10_000 + i * 61)[0],
+                        label=i % 2, panel=["missense", "splice"][i % 2]) for i in range(20)]
+    _, stats = select(records, group_by_site(records), _args(), verbose=False)
+    assert stats["strata_available"], "as contagens por estrato tem que ser reportadas"
+    assert all("/" in k for k in stats["strata_available"])
 
 
 def test_select_emits_both_arms_without_duplicates_within_arm():
