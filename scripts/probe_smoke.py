@@ -255,20 +255,27 @@ def main(argv: list[str] | None = None) -> int:
           f" | h_up = {summary['hup_cosine_min']:.4f}")
     report["checks"]["trivial_vs_contextual"] = summary
 
-    print("\n[7] previa do perfil espacial (4096 centrada, h_up, maximo por bin)")
+    print()
+    print("[7] previa do perfil espacial (4096 centrada, h_up)")
+    # MEDIA e a estatistica de decaimento; o MAXIMO cresce com a largura do bin (max sobre 1024
+    # posicoes e naturalmente maior que sobre 1 posicao), entao olhar so o max leria um plato
+    # falso onde ha apenas mais amostras.
     res = rows[0]
     labels, directions = res["bin_labels"], res["bin_directions"]
     base0 = next(iter(res["profiles"]))
-    prof = res["profiles"][base0]["hup_max"]
-    preview = {}
-    for label, direction, value in zip(labels, directions, prof):
-        if direction in ("focal", "down") and label in (
-            "focal", "down_1_1", "down_5_5", "down_10_10", "down_25_25",
-            "down_26_32", "down_65_128", "down_257_512", "down_513_1024", "down_1025_2048",
-        ):
-            preview[label] = float(value)
-            print(f"    {label:<16} {value:.6e}")
-    report["checks"]["profile_preview_hup_max"] = preview
+    prof_max = res["profiles"][base0]["hup_max"]
+    prof_mean = res["profiles"][base0]["hup_mean"]
+    wanted = ("focal", "down_1_1", "down_5_5", "down_10_10", "down_25_25",
+              "down_26_32", "down_65_128", "down_257_512", "down_513_1024", "down_1025_2048")
+    widths = {b.label: b.end - b.start
+              for b in reducer_for(4096, focal_offset(4096), probe.device).bins}
+    preview: dict = {}
+    print(f"    {'bin':<16} {'n_bases':>8} {'media':>14} {'maximo':>14}")
+    for label, direction, mean_v, max_v in zip(labels, directions, prof_mean, prof_max):
+        if direction in ("focal", "down") and label in wanted:
+            preview[label] = {"mean": float(mean_v), "max": float(max_v), "n_bases": widths[label]}
+            print(f"    {label:<16} {widths[label]:>8} {mean_v:14.6e} {max_v:14.6e}")
+    report["checks"]["profile_preview_hup"] = preview
     report["checks"]["profile_preview_base"] = f"{res['ref_base']}>{base0}"
 
     total = sum(v["seconds_per_site"] for v in report["cost"].values())
