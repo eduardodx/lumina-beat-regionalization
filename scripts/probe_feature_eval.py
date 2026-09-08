@@ -106,42 +106,55 @@ def ridge_scores(X_tr, y_tr, evals, lambdas):
     return out
 
 
-def mlp_scores(X_tr, y_tr, evals, *, seed: int, hidden: int = 64):
-    """Probe nao-linear minimo. Early stop pela macro da validation (evals[0])."""
+def mlp_scores(X_tr, y_tr, X_val, y_val, X_test, *, seed: int, hidden: int = 64):
+    """Probe nao-linear minimo. Retorna ``(scores_val, scores_test)``.
+
+    Existe para UMA pergunta: as 68 dims das cabecas lineares estao no span do trunk, entao um probe
+    LINEAR nao pode ganhar nada com elas -- se ajudarem, e por vies indutivo sob dados escassos, e so
+    um modelo nao-linear revela isso. O teste ``test_mlp_probe_learns_what_ridge_cannot`` verifica
+    que este probe de fato aprende o que o ridge nao aprende; sem essa verificacao ele nao serviria
+    para a pergunta que motiva sua existencia.
+
+    Early stop pela AUROC da validation. Semeado, mas NAO deterministico como o ridge -- por isso o
+    ridge segue sendo o probe de ranking e este serve so a pergunta linear-vs-nao-linear.
+    """
     import numpy as np
     import torch
 
     torch.manual_seed(seed)
     xt = torch.tensor(X_tr, dtype=torch.float32)
     yt = torch.tensor(y_tr, dtype=torch.float32).unsqueeze(1)
+    xv = torch.tensor(X_val, dtype=torch.float32)
+    xe = torch.tensor(X_test, dtype=torch.float32)
+    yv = np.asarray(y_val)
     net = torch.nn.Sequential(
         torch.nn.Linear(xt.shape[1], hidden), torch.nn.GELU(),
-        torch.nn.Dropout(0.2), torch.nn.Linear(hidden, 1),
+        torch.nn.Dropout(0.1), torch.nn.Linear(hidden, 1),
     )
-    opt = torch.optim.Adam(net.parameters(), lr=1e-3, weight_decay=1e-4)
+    opt = torch.optim.Adam(net.parameters(), lr=3e-3, weight_decay=1e-4)
     lossf = torch.nn.BCEWithLogitsLoss()
-    ev = [torch.tensor(e, dtype=torch.float32) for e in evals]
-    best, best_scores, patience = -1.0, None, 0
-    for epoch in range(200):
+    best, best_out, patience = -1.0, None, 0
+    for epoch in range(600):
         net.train()
         opt.zero_grad()
         lossf(net(xt), yt).backward()
         opt.step()
-        if epoch % 5 == 0:
-            net.eval()
-            with torch.no_grad():
-                scores = [net(e).squeeze(1).numpy() for e in ev]
-            # criterio de parada: AUROC global na validation (proxy barato da macro)
-            v = scores[0]
-            yv = getattr(mlp_scores, "_yval", None)
-            score = 0.0 if yv is None else auroc(v[yv == 1].tolist(), v[yv == 0].tolist())
-            if score > best:
-                best, best_scores, patience = score, scores, 0
-            else:
-                patience += 1
-                if patience >= 6:
-                    break
-    return best_scores if best_scores is not None else [np.zeros(len(e)) for e in evals]
+        if epoch % 10:
+            continue
+        net.eval()
+        with torch.no_grad():
+            sv = net(xv).squeeze(1).numpy()
+            se = net(xe).squeeze(1).numpy()
+        score = auroc(sv[yv == 1].tolist(), sv[yv == 0].tolist()) if 0 < yv.sum() < len(yv) else 0.0
+        if score > best:
+            best, best_out, patience = score, (sv, se), 0
+        else:
+            patience += 1
+            if patience >= 10:
+                break
+    if best_out is None:
+        return np.zeros(len(X_val)), np.zeros(len(X_test))
+    return best_out
 
 
 # ------------------------------------------------------------------------------------------------
@@ -189,8 +202,7 @@ def evaluate_config(X, meta, blocks, args, *, use_mlp=False) -> dict:
         pte = [panels[i] for i in te]
 
         if use_mlp:
-            mlp_scores._yval = yva  # criterio de early stop
-            sv, st = mlp_scores(Xtr, ytr, [Xva, Xte], seed=args.seed + run)
+            sv, st = mlp_scores(Xtr, ytr, Xva, yva, Xte, seed=args.seed + run)
             best = {"lambda": None, "val_macro": None, "val": sv, "test": st}
         else:
             lambdas = (len(tr) * np.logspace(-5, 3, args.n_lambda)).tolist()
@@ -211,6 +223,24 @@ def evaluate_config(X, meta, blocks, args, *, use_mlp=False) -> dict:
 
     if not per_run:
         return {"blocks": blocks, "n_runs": 0, "error": "nenhuma execucao avaliavel"}
+
+    used = [c for c in chosen if c is not None]
+    if used:
+        lo, hi = len(per_run[0]["sizes"]["train"] * np.array([1e-5])), None
+        edge_lo, edge_hi = per_run[0]["sizes"]["train"] * 1e-5, per_run[0]["sizes"]["train"] * 1e3
+        at_edge = sum(1 for c in used if c <= edge_lo * 1.01 or c >= edge_hi * 0.99)
+        if at_edge:
+            print(f"    [!] {at_edge}/{len(used)} execucoes com lambda na BORDA do grid -- "
+                  f"o otimo pode estar fora da faixa")
+
+    used = [c for c in chosen if c is not None]
+    if used:
+        n_tr = per_run[0]["sizes"]["train"]
+        lo, hi = n_tr * 1e-5, n_tr * 1e3
+        at_edge = sum(1 for c in used if c <= lo * 1.01 or c >= hi * 0.99)
+        if at_edge:
+            print(f"    [!] lambda na BORDA do grid em {at_edge}/{len(used)} execucoes -- "
+                  "o otimo pode estar fora da faixa")
 
     agg = {}
     for panel in DISCRIMINATION_PANELS:

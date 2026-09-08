@@ -40,7 +40,7 @@ except ImportError:  # pragma: no cover
     print("SKIP: precisa de numpy + pandas")
     sys.exit(0)
 
-from scripts.probe_feature_eval import evaluate_config, main  # noqa: E402
+from scripts.probe_feature_eval import main  # noqa: E402
 
 PANELS = ("missense", "splice", "noncoding")
 
@@ -96,10 +96,39 @@ def build(tmp: Path, *, n_units=150, per_unit=12, seed=7, shuffle_folds=False):
     return df
 
 
+def build_nonlinear(tmp: Path, *, n_units=200, per_unit=12, seed=11):
+    """Rotulo = XOR do sinal das duas primeiras features. Ridge NAO consegue; MLP consegue."""
+    rng = np.random.default_rng(seed)
+    rows, feats = [], []
+    for u in range(n_units):
+        for j in range(per_unit):
+            a, b = rng.normal(), rng.normal()
+            label = int((a * b) > 0)
+            rows.append({
+                "variant_id": f"var:{u:04d}:{j:02d}", "binary_label": label,
+                "label_tier": "consensus" if j >= per_unit - 3 else "gold",
+                "primary_panel": PANELS[j % 3], "core_fold": u % 5,
+                "overlap_cluster_id": f"ovl:{u:04d}",
+            })
+            feats.append([a, b, rng.normal() * 0.2, rng.normal() * 0.2])
+    df = pd.DataFrame(rows)
+    df[["variant_id", "binary_label", "label_tier"]].to_parquet(tmp / "pb_examples.parquet", index=False)
+    df[["variant_id", "primary_panel"]].assign(panel_role="discrimination").to_parquet(
+        tmp / "pb_panels.parquet", index=False)
+    df[["variant_id", "core_fold", "overlap_cluster_id"]].assign(
+        gene_transfer_fold=df["core_fold"], gene_transfer_group_id=df["overlap_cluster_id"],
+    ).to_parquet(tmp / "pb_partitions.parquet", index=False)
+    np.savez(tmp / "probe_features.npz",
+             variant_id=np.array(df["variant_id"].tolist(), dtype="U40"),
+             blk_xor=np.array(feats, dtype=np.float32))
+
+
 def run(tmp: Path, **kw) -> dict:
     out = tmp / "eval.json"
     argv = ["--features", str(tmp / "probe_features.npz"), "--release-root", str(tmp),
             "--out", str(out), "--train-tiers", kw.get("train_tiers", "gold")]
+    if kw.get("mlp"):
+        argv.append("--mlp")
     rc = main(argv)
     assert rc == 0, f"main retornou {rc}"
     return json.loads(out.read_text(encoding="utf-8"))
@@ -205,6 +234,26 @@ def test_high_dim_uses_dual_path():
         np.savez(tmp / "probe_features.npz", **z)
         r = run(tmp)["configs"]["wide"]
         assert r["n_dims"] == 400 and r["macro"] is not None
+
+
+def test_mlp_probe_learns_what_ridge_cannot():
+    """Se o MLP nao superar o ridge num sinal puramente nao-linear, ele esta subtreinado -- e a
+    pergunta 'as cabecas lineares ajudam um modelo nao-linear?' ficaria sem instrumento."""
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        print("        (SKIP: sem torch)")
+        return
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d); build_nonlinear(tmp)
+        ridge = run(tmp)["configs"]["xor"]["macro"]
+        mlp = run(tmp, mlp=True)["configs"]["xor"]["macro"]
+    assert 0.42 < ridge < 0.58, f"ridge deveria ficar no acaso num XOR, deu {ridge:.3f}"
+    assert mlp > ridge + 0.15, (
+        f"o probe MLP deu {mlp:.3f} contra {ridge:.3f} do ridge -- nao esta aprendendo o "
+        "nao-linear, entao nao serve para a pergunta das cabecas"
+    )
+    print(f"        (ridge {ridge:.3f} · mlp {mlp:.3f})")
 
 
 if __name__ == "__main__":
