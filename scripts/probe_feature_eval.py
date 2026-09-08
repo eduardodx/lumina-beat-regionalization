@@ -87,21 +87,25 @@ def ridge_scores(X_tr, y_tr, evals, lambdas):
     n, d = X_tr.shape
     yc = y_tr - y_tr.mean()
     out: dict[float, list] = {}
-    if d <= n:
-        gram = X_tr.T @ X_tr
-        s, V = np.linalg.eigh(gram)
-        s = np.clip(s, 0.0, None)  # eigh pode devolver -1e-12
-        proj = V.T @ (X_tr.T @ yc)
-        for lam in lambdas:
-            w = V @ (proj / (s + lam))
+    primal = d <= n
+    gram = (X_tr.T @ X_tr) if primal else (X_tr @ X_tr.T)
+    s, V = np.linalg.eigh(gram)
+    s = np.clip(s, 0.0, None)  # eigh pode devolver -1e-12
+    # Direcoes SEM suporte no treino (autovalor ~0) recebem peso zero, nao proj/(0+lambda).
+    # Sem isso, ruido de ponto flutuante no espaco nulo e amplificado por 1/lambda e o resultado
+    # passa a depender da implementacao de LAPACK -- medimos 0.511 numa maquina e 0.580 noutra
+    # no mesmo dado. Features de posto deficiente (colunas constantes, colineares, one-hot com
+    # categorias ausentes) caem nisso o tempo todo.
+    keep = s > (s.max() * 1e-10 if s.size and s.max() > 0 else 0.0)
+    proj = V.T @ ((X_tr.T @ yc) if primal else yc)
+    proj = np.where(keep, proj, 0.0)
+    for lam in lambdas:
+        coef = np.where(keep, proj / (s + lam), 0.0)
+        if primal:
+            w = V @ coef
             out[lam] = [Xe @ w for Xe in evals]
-    else:
-        gram = X_tr @ X_tr.T
-        s, V = np.linalg.eigh(gram)
-        s = np.clip(s, 0.0, None)
-        proj = V.T @ yc
-        for lam in lambdas:
-            alpha = V @ (proj / (s + lam))
+        else:
+            alpha = V @ coef
             out[lam] = [(Xe @ X_tr.T) @ alpha for Xe in evals]
     return out
 
@@ -162,8 +166,22 @@ def mlp_scores(X_tr, y_tr, X_val, y_val, X_test, *, seed: int, hidden: int = 64)
 # ------------------------------------------------------------------------------------------------
 
 
+def snap(scores):
+    """Arredonda os scores a 1e-12 RELATIVO antes de ranquear.
+
+    Sem isso, um probe que nao produz ordenamento nenhum (scores constantes a menos de ruido de
+    ponto flutuante, ~1e-17) tem esse ruido ordenado pelo rankdata, que usa igualdade EXATA. O
+    resultado e uma AUROC que passeia em torno de 0.5 em vez de ser 0.5, e que muda de maquina --
+    medimos 0.511 e 0.580 no mesmo dado antes desta correcao. 1e-12 relativo esta ordens de grandeza
+    abaixo de qualquer diferenca com significado e nao mascara sinal real.
+    """
+    scale = max((abs(v) for v in scores), default=0.0) or 1.0
+    return [round(v / scale, 12) for v in scores]
+
+
 def panel_auroc(scores, labels, panels) -> dict:
     """AUROC por painel, com n_P e n_B. Painel sem as duas classes fica None (indefinida)."""
+    scores = snap(scores)
     out = {}
     for panel in DISCRIMINATION_PANELS:
         mask = [i for i, p in enumerate(panels) if p == panel]
@@ -226,21 +244,13 @@ def evaluate_config(X, meta, blocks, args, *, use_mlp=False) -> dict:
 
     used = [c for c in chosen if c is not None]
     if used:
-        lo, hi = len(per_run[0]["sizes"]["train"] * np.array([1e-5])), None
-        edge_lo, edge_hi = per_run[0]["sizes"]["train"] * 1e-5, per_run[0]["sizes"]["train"] * 1e3
-        at_edge = sum(1 for c in used if c <= edge_lo * 1.01 or c >= edge_hi * 0.99)
-        if at_edge:
-            print(f"    [!] {at_edge}/{len(used)} execucoes com lambda na BORDA do grid -- "
-                  f"o otimo pode estar fora da faixa")
-
-    used = [c for c in chosen if c is not None]
-    if used:
-        n_tr = per_run[0]["sizes"]["train"]
-        lo, hi = n_tr * 1e-5, n_tr * 1e3
-        at_edge = sum(1 for c in used if c <= lo * 1.01 or c >= hi * 0.99)
-        if at_edge:
-            print(f"    [!] lambda na BORDA do grid em {at_edge}/{len(used)} execucoes -- "
-                  "o otimo pode estar fora da faixa")
+        # So a borda SUPERIOR e sintoma: significa que o probe quis regularizar mais do que o grid
+        # permite. Colar na borda inferior com d << n e o esperado -- nao ha o que regularizar.
+        hi = per_run[0]["sizes"]["train"] * 1e3
+        at_top = sum(1 for c in used if c >= hi * 0.99)
+        if at_top:
+            print(f"    [!] lambda no TETO do grid em {at_top}/{len(used)} execucoes -- "
+                  "o probe queria regularizar mais; amplie a faixa")
 
     agg = {}
     for panel in DISCRIMINATION_PANELS:

@@ -40,7 +40,7 @@ except ImportError:  # pragma: no cover
     print("SKIP: precisa de numpy + pandas")
     sys.exit(0)
 
-from scripts.probe_feature_eval import main  # noqa: E402
+from scripts.probe_feature_eval import main, ridge_scores  # noqa: E402
 
 PANELS = ("missense", "splice", "noncoding")
 
@@ -234,6 +234,37 @@ def test_high_dim_uses_dual_path():
         np.savez(tmp / "probe_features.npz", **z)
         r = run(tmp)["configs"]["wide"]
         assert r["n_dims"] == 400 and r["macro"] is not None
+
+
+def test_ridge_ignores_directions_without_support_in_training():
+    """Regressao: colunas sem suporte no treino nao podem influenciar o score de teste.
+
+    Bug real encontrado na revisao: com features de posto deficiente o Gram tem autovalores ~0, e
+    ``proj/(s + lambda)`` amplificava ruido de ponto flutuante no espaco nulo por 1/lambda. Como
+    cada linha de teste ativa uma direcao nula diferente, os scores deixavam de ser constantes e o
+    resultado passava a depender da implementacao de LAPACK (medimos 0.511 e 0.580 no mesmo dado,
+    em maquinas diferentes). A correcao zera essas direcoes.
+    """
+    rng = np.random.default_rng(5)
+    n, d = 300, 20
+    X = rng.normal(size=(n, d))
+    y = (X[:, 0] + rng.normal(size=n) * 0.5 > 0).astype(np.float64)
+    Xe = rng.normal(size=(40, d))
+    lams = [n * 1e-5, n * 1.0]
+
+    base = ridge_scores(X, y, [Xe], lams)
+    # acrescenta 15 colunas que sao ZERO no treino mas variam no teste -- exatamente o caso
+    # degenerado (categorias ausentes do treino, colunas constantes, colineares)
+    Xz = np.concatenate([X, np.zeros((n, 15))], axis=1)
+    Xez = np.concatenate([Xe, rng.normal(size=(40, 15))], axis=1)
+    ext = ridge_scores(Xz, y, [Xez], lams)
+
+    for lam in lams:
+        diff = np.abs(base[lam][0] - ext[lam][0]).max()
+        assert diff < 1e-9, (
+            f"lambda={lam}: colunas sem suporte no treino mudaram o score em {diff:.2e} -- "
+            "o espaco nulo esta voltando a ser amplificado"
+        )
 
 
 def test_mlp_probe_learns_what_ridge_cannot():
