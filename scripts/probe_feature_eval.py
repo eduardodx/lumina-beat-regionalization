@@ -57,7 +57,9 @@ from eval.embedding_probe.stats import auroc  # noqa: E402
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--features", type=Path, required=True, help="npz com um array por bloco + variant_id")
+    p.add_argument("--features", type=Path, required=True, nargs="+",
+                   help="npz com um array por bloco + variant_id. Varios arquivos sao unidos pelo "
+                        "variant_id (interseccao), o que permite cruzar embedding x comparadores.")
     p.add_argument("--release-root", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--configs", type=Path, default=None,
@@ -66,7 +68,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--train-tiers", default="gold", choices=["gold", "gold+consensus"],
                    help="'gold' e o desvio barato da fase de ablacao; o contrato e gold+consensus")
     p.add_argument("--mlp", action="store_true", help="roda tambem um probe MLP (precisa de torch)")
-    p.add_argument("--n-lambda", type=int, default=9)
+    p.add_argument("--n-lambda", type=int, default=12)
+    p.add_argument("--lambda-range", type=float, nargs=2, default=(-5.0, 6.0),
+                   help="expoentes de 10 do grid, multiplicados por n_treino. O teto foi ampliado "
+                        "de 1e3 para 1e6 porque varias configuracoes selecionaram o maior lambda "
+                        "do grid antigo -- sinal de que o probe queria regularizar mais.")
     p.add_argument("--seed", type=int, default=20260908)
     return p.parse_args(argv)
 
@@ -194,6 +200,46 @@ def panel_auroc(scores, labels, panels) -> dict:
     return out
 
 
+def load_features(paths):
+    """Une um ou mais npz de features alinhando pelo ``variant_id``.
+
+    A ordem das linhas de arquivos diferentes NAO e assumida igual: cada arquivo e reindexado
+    para a ordem do primeiro. Sobra so a interseccao dos ids, porque uma linha sem contraparte
+    nao tem como entrar numa concatenacao de colunas. Nomes de bloco repetidos entre arquivos
+    sao erro -- silenciosamente sobrescrever um deles trocaria o experimento sem avisar.
+    """
+    import numpy as np
+
+    per_file = []
+    for path in paths:
+        with np.load(path, allow_pickle=False) as z:
+            names = [k for k in z.files if k.startswith("blk_")]
+            if not names:
+                raise SystemExit(f"nenhum array 'blk_*' em {path}; achei {z.files}")
+            per_file.append(([str(v) for v in z["variant_id"]], {b: z[b] for b in names}, path))
+
+    ids = list(per_file[0][0])
+    for other, _, _ in per_file[1:]:
+        keep = set(other)
+        ids = [v for v in ids if v in keep]
+    if not ids:
+        raise SystemExit("os arquivos de features nao compartilham nenhum variant_id")
+
+    merged: dict = {}
+    for vids, blocks, path in per_file:
+        pos = {v: i for i, v in enumerate(vids)}
+        take = np.array([pos[v] for v in ids], dtype=np.int64)
+        for name, arr in blocks.items():
+            if name in merged:
+                raise SystemExit(f"bloco '{name[4:]}' aparece em mais de um arquivo de features")
+            merged[name] = arr[take]
+        if len(paths) > 1:
+            print(f"[eval] {path.name}: {len(vids):,} linhas, {len(blocks)} blocos")
+    if len(paths) > 1:
+        print(f"[eval] uniao por variant_id: {len(ids):,} em comum")
+    return ids, merged
+
+
 def resolve(blocks: dict, spec: str):
     """Resolve 'nome' ou 'nome[a:b]' para a matriz correspondente."""
     import re
@@ -244,7 +290,8 @@ def evaluate_config(X, meta, blocks, args, *, use_mlp=False) -> dict:
             sv, st = mlp_scores(Xtr, ytr, Xva, yva, Xte, seed=args.seed + run)
             best = {"lambda": None, "val_macro": None, "val": sv, "test": st}
         else:
-            lambdas = (len(tr) * np.logspace(-5, 3, args.n_lambda)).tolist()
+            lo, hi = args.lambda_range
+            lambdas = (len(tr) * np.logspace(lo, hi, args.n_lambda)).tolist()
             paths = ridge_scores(Xtr, ytr, [Xva, Xte], lambdas)
             best = None
             for lam, (sv, st) in paths.items():
@@ -265,13 +312,18 @@ def evaluate_config(X, meta, blocks, args, *, use_mlp=False) -> dict:
 
     used = [c for c in chosen if c is not None]
     if used:
-        # So a borda SUPERIOR e sintoma: significa que o probe quis regularizar mais do que o grid
-        # permite. Colar na borda inferior com d << n e o esperado -- nao ha o que regularizar.
-        hi = per_run[0]["sizes"]["train"] * 1e3
-        at_top = sum(1 for c in used if c >= hi * 0.99)
+        # So a borda SUPERIOR interessa: colar na inferior com d << n e o esperado, nao ha o que
+        # regularizar. Mas o teto tem DUAS leituras e o aviso precisa dizer as duas: numa feature
+        # informativa significa grid curto; numa feature sem sinal e a escolha CORRETA (regularizar
+        # ate a media constante), e nenhum grid finito consertaria isso. Por isso o aviso so vale
+        # como suspeita, a ser lida junto da macro da configuracao.
+        top = args.lambda_range[1]
+        at_top = sum(1 for c, r in zip(used, per_run)
+                     if c >= r["sizes"]["train"] * (10 ** top) * 0.99)
         if at_top:
             print(f"    [!] lambda no TETO do grid em {at_top}/{len(used)} execucoes -- "
-                  "o probe queria regularizar mais; amplie a faixa")
+                  "amplie --lambda-range se a configuracao tiver sinal; se a macro estiver "
+                  "no acaso, o teto e a escolha certa e o aviso e esperado")
 
     agg = {}
     for panel in DISCRIMINATION_PANELS:
@@ -294,14 +346,10 @@ def main(argv: list[str] | None = None) -> int:
     import numpy as np
     import pandas as pd
 
-    with np.load(args.features, allow_pickle=False) as z:
-        block_names = [k for k in z.files if k.startswith("blk_")]
-        if not block_names:
-            raise SystemExit(f"nenhum array 'blk_*' em {args.features}; achei {z.files}")
-        vid = [str(v) for v in z["variant_id"]]
-        raw_blocks = {b: z[b] for b in block_names}  # materializa antes de fechar o handle
+    vid, raw_blocks = load_features(args.features)
+    block_names = sorted(raw_blocks)
     print(f"[eval] {len(vid):,} variantes · {len(block_names)} blocos: "
-          + ", ".join(b[4:] for b in sorted(block_names)[:8])
+          + ", ".join(b[4:] for b in block_names[:8])
           + (" ..." if len(block_names) > 8 else ""))
 
     ex = pd.read_parquet(args.release_root / "pb_examples.parquet",

@@ -45,6 +45,15 @@ from scripts.probe_feature_eval import main, ridge_scores  # noqa: E402
 PANELS = ("missense", "splice", "noncoding")
 
 
+class Skip(Exception):
+    """Teste nao executado por falta de dependencia. NAO e um PASS.
+
+    Ja fomos enganados por isto uma vez: um teste que retornava cedo aparecia como PASS e a
+    ausencia de cobertura passou despercebida. O runner conta os skips separado, e o codigo de
+    saida so ignora skips -- nunca os soma aos aprovados.
+    """
+
+
 def build(tmp: Path, *, n_units=150, per_unit=12, seed=7, shuffle_folds=False):
     """Release + features sinteticos. Rotulo depende do sitio (tenta a memorizacao) e de um sinal."""
     rng = np.random.default_rng(seed)
@@ -125,8 +134,13 @@ def build_nonlinear(tmp: Path, *, n_units=200, per_unit=12, seed=11):
 
 def run(tmp: Path, **kw) -> dict:
     out = tmp / "eval.json"
-    argv = ["--features", str(tmp / "probe_features.npz"), "--release-root", str(tmp),
+    feats = kw.get("features") or [tmp / "probe_features.npz"]
+    argv = ["--features", *[str(f) for f in feats], "--release-root", str(tmp),
             "--out", str(out), "--train-tiers", kw.get("train_tiers", "gold")]
+    if kw.get("configs"):
+        cfg = tmp / "cfg.json"
+        cfg.write_text(json.dumps(kw["configs"]), encoding="utf-8")
+        argv += ["--configs", str(cfg)]
     if kw.get("mlp"):
         argv.append("--mlp")
     rc = main(argv)
@@ -273,8 +287,7 @@ def test_mlp_probe_learns_what_ridge_cannot():
     try:
         import torch  # noqa: F401
     except ImportError:
-        print("        (SKIP: sem torch)")
-        return
+        raise Skip("sem torch") from None
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d); build_nonlinear(tmp)
         ridge = run(tmp)["configs"]["xor"]["macro"]
@@ -287,15 +300,107 @@ def test_mlp_probe_learns_what_ridge_cannot():
     print(f"        (ridge {ridge:.3f} · mlp {mlp:.3f})")
 
 
+def _split_features(tmp: Path, *, shuffle_second=False, rename=None):
+    """Quebra o npz sintetico em dois arquivos, para exercitar a uniao."""
+    with np.load(tmp / "probe_features.npz") as z:
+        d = {k: z[k] for k in z.files}
+    vid = d["variant_id"]
+    np.savez(tmp / "a.npz", variant_id=vid, blk_signal=d["blk_signal"])
+    order = np.arange(len(vid))
+    if shuffle_second:
+        order = np.random.default_rng(3).permutation(order)
+    name = rename or "blk_noise"
+    np.savez(tmp / "b.npz", variant_id=vid[order], **{name: d["blk_noise"][order]})
+    return [tmp / "a.npz", tmp / "b.npz"]
+
+
+def test_merging_feature_files_matches_a_single_file():
+    """Unir dois npz tem de dar exatamente o mesmo que um npz com os dois blocos."""
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d); build(tmp)
+        cfg = {"juntos": ["signal", "noise"]}
+        single = run(tmp, configs=cfg)["configs"]["juntos"]["macro"]
+        merged = run(tmp, features=_split_features(tmp), configs=cfg)["configs"]["juntos"]["macro"]
+        assert single == merged, f"uniao deu {merged:.6f}, arquivo unico deu {single:.6f}"
+
+
+def test_merge_aligns_by_variant_id_not_by_row_order():
+    """O segundo arquivo vem embaralhado: se a uniao alinhasse por posicao, o sinal se perderia."""
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d); build(tmp)
+        cfg = {"juntos": ["signal", "noise"]}
+        ref = run(tmp, features=_split_features(tmp), configs=cfg)["configs"]["juntos"]["macro"]
+        shuf = run(tmp, features=_split_features(tmp, shuffle_second=True),
+                   configs=cfg)["configs"]["juntos"]["macro"]
+        assert ref == shuf, (
+            f"embaralhar as linhas do segundo arquivo mudou o resultado ({shuf:.6f} vs {ref:.6f}) "
+            "-- a uniao esta alinhando por posicao, nao por variant_id"
+        )
+
+
+def test_merge_refuses_duplicate_block_names():
+    """Dois arquivos com o mesmo nome de bloco: sobrescrever em silencio trocaria o experimento."""
+    from scripts.probe_feature_eval import load_features
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d); build(tmp)
+        paths = _split_features(tmp, rename="blk_signal")
+        try:
+            load_features(paths)
+        except SystemExit as exc:
+            assert "mais de um arquivo" in str(exc), str(exc)
+        else:
+            raise AssertionError("nome de bloco repetido deveria ser erro")
+
+
+def test_merge_keeps_only_the_intersection_of_ids():
+    from scripts.probe_feature_eval import load_features
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d); build(tmp)
+        a, b = _split_features(tmp)
+        with np.load(b) as z:
+            keep = slice(0, 40)
+            np.savez(tmp / "b.npz", variant_id=z["variant_id"][keep], blk_noise=z["blk_noise"][keep])
+        ids, blocks = load_features([a, tmp / "b.npz"])
+        assert len(ids) == 40, f"esperava a interseccao (40), veio {len(ids)}"
+        assert all(v.shape[0] == 40 for v in blocks.values())
+
+
+def test_lambda_grid_reaches_far_enough_to_regularise():
+    """Uma feature COM sinal nao pode selecionar o teto do grid.
+
+    O teto tem duas leituras. Num bloco de puro ruido, regularizar ate a media e a escolha certa e
+    o teto sera sempre selecionado -- nenhum grid finito muda isso, entao testar ruido nao mede
+    nada. Ja num bloco informativo, colar no teto significa que o grid acabou antes do otimo e o
+    numero reportado e artefato do grid. Esse e o caso que importa.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d); build(tmp)
+        res = run(tmp, configs={"signal": ["signal"]})["configs"]["signal"]
+        chosen = [c for c in res["lambdas_chosen"] if c is not None]
+        assert chosen, "nenhum lambda registrado"
+        tops = [r["sizes"]["train"] * (10 ** 6) for r in res["per_run"]]
+        at_top = sum(1 for c, t in zip(chosen, tops) if c >= t * 0.99)
+        assert at_top == 0, (
+            f"bloco com sinal selecionou o teto do grid em {at_top}/{len(chosen)} execucoes -- "
+            "o grid acabou antes do otimo e os numeros sao artefato dele"
+        )
+        assert res["macro"] > 0.65, f"o bloco com sinal deveria pontuar, deu {res['macro']:.3f}"
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
-    failed = 0
+    failed, skipped = 0, []
     for name, fn in tests:
         try:
             fn()
             print(f"  PASS  {name}")
+        except Skip as exc:
+            skipped.append(name)
+            print(f"  SKIP  {name}: {exc}")
         except Exception as exc:  # noqa: BLE001
             failed += 1
             print(f"  FAIL  {name}: {type(exc).__name__}: {exc}")
-    print(f"\n{len(tests) - failed}/{len(tests)} passaram")
+    ran = len(tests) - failed - len(skipped)
+    tail = f"  |  {len(skipped)} PULADO(S), sem cobertura: {', '.join(skipped)}" if skipped else ""
+    print(f"\n{ran}/{len(tests) - len(skipped)} passaram{tail}")
     sys.exit(1 if failed else 0)

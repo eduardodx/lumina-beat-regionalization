@@ -1,0 +1,86 @@
+{
+  "_comment_0": "A PERGUNTA DO EDUARDO, na forma decidivel: o embedding do R03 acrescenta algo ao que ja esta disponivel? Rodar com --features <rich.npz> <baseline.npz>, que o eval une pelo variant_id. Se comparadores_mais_v2 nao superar comparadores, o embedding e redundante.",
+  "_comment_1": "Os pares importantes: comparadores vs comparadores_mais_v2 (ganho sobre o estado da arte disponivel) e conservacao vs conservacao_mais_cabecas (ganho sobre a feature isolada mais forte, com o embedding no formato compacto de 156 dims).",
+  "comparadores": [
+    "alphamissense",
+    "cadd",
+    "gnomad",
+    "other_predictors",
+    "pangolin",
+    "phylop",
+    "revel",
+    "spliceai"
+  ],
+  "conservacao": [
+    "phylop"
+  ],
+  "v2": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512_max",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "cabecas_compactas": [
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "comparadores_mais_v2": [
+    "alphamissense",
+    "cadd",
+    "gnomad",
+    "other_predictors",
+    "pangolin",
+    "phylop",
+    "revel",
+    "spliceai",
+    "delta_focal",
+    "delta_p25",
+    "delta_p512_max",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "comparadores_mais_cabecas": [
+    "alphamissense",
+    "cadd",
+    "gnomad",
+    "other_predictors",
+    "pangolin",
+    "phylop",
+    "revel",
+    "spliceai",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "conservacao_mais_v2": [
+    "phylop",
+    "delta_focal",
+    "delta_p25",
+    "delta_p512_max",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "conservacao_mais_cabecas": [
+    "phylop",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ]
+}

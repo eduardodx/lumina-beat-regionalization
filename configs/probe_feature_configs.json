@@ -281,5 +281,30 @@
     "heads_mlp",
     "heads_ref",
     "subst"
+  ],
+  "_q12_gnomad_limpo": "proposta_sem_gnomad NAO era ablacao limpa: alem de tirar o gnomAD ela ADICIONAVA delta_p512_max. Aqui a comparacao correta -- proposta_v2 identica, menos as 16 dims de gnomAD (population_af + population_observed, em heads_lin e heads_ref) e nada mais.",
+  "v2_sem_gnomad_limpo": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512_max",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin[0:60]",
+    "heads_mlp",
+    "heads_ref[0:60]",
+    "heads_ref[68:78]",
+    "subst"
+  ],
+  "_q13_rc_na_proposta": "sob MLP a MEDIA reverse-complement (384d, 0.9098) bateu a CONCATENACAO (768d, 0.8926) -- ao contrario do que eu previa. Entao vale trocar delta_focal por delta_focal_rcavg dentro da proposta, sem custo de dimensao.",
+  "v2_com_rc_medio": [
+    "delta_focal_rcavg",
+    "delta_p25",
+    "delta_p512_max",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
   ]
 }
