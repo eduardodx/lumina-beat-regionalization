@@ -194,6 +194,27 @@ def panel_auroc(scores, labels, panels) -> dict:
     return out
 
 
+def resolve(blocks: dict, spec: str):
+    """Resolve 'nome' ou 'nome[a:b]' para a matriz correspondente."""
+    import re
+
+    m = re.fullmatch(r"([A-Za-z0-9_]+)\[(\d+):(\d+)\]", spec)
+    if not m:
+        return blocks[spec]
+    name, lo, hi = m.group(1), int(m.group(2)), int(m.group(3))
+    arr = blocks[name]
+    if hi > arr.shape[1]:
+        raise KeyError(f"{spec}: bloco '{name}' tem {arr.shape[1]} dims")
+    return arr[:, lo:hi]
+
+
+def block_exists(blocks: dict, spec: str) -> bool:
+    import re
+
+    m = re.fullmatch(r"([A-Za-z0-9_]+)(\[\d+:\d+\])?", spec)
+    return bool(m) and m.group(1) in blocks
+
+
 def evaluate_config(X, meta, blocks, args, *, use_mlp=False) -> dict:
     import numpy as np
 
@@ -309,7 +330,8 @@ def main(argv: list[str] | None = None) -> int:
 
     blocks = {b[4:]: raw_blocks[b][keep].astype(np.float64) for b in block_names}
     if args.configs:
-        configs = json.loads(args.configs.read_text(encoding="utf-8"))
+        raw = json.loads(args.configs.read_text(encoding="utf-8"))
+        configs = {k: v for k, v in raw.items() if not k.startswith("_")}  # "_" = comentario
     else:
         configs = {name: [name] for name in sorted(blocks)}
         configs["__todos__"] = sorted(blocks)
@@ -321,12 +343,12 @@ def main(argv: list[str] | None = None) -> int:
           f"{'missense':>9} {'splice':>7} {'noncoding':>10}")
     print("-" * 82)
     for name, wanted in configs.items():
-        missing = [b for b in wanted if b not in blocks]
+        missing = [b for b in wanted if not block_exists(blocks, b)]
         if missing:
             print(f"  {name}: blocos ausentes {missing}, pulando")
             continue
         t0 = time.perf_counter()
-        X = np.concatenate([blocks[b] for b in wanted], axis=1)
+        X = np.concatenate([resolve(blocks, b) for b in wanted], axis=1)
         res = evaluate_config(X, meta, wanted, args, use_mlp=args.mlp)
         res["seconds"] = time.perf_counter() - t0
         report["configs"][name] = res

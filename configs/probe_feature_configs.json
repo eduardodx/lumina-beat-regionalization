@@ -3,58 +3,283 @@
   "_comment_01": "configuracao de features; o valor e a lista de blocos de probe_features.npz a",
   "_comment_02": "concatenar. Nomes agrupados por pergunta. Rodar com --track core_locus e depois",
   "_comment_03": "--track gene_transfer: a DIFERENCA entre as duas trilhas mede memorizacao de locus.",
-
   "_q1_camada": "qual profundidade do mid-stack transfere melhor? o trunk e a camada MAIS especializada (alimenta 10 cabecas)",
-  "camada_L00_entrada": ["L00"],
-  "camada_L01": ["L01"], "camada_L02": ["L02"], "camada_L03": ["L03"], "camada_L04": ["L04"],
-  "camada_L05": ["L05"], "camada_L06": ["L06"], "camada_L07": ["L07"], "camada_L08": ["L08"],
-  "camada_L09": ["L09"], "camada_L10": ["L10"], "camada_L11": ["L11"], "camada_L12": ["L12"],
-  "camada_L13": ["L13"], "camada_L14": ["L14"], "camada_L15": ["L15"], "camada_L16": ["L16"],
-  "camada_L17": ["L17"], "camada_L18": ["L18"], "camada_L19": ["L19"], "camada_L20": ["L20"],
-  "camada_L21": ["L21"], "camada_L22": ["L22"], "camada_L23": ["L23"], "camada_L24": ["L24"],
-  "camada_L25": ["L25"], "camada_L26_saida": ["L26"],
-
+  "camada_L00_entrada": [
+    "L00"
+  ],
+  "camada_L01": [
+    "L01"
+  ],
+  "camada_L02": [
+    "L02"
+  ],
+  "camada_L03": [
+    "L03"
+  ],
+  "camada_L04": [
+    "L04"
+  ],
+  "camada_L05": [
+    "L05"
+  ],
+  "camada_L06": [
+    "L06"
+  ],
+  "camada_L07": [
+    "L07"
+  ],
+  "camada_L08": [
+    "L08"
+  ],
+  "camada_L09": [
+    "L09"
+  ],
+  "camada_L10": [
+    "L10"
+  ],
+  "camada_L11": [
+    "L11"
+  ],
+  "camada_L12": [
+    "L12"
+  ],
+  "camada_L13": [
+    "L13"
+  ],
+  "camada_L14": [
+    "L14"
+  ],
+  "camada_L15": [
+    "L15"
+  ],
+  "camada_L16": [
+    "L16"
+  ],
+  "camada_L17": [
+    "L17"
+  ],
+  "camada_L18": [
+    "L18"
+  ],
+  "camada_L19": [
+    "L19"
+  ],
+  "camada_L20": [
+    "L20"
+  ],
+  "camada_L21": [
+    "L21"
+  ],
+  "camada_L22": [
+    "L22"
+  ],
+  "camada_L23": [
+    "L23"
+  ],
+  "camada_L24": [
+    "L24"
+  ],
+  "camada_L25": [
+    "L25"
+  ],
+  "camada_L26_saida": [
+    "L26"
+  ],
   "_q2_cabecas": "as 68 dims lineares estao no span do trunk -- um probe LINEAR nao pode ganhar com elas; comparar com --mlp",
-  "so_hidden": ["delta_focal"],
-  "so_cabecas_lineares": ["heads_lin"],
-  "so_cabecas_mlp": ["heads_mlp"],
-  "so_cabecas_todas": ["heads_lin", "heads_mlp", "heads_ref"],
-  "hidden_mais_cabecas": ["delta_focal", "heads_lin", "heads_mlp", "heads_ref"],
-
+  "so_hidden": [
+    "delta_focal"
+  ],
+  "so_cabecas_lineares": [
+    "heads_lin"
+  ],
+  "so_cabecas_mlp": [
+    "heads_mlp"
+  ],
+  "so_cabecas_todas": [
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref"
+  ],
+  "hidden_mais_cabecas": [
+    "delta_focal",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref"
+  ],
   "_q3_contexto": "quanto do desempenho vem de reconhecer o locus? comparar core_locus vs gene_transfer",
-  "so_variante": ["delta_focal", "delta_p25", "delta_p512"],
-  "variante_mais_contexto": ["delta_focal", "delta_p25", "delta_p512", "ref_focal", "ref_p512"],
-  "so_contexto": ["ref_focal", "ref_p512"],
-
+  "so_variante": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512"
+  ],
+  "variante_mais_contexto": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512",
+    "ref_focal",
+    "ref_p512"
+  ],
+  "so_contexto": [
+    "ref_focal",
+    "ref_p512"
+  ],
   "_q4_onde_ler": "trunk full-res, representacao regional, ou o resumo global dos registers?",
-  "leitura_trunk": ["delta_focal"],
-  "leitura_mid": ["mid_delta"],
-  "leitura_registers": ["reg_delta_mean", "reg_delta_max"],
-  "leitura_mid_mais_registers": ["mid_delta", "reg_delta_mean", "reg_delta_max"],
-
+  "leitura_trunk": [
+    "delta_focal"
+  ],
+  "leitura_mid": [
+    "mid_delta"
+  ],
+  "leitura_registers": [
+    "reg_delta_mean",
+    "reg_delta_max"
+  ],
+  "leitura_mid_mais_registers": [
+    "mid_delta",
+    "reg_delta_mean",
+    "reg_delta_max"
+  ],
   "_q5_escalas": "os raios sao os horizontes da arquitetura: +-25 conv, +-512 atencao local",
-  "escala_so_focal": ["delta_focal"],
-  "escala_mais_25": ["delta_focal", "delta_p25"],
-  "escala_mais_512": ["delta_focal", "delta_p512"],
-  "escala_todas": ["delta_focal", "delta_p25", "delta_p512"],
-  "escala_max_em_vez_de_media": ["delta_focal", "delta_p512_max"],
-
+  "escala_so_focal": [
+    "delta_focal"
+  ],
+  "escala_mais_25": [
+    "delta_focal",
+    "delta_p25"
+  ],
+  "escala_mais_512": [
+    "delta_focal",
+    "delta_p512"
+  ],
+  "escala_todas": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512"
+  ],
+  "escala_max_em_vez_de_media": [
+    "delta_focal",
+    "delta_p512_max"
+  ],
   "_q6_rc": "cos(fwd, rc) medido = 0.64: referenciais diferentes, entao concatenar deve bater mediar",
-  "rc_so_direta": ["delta_focal"],
-  "rc_media": ["delta_focal_rcavg"],
-  "rc_concatenado": ["delta_focal", "delta_focal_rc"],
-
+  "rc_so_direta": [
+    "delta_focal"
+  ],
+  "rc_media": [
+    "delta_focal_rcavg"
+  ],
+  "rc_concatenado": [
+    "delta_focal",
+    "delta_focal_rc"
+  ],
   "_q7_pisos": "o que precisamos superar, e o que deve ficar no chao",
-  "piso_canal_trivial": ["hpure_delta"],
-  "piso_substituicao": ["subst"],
-  "piso_trivial_mais_subst": ["hpure_delta", "subst"],
-  "infra_atual_pos_norma": ["post_delta", "post_ref"],
-
+  "piso_canal_trivial": [
+    "hpure_delta"
+  ],
+  "piso_substituicao": [
+    "subst"
+  ],
+  "piso_trivial_mais_subst": [
+    "hpure_delta",
+    "subst"
+  ],
+  "infra_atual_pos_norma": [
+    "post_delta",
+    "post_ref"
+  ],
   "_q8_proposta": "a especificacao do documento, com e sem o bloco de contexto",
-  "proposta_completa": ["delta_focal", "delta_p25", "delta_p512", "ref_focal", "ref_p512",
-                        "heads_lin", "heads_mlp", "heads_ref", "subst"],
-  "proposta_sem_contexto": ["delta_focal", "delta_p25", "delta_p512",
-                            "heads_lin", "heads_mlp", "heads_ref", "subst"],
-  "proposta_mais_rc": ["delta_focal", "delta_focal_rc", "delta_p25", "delta_p512",
-                       "ref_focal", "ref_p512", "heads_lin", "heads_mlp", "heads_ref", "subst"]
+  "proposta_completa": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "proposta_sem_contexto": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "proposta_mais_rc": [
+    "delta_focal",
+    "delta_focal_rc",
+    "delta_p25",
+    "delta_p512",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "_q9_maxpool": "R2 mostrou max >> media (0.8933 vs 0.7579). Quanto disso sozinho?",
+  "max_so": [
+    "delta_p512_max"
+  ],
+  "max_mais_focal": [
+    "delta_focal",
+    "delta_p512_max"
+  ],
+  "max_mais_cabecas": [
+    "delta_p512_max",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref"
+  ],
+  "_q10_circularidade": "gnomAD sozinho da 0.909 por CIRCULARIDADE (ACMG BA1/BS1 usam frequencia para classificar benigno) e o R03 tem cabeca de AF. O ganho das cabecas e biologia ou circularidade herdada?",
+  "cabecas_so_gnomad": [
+    "heads_lin[60:68]",
+    "heads_ref[60:68]"
+  ],
+  "cabecas_sem_gnomad": [
+    "heads_lin[0:60]",
+    "heads_ref[0:60]",
+    "heads_ref[68:78]",
+    "heads_mlp"
+  ],
+  "cabecas_so_conservacao": [
+    "heads_lin[4:23]",
+    "heads_ref[4:23]"
+  ],
+  "proposta_sem_gnomad": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512",
+    "delta_p512_max",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin[0:60]",
+    "heads_ref[0:60]",
+    "heads_ref[68:78]",
+    "heads_mlp",
+    "subst"
+  ],
+  "_q11_revisada": "a especificacao revisada pelos resultados: max-pool entra, RC sai",
+  "proposta_v2": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512_max",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "proposta_v2_sem_contexto": [
+    "delta_focal",
+    "delta_p25",
+    "delta_p512_max",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ]
 }
