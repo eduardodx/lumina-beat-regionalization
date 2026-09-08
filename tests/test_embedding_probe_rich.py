@@ -266,6 +266,33 @@ def test_reverse_complement_maps_position_i_to_L_minus_1_minus_i():
         assert rc[len(seq) - 1 - i] == COMPLEMENT[base]
 
 
+def test_mid_receptive_field_explains_why_several_tokens_see_the_focal_base():
+    """Justifica MID_SPAN e MID_OFFSET_LIMIT em probe_extract_rich.py.
+
+    O smoke mediu o pico de ||Delta|| no mid em offsets -1..+2 em vez de sempre em f//4. Isso NAO e
+    erro de indexacao: um token do mid ve ~+-16 bp de entrada (stem k=15 -> +-7, depois duas convs
+    k=4 s=2 com refine k=3), entao a base focal cai no campo receptivo de varios tokens. Aqui a
+    geometria e recomputada por aritmetica de intervalos, sem depender de memoria.
+    """
+    def conv(mask, k, s, p):
+        n = len(mask); padded = [False] * p + mask + [False] * p
+        return [any(padded[j * s:j * s + k]) for j in range((n + 2 * p - k) // s + 1)]
+
+    L, focal = 4096, 2047
+    x = [False] * L
+    x[focal] = True
+    h = conv(x, 15, 1, 7)                      # stem (ramo mais largo)
+    h = conv(conv(h, 4, 2, 1), 3, 1, 1)        # DownStage 1
+    h = conv(conv(h, 4, 2, 1), 3, 1, 1)        # DownStage 2
+    touched = [i for i, v in enumerate(h) if v]
+    offsets = [i - focal // 4 for i in touched]
+    assert min(offsets) >= -4 and max(offsets) <= 4, (
+        f"tokens do mid alcancados pela base focal: offsets {min(offsets)}..{max(offsets)}; "
+        "MID_OFFSET_LIMIT=4 nao cobriria")
+    assert len(touched) >= 4, f"esperava varios tokens, achei {len(touched)}"
+    assert 0 in offsets, "o token f//4 tem que estar entre os alcancados"
+
+
 def test_mid_index_maps_focal_to_quarter_resolution():
     assert mid_index(2047) == 511
     assert mid_index(8191) == 2047

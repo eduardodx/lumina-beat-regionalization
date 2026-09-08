@@ -56,6 +56,13 @@ DEFAULT_CKPT = (
 )
 CONV_HORIZON, LOCAL_ATTENTION = 25, 512  # os horizontes medidos/derivados na sonda
 
+# Um token do mid ve ~+-16 bp de entrada (stem +-7, depois 2x conv k=4 s=2), entao a base focal
+# cai no campo receptivo de varios tokens -- nao de um so. Offsets de -4 a +4 sao geometricamente
+# possiveis; o smoke mediu o pico de ||Delta|| em -1..+2 com MODA 0, ou seja o token mais central
+# domina, como a formula f//4 preve. Agregamos essa vizinhanca em vez de pegar um token.
+MID_SPAN = (-1, 2)          # tokens do mid agregados em torno de f//4
+MID_OFFSET_LIMIT = 4        # geometricamente possivel; fora disso a indexacao estaria errada
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -139,7 +146,8 @@ def main(argv: list[str] | None = None) -> int:
 
             # sweep de camada: empilha na GPU e transfere UMA vez. 27 transferencias separadas por
             # variante custariam ~500 mil sincronizacoes no run completo.
-            sweep = torch.stack([st[1, n_reg + focal_mid] - st[0, n_reg + focal_mid]
+            lo, hi = n_reg + focal_mid + MID_SPAN[0], n_reg + focal_mid + MID_SPAN[1] + 1
+            sweep = torch.stack([(st[1, lo:hi] - st[0, lo:hi]).mean(0)
                                  for st in states]).float().cpu().numpy()
             for d in range(n_taps):
                 add(f"L{d:02d}", sweep[d])
@@ -159,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
 
             # --- media RC: o focal vira L-1-focal no complemento reverso -------------------
             dhu_rc = h_up[3, rc_focal] - h_up[2, rc_focal]
+            add("delta_focal_rc", dhu_rc.float().cpu().numpy())
             add("delta_focal_rcavg", ((dhu[0, focal] + dhu_rc) / 2).float().cpu().numpy())
 
             # --- mid e registers -----------------------------------------------------------
@@ -206,10 +215,15 @@ def main(argv: list[str] | None = None) -> int:
     # --------------------------------------------------------------------------------------
     print("\n[rich] CHECAGENS")
     offs = checks["mid_argmax"]
-    mid_ok = all(abs(o) <= 1 for o in offs)
-    print(f"  1. mapeamento full-res -> mid: deslocamento do pico de ||Delta|| = "
-          f"{min(offs)}..{max(offs)} (moda {max(set(offs), key=offs.count)}) -> "
+    mode = max(set(offs), key=offs.count)
+    # O criterio nao e "o pico esta sempre no mesmo lugar" (nao esta, e nao deveria: varios tokens
+    # do mid veem a base focal). E "o token mais central domina, e nada cai fora do geometricamente
+    # possivel" -- que e o que valida a formula f//4.
+    mid_ok = abs(mode) <= 1 and all(abs(o) <= MID_OFFSET_LIMIT for o in offs)
+    print(f"  1. mapeamento full-res -> mid: pico de ||Delta|| em {min(offs)}..{max(offs)}, "
+          f"MODA {mode} (limite geometrico +-{MID_OFFSET_LIMIT}) -> "
           f"{'OK' if mid_ok else 'FORA DO ESPERADO'}")
+    print(f"     sweep agrega os tokens {MID_SPAN[0]}..{MID_SPAN[1]} em torno de f//4")
     reg = checks["register_response"]
     reg_med = float(np.median(reg))
     print(f"  2. resposta dos registers: ||Delta_reg|| / ||Delta_focal|| mediana = {reg_med:.4f}"
@@ -217,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
     rc = checks["rc_cosine"]
     rc_med = float(np.median(rc))
     print(f"  3. equivariancia RC: cos(ref_fwd[f], ref_rc[L-1-f]) mediana = {rc_med:.4f}"
-          f" -> {'media RC faz sentido' if rc_med > 0.9 else 'referenciais DIFERENTES; media RC suspeita'}")
+          f" -> {'mesmo referencial: media RC ok' if rc_med > 0.9 else 'referenciais DIFERENTES: preferir CONCATENAR (blocos delta_focal + delta_focal_rc) a mediar'}")
 
     stacked = {k: np.stack(v).astype(np.float32) for k, v in blocks.items()}
     ref_block = stacked["delta_focal"]
