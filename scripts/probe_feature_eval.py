@@ -239,15 +239,32 @@ def apply_subset(blocks, meta, criteria):
     blocks = {k: v[keep] for k, v in blocks.items()}
     meta = {k: [v[i] for i in keep] for k, v in meta.items()}
 
+    print_panel_counts(meta)
+    return blocks, meta
+
+
+def print_panel_counts(meta) -> None:
+    """Positivos e negativos por painel -- impresso SEMPRE, nao so quando ha recorte.
+
+    A precisao de uma AUROC e governada pelo lado MENOR: com 28 negativos o erro-padrao passa de
+    0.02 e diferencas de 0.03 viram ruido. Sem estes numeros na saida, nao ha como saber quantas
+    casas decimais de um resultado sao reais -- e ja lemos um run inteiro sem perceber que um painel
+    tinha 2% de uma das classes.
+    """
     by_panel: dict = {}
     for panel, label in zip(meta["panels"], meta["labels"]):
         cell = by_panel.setdefault(panel, [0, 0])
         cell[label] += 1
     for panel in sorted(by_panel):
         nb, np_ = by_panel[panel]
-        flag = "  <- SEM UM DOS LADOS, macro indefinida neste painel" if not (nb and np_) else ""
-        print(f"[eval]   {panel:<12} P={np_:>5,}  B={nb:>5,}{flag}")
-    return blocks, meta
+        menor = min(nb, np_)
+        if not menor:
+            nota = "  <- SEM UM DOS LADOS, macro indefinida neste painel"
+        elif menor < 50:
+            nota = f"  <- so {menor} do lado menor: AUROC pouco precisa aqui"
+        else:
+            nota = ""
+        print(f"[eval]   {panel:<12} P={np_:>6,}  B={nb:>6,}{nota}")
 
 
 def load_features(paths):
@@ -427,6 +444,7 @@ def main(argv: list[str] | None = None) -> int:
           f"{len(keep):,} usaveis")
 
     blocks = {b[4:]: raw_blocks[b][keep].astype(np.float64) for b in block_names}
+    print_panel_counts(meta)
     if args.subset:
         blocks, meta = apply_subset(blocks, meta, args.subset)
 
