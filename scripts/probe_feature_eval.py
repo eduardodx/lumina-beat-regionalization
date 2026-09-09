@@ -65,6 +65,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--configs", type=Path, default=None,
                    help="JSON {nome: [blocos]}; omitido = um config por bloco + 'todos'")
     p.add_argument("--track", default="core_locus", choices=sorted(TRACKS))
+    p.add_argument("--subset", nargs="+", default=None, metavar="BLOCO:COLUNA",
+                   help="restringe as variantes as que tem 1.0 em blocos[BLOCO][:, COLUNA]. "
+                        "Feito para as indicadoras de ausencia dos comparadores, que ocupam a "
+                        "segunda metade de cada bloco de baseline: 'alphamissense:1' seleciona as "
+                        "variantes SEM score de AlphaMissense. Varios criterios se combinam por E. "
+                        "E onde o embedding tem de se justificar -- ele existe para toda variante, "
+                        "os comparadores nao (AlphaMissense falta em 61%, gnomAD em ~33%).")
     p.add_argument("--train-tiers", default="gold", choices=["gold", "gold+consensus"],
                    help="'gold' e o desvio barato da fase de ablacao; o contrato e gold+consensus")
     p.add_argument("--mlp", action="store_true", help="roda tambem um probe MLP (precisa de torch)")
@@ -198,6 +205,49 @@ def panel_auroc(scores, labels, panels) -> dict:
             "n_pos": len(pos), "n_neg": len(neg),
         }
     return out
+
+
+def apply_subset(blocks, meta, criteria):
+    """Mantem so as variantes que satisfazem TODOS os criterios ``BLOCO:COLUNA``.
+
+    Serve para medir o embedding onde os comparadores nao existem. Um recorte por ausencia nao
+    quebra o protocolo -- folds e unidades de bloqueio acompanham a linha --, mas PODE esvaziar um
+    painel de positivos ou negativos, e ai a macro daquela execucao fica indefinida. Por isso o
+    resumo por painel e impresso: sem ele, um painel colapsado passaria como "numero menor".
+    """
+    import numpy as np
+
+    mask = np.ones(len(meta["labels"]), dtype=bool)
+    for crit in criteria:
+        name, _, col = crit.partition(":")
+        if not col.isdigit():
+            raise SystemExit(f"criterio '{crit}' nao esta na forma BLOCO:COLUNA")
+        if name not in blocks:
+            raise SystemExit(f"criterio '{crit}': bloco '{name}' nao existe")
+        arr = blocks[name]
+        idx = int(col)
+        if idx >= arr.shape[1]:
+            raise SystemExit(f"criterio '{crit}': o bloco tem {arr.shape[1]} colunas")
+        mask &= arr[:, idx] == 1.0
+
+    n = int(mask.sum())
+    if n == 0:
+        raise SystemExit(f"o recorte {criteria} nao deixou nenhuma variante")
+    print(f"[eval] recorte {' E '.join(criteria)}: {n:,} de {len(mask):,} variantes")
+
+    keep = np.flatnonzero(mask)
+    blocks = {k: v[keep] for k, v in blocks.items()}
+    meta = {k: [v[i] for i in keep] for k, v in meta.items()}
+
+    by_panel: dict = {}
+    for panel, label in zip(meta["panels"], meta["labels"]):
+        cell = by_panel.setdefault(panel, [0, 0])
+        cell[label] += 1
+    for panel in sorted(by_panel):
+        nb, np_ = by_panel[panel]
+        flag = "  <- SEM UM DOS LADOS, macro indefinida neste painel" if not (nb and np_) else ""
+        print(f"[eval]   {panel:<12} P={np_:>5,}  B={nb:>5,}{flag}")
+    return blocks, meta
 
 
 def load_features(paths):
@@ -377,6 +427,9 @@ def main(argv: list[str] | None = None) -> int:
           f"{len(keep):,} usaveis")
 
     blocks = {b[4:]: raw_blocks[b][keep].astype(np.float64) for b in block_names}
+    if args.subset:
+        blocks, meta = apply_subset(blocks, meta, args.subset)
+
     if args.configs:
         raw = json.loads(args.configs.read_text(encoding="utf-8"))
         configs = {k: v for k, v in raw.items() if not k.startswith("_")}  # "_" = comentario

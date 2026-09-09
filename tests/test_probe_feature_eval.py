@@ -143,6 +143,8 @@ def run(tmp: Path, **kw) -> dict:
         argv += ["--configs", str(cfg)]
     if kw.get("mlp"):
         argv.append("--mlp")
+    if kw.get("subset"):
+        argv += ["--subset", *kw["subset"]]
     rc = main(argv)
     assert rc == 0, f"main retornou {rc}"
     return json.loads(out.read_text(encoding="utf-8"))
@@ -385,6 +387,54 @@ def test_lambda_grid_reaches_far_enough_to_regularise():
             "o grid acabou antes do otimo e os numeros sao artefato dele"
         )
         assert res["macro"] > 0.65, f"o bloco com sinal deveria pontuar, deu {res['macro']:.3f}"
+
+
+def test_subset_selects_rows_and_preserves_blocking():
+    """O recorte por indicadora mantem folds e unidades alinhados a linha certa.
+
+    Se o recorte cortasse as features sem cortar os metadados junto, o rotulo de uma variante
+    passaria a acompanhar as features de outra -- e o resultado ainda assim SAIRIA, so que errado.
+    Por isso o teste marca metade das linhas por um criterio que correlaciona com o rotulo: se o
+    alinhamento quebrar, o sinal desaparece.
+    """
+    from scripts.probe_feature_eval import apply_subset
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d); df = build(tmp)
+        with np.load(tmp / "probe_features.npz") as z:
+            data = {k: z[k] for k in z.files}
+        n = len(data["variant_id"])
+        flag = np.zeros((n, 2), dtype=np.float32)
+        flag[::2, 1] = 1.0                       # coluna 1 = "indicadora", marca as linhas pares
+        data["blk_flag"] = flag
+        np.savez(tmp / "probe_features.npz", **data)
+
+        full = run(tmp, configs={"signal": ["signal"]})["configs"]["signal"]["macro"]
+        res = run(tmp, configs={"signal": ["signal"]}, subset=["flag:1"])["configs"]["signal"]
+        assert res["n_runs"] > 0, "o recorte nao deixou execucao avaliavel"
+        assert res["macro"] > 0.60, (
+            f"o sinal sumiu apos o recorte ({res['macro']:.3f} contra {full:.3f} sem recorte) -- "
+            "features e metadados provavelmente sairam desalinhados"
+        )
+
+
+def test_subset_rejects_bad_criteria():
+    from scripts.probe_feature_eval import apply_subset
+    meta = {"labels": [0, 1], "panels": ["missense", "splice"]}
+    blocks = {"flag": np.zeros((2, 2), dtype=np.float64)}
+    for crit, why in (("flag:9", "coluna inexistente"), ("naoexiste:0", "bloco inexistente"),
+                      ("flag:x", "forma invalida")):
+        try:
+            apply_subset(blocks, meta, [crit])
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError(f"{why} deveria ser erro: {crit}")
+    try:
+        apply_subset({"flag": np.zeros((2, 2))}, meta, ["flag:1"])
+    except SystemExit as exc:
+        assert "nenhuma variante" in str(exc), str(exc)
+    else:
+        raise AssertionError("recorte vazio deveria ser erro")
 
 
 if __name__ == "__main__":
