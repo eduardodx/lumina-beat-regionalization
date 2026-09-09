@@ -51,6 +51,22 @@ LINEAR_HEADS = (
 # Cabecas MLP: precisam rodar nas duas torres.
 MLP_HEADS = ("splice_class_head", "splice_distance_head", "missense_severity_head")
 
+# Layout de ``heads_lin`` no R03, verificado contra lumina/models/model.py e config/lumina_r03_base.json.
+# As fatias em configs/*.json enderecam COLUNAS -- 'heads_lin[60:68]' so e o gnomAD se este layout
+# valer. E ele depende do CONFIG, nao so do codigo: NUM_COUNTERFACTUAL_EFFECT_CLASSES tem default 12
+# em lumina/constants.py e o R03 sobrescreve para 8. Rodar com o default daria 84 dims em vez de 68 e
+# TODAS as fatias apontariam para colunas erradas, sem erro nenhum -- as ablacoes de circularidade e
+# de conservacao mediriam outra coisa e o numero sairia normal.
+R03_HEAD_LAYOUT = (
+    ("mlm_head", 4),
+    ("conservation_scalar_head", 3),
+    ("conservation_bin_head", 16),
+    ("region_head", 5),
+    ("counterfactual_snv_head", 32),   # len(SNV_BASES)=4 x num_counterfactual_effect_classes=8
+    ("population_af_head", 4),
+    ("population_observed_head", 4),
+)
+
 BASES = ("A", "C", "G", "T")
 COMPLEMENT = {"A": "T", "C": "G", "G": "C", "T": "A"}
 SUBSTITUTIONS = tuple(f"{r}>{a}" for r in BASES for a in BASES if r != a)  # 12, ordem estavel
@@ -180,3 +196,33 @@ def substitution_onehot(ref: str, alt: str) -> list[float]:
     vec[BASES.index(ref)] = 1.0
     vec[4 + SUBSTITUTIONS.index(f"{ref}>{alt}")] = 1.0
     return vec
+
+
+def head_layout(model: Any) -> list[tuple[str, int, int]]:
+    """(nome, inicio, fim) de cada cabeca linear dentro do bloco ``heads_lin``."""
+    out, off = [], 0
+    for name in LINEAR_HEADS:
+        n = int(getattr(model, name).out_features)
+        out.append((name, off, off + n))
+        off += n
+    return out
+
+
+def assert_r03_head_layout(model: Any) -> list[tuple[str, int, int]]:
+    """Falha alto se o layout das cabecas nao for o do R03. Ver R03_HEAD_LAYOUT."""
+    layout = head_layout(model)
+    got = [(name, end - start) for name, start, end in layout]
+    if got != list(R03_HEAD_LAYOUT):
+        linhas = "\n".join(
+            f"    {name:<28} esperado {exp:>3}  obtido {obt:>3}"
+            f"{'   <-- DIFERE' if exp != obt else ''}"
+            for (name, exp), (_, obt) in zip(R03_HEAD_LAYOUT, got)
+        )
+        raise SystemExit(
+            "layout das cabecas lineares nao e o do R03 -- as fatias dos configs "
+            "('heads_lin[60:68]' = gnomAD, 'heads_lin[4:23]' = conservacao) apontariam para "
+            f"colunas erradas SEM dar erro:\n{linhas}\n"
+            "  confira num_counterfactual_effect_classes no config do checkpoint (R03 usa 8; "
+            "o default de lumina/constants.py e 12)."
+        )
+    return layout

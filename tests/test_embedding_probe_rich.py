@@ -29,6 +29,8 @@ except ImportError:  # pragma: no cover
 from eval.embedding_probe.rich import (  # noqa: E402
     BASES,
     LINEAR_HEADS,
+    assert_r03_head_layout,
+    head_layout,
     MLP_HEADS,
     SUBSTITUTIONS,
     MidStackTaps,
@@ -317,6 +319,43 @@ def test_pooled_respects_the_radius_and_the_window_edges():
     assert torch.allclose(pooled(delta, 10, 2), torch.tensor([[10.0]]))   # media de 8..12
     assert torch.allclose(pooled(delta, 1, 5), torch.tensor([[3.0]]))     # cortado em 0..6
     assert torch.allclose(pooled(delta, 10, 2, reduce="max"), torch.tensor([[12.0]]))
+
+
+def test_head_layout_matches_the_slices_the_configs_use():
+    """As fatias dos configs enderecam COLUNAS de heads_lin -- este teste as ancora.
+
+    'heads_lin[60:68]' so e o gnomAD, e 'heads_lin[4:23]' so e a conservacao, se o layout for o do
+    R03. Se mudar, as ablacoes de circularidade e de conservacao passam a medir outras colunas e o
+    resultado sai com cara normal.
+    """
+    layout = dict((n, (a, b)) for n, a, b in head_layout(HeadModel()))
+    assert layout["population_af_head"][0] == 60 and layout["population_observed_head"][1] == 68, (
+        f"gnomAD nao esta em [60:68]: af={layout['population_af_head']} "
+        f"obs={layout['population_observed_head']}"
+    )
+    assert layout["conservation_scalar_head"][0] == 4 and layout["conservation_bin_head"][1] == 23, (
+        f"conservacao nao esta em [4:23]: {layout['conservation_scalar_head']} "
+        f"{layout['conservation_bin_head']}"
+    )
+    assert layout["population_observed_head"][1] == 68, "heads_lin deveria ter 68 dims no total"
+
+
+def test_head_layout_guard_catches_the_default_config():
+    """O default de NUM_COUNTERFACTUAL_EFFECT_CLASSES e 12; o R03 usa 8.
+
+    Com 12, counterfactual_snv_head vira 4x12=48 e heads_lin 84 dims. As fatias [60:68] e [4:23]
+    continuariam VALIDAS como indices -- so apontariam para colunas erradas. Sem esta guarda, a
+    ablacao de gnomAD leria pedacos do counterfactual e nao daria erro nenhum.
+    """
+    m = HeadModel()
+    m.counterfactual_snv_head = nn.Linear(448, 4 * 12)      # o default do repo
+    try:
+        assert_r03_head_layout(m)
+    except SystemExit as exc:
+        assert "counterfactual" in str(exc) and "num_counterfactual_effect_classes" in str(exc), str(exc)
+    else:
+        raise AssertionError("layout errado passou pela guarda -- as fatias sairiam deslocadas")
+    assert_r03_head_layout(HeadModel())   # o layout certo continua passando
 
 
 if __name__ == "__main__":

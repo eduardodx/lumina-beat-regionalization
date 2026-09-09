@@ -42,6 +42,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from eval.embedding_probe.rich import (  # noqa: E402
     MidStackTaps,
+    assert_r03_head_layout,
     head_readouts,
     mid_index,
     pooled,
@@ -115,6 +116,12 @@ def main(argv: list[str] | None = None) -> int:
     d_model, n_reg, n_taps = probe.d_model, taps.n_registers, taps.n_taps
     print(f"[rich] {n_taps} tomadas do mid-stack · {n_reg} registers · d_model={d_model} "
           f"· focal={focal} (mid {focal_mid})")
+
+    # As fatias dos configs enderecam colunas de heads_lin; um checkpoint com outro
+    # num_counterfactual_effect_classes as desloca TODAS sem dar erro. Falhar aqui e barato.
+    layout = assert_r03_head_layout(probe.model)
+    print("[rich] layout de heads_lin conferido: "
+          + " · ".join(f"{n.replace('_head', '')}[{a}:{b}]" for n, a, b in layout))
 
     # --------------------------------------------------------------------------------------
     blocks: dict[str, list] = {}
@@ -238,7 +245,23 @@ def main(argv: list[str] | None = None) -> int:
     q = ref_block.astype(np.float16).astype(np.float32)
     rel = float(np.abs(q - ref_block).max() / max(np.abs(ref_block).max(), 1e-9))
     print(f"  4. fp16: erro relativo maximo de quantizacao = {rel:.2e} -> "
-          f"{'suficiente' if rel < 1e-2 else 'usar fp32'}")
+          f"{'suficiente' if rel < 1e-2 else 'usar fp32'} (medido em delta_focal)")
+
+    # fp16 satura em 65504. A checagem 4 mede so o delta_focal, cuja escala e ~1; ja heads_ref
+    # guarda valores ABSOLUTOS de cabecas -- splice_distance_pred e uma distancia sem limite
+    # superior conhecido. Um overflow viraria inf, o ridge propagaria NaN e o resultado sairia
+    # como AUROC 0.5 sem nenhum aviso. Custa uma varredura conferir.
+    estourou = []
+    for name, arr in stacked.items():
+        h = arr.astype(np.float16)
+        if not np.isfinite(h).all():
+            n = int((~np.isfinite(h)).sum())
+            estourou.append(f"{name} ({n} valores, |max|={float(np.abs(arr).max()):.3e})")
+    if estourou:
+        raise SystemExit("  4b. fp16 SATUROU em: " + "; ".join(estourou)
+                         + "\n      grave estes blocos em float32 antes de seguir")
+    print(f"  4b. fp16: nenhum overflow em {len(stacked)} blocos "
+          f"(|max| global = {max(float(np.abs(a).max()) for a in stacked.values()):.3e}, limite 6.55e+04)")
 
     out = {"variant_id": np.array(ids, dtype="U40")}
     total = 0
