@@ -82,5 +82,57 @@
     "heads_mlp",
     "heads_ref",
     "subst"
+  ],
+  "_comment_2": "Sob probe MLP com ~6,5k exemplos de treino, 2092 dims PIORAM a combinacao: conservacao+cabecas (180d) 0.9389 bate conservacao+v2 (2100d) 0.9325, e comparadores+v2 fica -0.0085 abaixo de comparadores sozinho. Como o consumidor do Eduardo e um modelo treinado sobre os embeddings, o regime que importa e esse. Estes candidatos compactos existem para achar o ponto onde a dimensao ainda paga.",
+  "compacto_a_cabecas": [
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "compacto_b_mais_max": [
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst",
+    "delta_p512_max"
+  ],
+  "compacto_c_mais_rcavg": [
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst",
+    "delta_focal_rcavg"
+  ],
+  "compacto_d_mais_ambos": [
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst",
+    "delta_focal_rcavg",
+    "delta_p512_max"
+  ],
+  "conservacao_mais_compacto_c": [
+    "phylop",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst",
+    "delta_focal_rcavg"
+  ],
+  "comparadores_mais_compacto_c": [
+    "alphamissense",
+    "cadd",
+    "gnomad",
+    "other_predictors",
+    "pangolin",
+    "phylop",
+    "revel",
+    "spliceai",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst",
+    "delta_focal_rcavg"
   ]
 }
