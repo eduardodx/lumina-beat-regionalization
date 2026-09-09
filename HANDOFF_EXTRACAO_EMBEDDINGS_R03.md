@@ -2,7 +2,7 @@
 
 > **Para quem pega num chat novo: este doc é auto-contido.** Leia inteiro antes de tocar em código.
 > Datado **2026-09-08**. Autor: Gabriel (dev, TCC). Gestor: Eduardo.
-> Branch: **`embedding-probe-mosaic`**. Último commit: `5035304`.
+> Branch: **`embedding-probe-mosaic`**. Último commit: `14b5d00` (atualizado 08/09 à noite).
 >
 > Esta frente **sucede** a sonda de embedding (`HANDOFF_SONDA_EMBEDDING_VARIANTE_MOSAIC.md`), que já
 > foi concluída e reportada ao Eduardo. Os achados da sonda são **premissa** do que se faz aqui.
@@ -33,7 +33,8 @@ proposta sem suposições. Foco no **R03** (a versão mais recente do beat).
 |---|---|---|
 | **R0** | Harness de avaliação sob o protocolo do Mosaic | ✅ fechado e validado |
 | **R1** | Extração rica: uma passada de GPU, tudo de uma vez | ✅ rodado (10.761 gold, 19 min) |
-| **R2** | Ablações offline sobre as features | 🔄 **1ª rodada feita; 3 runs pendentes** |
+| **R2** | Ablações offline sobre as features | ✅ 4 células: ridge/MLP × core_locus/gene_transfer |
+| **R2b–d** | Ortogonalidade vs comparadores, ablação limpa de gnomAD, recorte por cobertura | ✅ rodado; **1 run pendente (§7)** |
 | **R3** | O que exigir extração nova (16k vs 4k, boost nativo) | ⬜ não iniciado |
 | **R4** | Configuração final sob o protocolo completo (gold+consensus) | ⬜ não iniciado |
 
@@ -156,16 +157,21 @@ Eu apostei que camadas intermediárias transfeririam melhor (a última alimenta 
 especializada demais). **Não é o caso.** Consequência prática: **não precisamos de hooks na extração
 final** — o `mid_hidden_state` do `encode()` basta.
 
-### 5.3 Max-pool ≫ média — **o maior efeito isolado, e não estava na proposta**
+### 5.3 Max-pool NÃO é o maior efeito isolado — **era muleta de não-linearidade** (corrigido)
 
-```
-delta_focal + p512 (média)   0.7579
-delta_focal + p512 (MAX)     0.8933      ← +0.135
-```
+A primeira leitura dizia "+0.135, o maior ganho de desenho". O probe MLP derrubou isso. Rodando a
+**mesma feature** nos dois probes:
 
-Conversa direto com o perfil da sonda: a razão máximo/média crescia com a distância, ou seja o efeito
-tem **picos heterogêneos**. A média os dilui, o máximo os captura. (`pooled(..., reduce="max")` é
-`window.abs().amax(dim=1)`.)
+| max-pool ±512 sobre `delta_focal` | ganho |
+|---|---:|
+| probe **ridge** | **+0.1451** |
+| probe **MLP** | **+0.0108** |
+
+`pooled(..., reduce="max")` é `window.abs().amax(dim=1)` — o `abs` é uma **não-linearidade**. O ridge
+não consegue construí-la e o max-pool a entregava de graça; um modelo não-linear já a tem. O valor
+real da agregação espacial é **+0.011**, não +0.135. Como o consumidor pretendido é não-linear, é o
++0.011 que vale. O bloco fica na especificação por estabilizar sob bloqueio de gene (§5.7), não pelo
+número original.
 
 ### 5.4 Cabeças — ganham, mas não pelo motivo que eu previa
 
@@ -190,15 +196,22 @@ so_contexto (768d)               0.8872   ← contexto sozinho > variante sozinh
 variante_mais_contexto (1920d)   0.9106
 ```
 
-Pode ser sinal legítimo ("esta posição é importante", que generaliza) ou memorização de gene.
-**Só rodamos `core_locus`. Sem `gene_transfer` não dá para separar.** É o run mais importante pendente.
+**RESOLVIDO pelo `gene_transfer`: é sinal legítimo, não memorização.** O diferencial é limpo porque
+se auto-controla — se o conjunto de teste de gene fosse só mais difícil, tudo cairia junto:
+
+- configurações **com** `ref_*` (podem decorar gene): queda média **−0.019**
+- configurações **sem** contexto (não podem): **+0.005**; a camada L26 até sobe (+0.013)
+
+E o bloco de contexto se paga **igual nas três trilhas**: +0.0166 (core), +0.0162 (gene), +0.0166
+(MLP). **O Bloco C fica.** Ressalva: cabeças e max-pool largo também caem (−0.018 a −0.021), porque
+`region_head` e o raio de ±512 carregam identidade regional — o contexto não está só no `ref_*`.
 
 ### 5.6 Demais
 
 ```
 leitura_trunk        0.7482      leitura_mid          0.7414
 leitura_registers    0.7883      ← registers (768d) batem trunk e mid, apesar de responderem só 2,1%
-rc_so_direta         0.7482      rc_media  0.7576     rc_concatenado 0.7576   ← RC quase não importa
+rc_so_direta         0.7482      rc_media  0.7576     rc_concatenado 0.7576   ← sob ridge, quase não importa
 piso_canal_trivial   0.4736      ← ABAIXO do acaso: confirma que é lookup puro
 piso_substituicao    0.5316
 infra_atual_pos_norma (896d)     0.8983   ← a extração que JÁ existe é forte
@@ -206,18 +219,69 @@ proposta_completa    (2092d)     0.9156   ← melhor
 proposta_mais_rc     (2476d)     0.9154
 ```
 
-### 5.7 A leitura honesta do placar
+### 5.7 A leitura honesta do placar — **por painel, e por ortogonalidade**
 
-| | macro | vs nossa melhor |
-|---|---:|---:|
-| **`proposta_completa`** | **0.9156** | — |
-| gnomAD sozinho (circular) | 0.9090 | +0.007 |
-| **infra atual** | **0.8983** | **+0.017** |
-| conservação (barra honesta) | 0.8768 | +0.039 |
-| todos os comparadores | 0.9801 | **−0.065** |
+A macro escondia o essencial. O `pior` painel é o **missense** em toda configuração acima do acaso.
 
-**Batemos a conservação, empatamos com a gnomAD, ganhamos pouco da infra existente, e estamos bem
-atrás do conjunto de comparadores.** Não reportar "0.9156" sem este contexto.
+| | dims | macro | **missense** | splice | noncoding |
+|---|---:|---:|---:|---:|---:|
+| **R03 `v2_com_rc_medio`** | 2092 | **0.9316** | 0.8290 | 0.9934 | 0.9725 |
+| R03 infra atual | 896 | 0.8983 | 0.7947 | 0.9693 | 0.9308 |
+| conservação (4 scores) | **8** | 0.8768 | **0.8212** | 0.9711 | 0.8380 |
+| gnomAD real (circular) | 6 | 0.9090 | 0.9270 | 0.8487 | 0.9513 |
+| SpliceAI | 8 | 0.8228 | 0.5752 | 0.9901 | 0.9031 |
+| todos os comparadores | 40 | 0.9801 | 0.9633 | 0.9932 | 0.9837 |
+
+O embedding **bate o SpliceAI no splice** e supera **todos** os comparadores isolados no noncoding.
+No missense **empata com 4 colunas de conservação** — mas empatar sozinho não é ser redundante:
+
+**Ortogonalidade (4 células: ridge/MLP × core/gene).** Ganho de macro ao ADICIONAR o embedding:
+
+| adicionado a… | dims | ridge/core | mlp/core | ridge/gene | mlp/gene |
+|---|---:|---:|---:|---:|---:|
+| **conservação** + v2 | 2092 | +0.0723 | +0.0422 | +0.0589 | +0.0507 |
+| **conservação** + cabeças | 180 | +0.0476 | +0.0486 | +0.0420 | +0.0420 |
+| **comparadores** + v2 | 2132 | +0.0021 | −0.0085 | −0.0040 | −0.0189 |
+| **comparadores** + cabeças | 212 | −0.0009 | −0.0032 | −0.0040 | −0.0061 |
+
+**Doze medidas de ganho sobre conservação, todas positivas (+0.042 a +0.072). Onze sobre o conjunto
+de comparadores, nenhuma positiva além de ruído.** O dano cresce monotonicamente com a dimensão nas
+células de MLP — é **diluição**, não contradição. Mas o conjunto contém REVEL, AlphaMissense, CADD,
+PolyPhen2 e PrimateAI (treinados em dados adjacentes ao ClinVar) mais o gnomAD (circular): "não
+acrescenta ao conjunto" é em parte **"o conjunto já viu o gabarito"**.
+
+### 5.8 Formato: a dimensão virou a variável, e os decimais não decidem
+
+| formato | dims | ridge/core | mlp/core | ridge/gene | mlp/gene | amplitude |
+|---|---:|---:|---:|---:|---:|---:|
+| v2 completo | 2092 | 0.9294 | 0.9265 | 0.9197 | 0.9115 | 0.0179 |
+| A: cabeças | 172 | 0.8875 | 0.9118 | 0.8688 | 0.8822 | 0.0430 |
+| B: + max±512 | 556 | — | 0.9142 | 0.9050 | 0.9008 | **0.0134** |
+| C: + rc médio | 556 | 0.8875 | **0.9233** | 0.8764 | 0.9061 | 0.0469 |
+| D: + ambos | 940 | — | 0.9214 | 0.9065 | 0.9051 | 0.0163 |
+
+Sob MLP com ~6,5k exemplos, 2092 dims **pioram** a combinação. As diferenças entre B/C/D estão
+**dentro do ruído** (~2 mil variantes por painel, 5 execuções) e já comparamos configurações demais
+no mesmo teste — escolher formato por essas casas decimais seria garimpo. Escolha por princípio:
+**D (940 dims)** é quase o melhor em toda célula e o segundo mais estável.
+
+### 5.9 Correções que os resultados impuseram
+
+| o que eu afirmei | o que os dados mostraram |
+|---|---|
+| max-pool é o maior ganho de desenho (+0.135) | muleta de não-linearidade; valor real **+0.011** (§5.3) |
+| concatenar RC bate mediar (cos=0.64) | **mediar bate**: `rc_media` 0.9098 vs `rc_concatenado` 0.8926 (MLP) |
+| `proposta_sem_gnomad` mede circularidade | não media — ela também **adicionava** `delta_p512_max`. Ablação limpa: **−0.0016** (ridge) / **−0.0001** (MLP) |
+| o embedding empata com conservação no missense, logo não ganha ali | empata sozinho, mas **soma**: juntos vão a 0.8842 |
+
+### 5.10 Recorte por ausência de gnomAD — **experimento inválido, medida válida**
+
+`--subset gnomad:3` selecionou 3.563 variantes com **86,9% de patogênicas** contra 54,9% no conjunto
+completo (missense: 1.370 P / **28 B**). Erro-padrão da AUROC = 0.025; maior diferença observada =
+1,2 SE. **Nada decidível.** Mas o próprio colapso mede a circularidade: **ausência de gnomAD é quase
+o rótulo**, porque BA1/BS1 usam frequência para chamar benigno. Contraprova: o painel `synonymous`
+inverte (1,3% patogênicas) — para sinônimas a frequência nunca foi o critério. **Não repetir esse
+desenho.**
 
 ### 5.8 Checagens da extração (R1)
 
@@ -256,12 +320,17 @@ comparar `fwd` / `média` / `concatenação`. (Resultado: quase não importa, §
 | `probe_build_manifest.py`, `probe_smoke.py`, `probe_run.py`, `probe_analyze_focal.py`, `probe_batch_diagnostic.py` | — | Da frente da sonda; ainda válidos |
 
 ### Config
-`configs/probe_feature_configs.json` — **63 configurações** em 11 grupos (chaves iniciadas por `_`
-são comentários e o harness as ignora).
+- `configs/probe_feature_configs.json` — **69 configurações** em 14 grupos
+- `configs/probe_ortogonalidade_configs.json` — **21 configurações** cruzando embedding × comparadores
 
-### Testes: **129** no total
-`windows 13 · profile 12 · stats 25 · protocol 19 · build_manifest 21 · rich 17 · feature_eval 9+`
-Os de `rich` e `feature_eval` precisam de torch/numpy (rodam no notebook).
+Chaves iniciadas por `_` são comentários e o harness as ignora. `--features` aceita **vários** npz,
+unidos por `variant_id`. `--subset BLOCO:COLUNA` recorta pelas indicadoras de ausência.
+
+### Testes: **137** no total
+`windows 13 · profile 12 · stats 25 · protocol 19 · build_manifest 21 · rich 17 · feature_eval 15+1 pulado`
+Os de `rich` e `feature_eval` precisam de torch/numpy. O runner conta **SKIP separado de PASS** — um
+teste que pulava por falta de torch já apareceu como aprovado uma vez e escondeu ausência de
+cobertura.
 
 ### Decisões de desenho que **não devem ser revertidas sem motivo**
 
@@ -285,46 +354,51 @@ Os de `rich` e `feature_eval` precisam de torch/numpy (rodam no notebook).
 
 ## 7. PENDENTE — o próximo passo, exatamente
 
-Os três runs abaixo já têm tudo pronto no repo. **CPU, ~10 min cada.** As features já estão extraídas
-em `~/probe/rich/probe_features.npz` (309 MB, 10.761 gold).
+Falta **um run**, em CPU, com as features já extraídas. Ele decide se a proposta se sustenta.
+
+A pergunta que sobrou: o embedding acrescenta a uma base **forte mas não contaminada**? Conservação
+sozinha é fraca demais para ser a única barra; o conjunto completo já viu o gabarito. O meio-termo é
+`honestos` = **phyloP/phastCons + GERP** (alinhamento entre espécies) **+ SpliceAI + Pangolin**
+(treinados em uso de splice de RNA-seq, nunca em ClinVar). Ficam de fora REVEL (HGMD/ESP), PolyPhen2
+(UniProt), AlphaMissense (rótulos fracos de frequência), CADD (calibrado contra patogênicos
+conhecidos) e gnomAD (circular).
 
 ```bash
-# 1. core_locus com as configs novas (max-pool isolado, sem-gnomAD, proposta_v2)
-export WORK=~/testeArq/lumina-beat-regionalization && cd "$WORK" && git pull && PYTHONPATH="$WORK" "$PY" scripts/probe_feature_eval.py --features ~/probe/rich/probe_features.npz --release-root ~/mosaic-v1 --configs configs/probe_feature_configs.json --out ~/probe/rich/eval_core_v2.json 2>&1 | tee ~/probe/eval_core_v2.log
+export WORK=~/testeArq/lumina-beat-regionalization && cd "$WORK" && git pull && for t in "--mlp --track gene_transfer" "--track gene_transfer" "--mlp"; do PYTHONPATH="$WORK" "$PY" scripts/probe_feature_eval.py --features ~/probe/rich/probe_features.npz ~/probe/baseline/baseline_features.npz --release-root ~/mosaic-v1 --configs configs/probe_ortogonalidade_configs.json $t --out ~/probe/rich/eval_honestos_$(echo $t | tr -d ' -').json; done 2>&1 | tee ~/probe/eval_honestos.log
 ```
 
-```bash
-# 2. gene_transfer -- O MAIS IMPORTANTE
-export WORK=~/testeArq/lumina-beat-regionalization && cd "$WORK" && PYTHONPATH="$WORK" "$PY" scripts/probe_feature_eval.py --features ~/probe/rich/probe_features.npz --release-root ~/mosaic-v1 --configs configs/probe_feature_configs.json --track gene_transfer --out ~/probe/rich/eval_gene_transfer.json 2>&1 | tee ~/probe/eval_gene.log
-```
+### Como ler
 
-```bash
-# 3. probe MLP -- responde se as 68 dims lineares ajudam um modelo nao-linear
-export WORK=~/testeArq/lumina-beat-regionalization && cd "$WORK" && PYTHONPATH="$WORK" "$PY" scripts/probe_feature_eval.py --features ~/probe/rich/probe_features.npz --release-root ~/mosaic-v1 --configs configs/probe_feature_configs.json --mlp --out ~/probe/rich/eval_core_mlp.json 2>&1 | tee ~/probe/eval_mlp.log
-```
-
-### Como ler cada um
-
-**(2) `gene_transfer` é o que decide a especificação.** A **diferença** entre `core_locus` e
-`gene_transfer` para a mesma config **é a medida de memorização**. Olhar especialmente:
-- `so_contexto`: se despencar em gene_transfer, os 0.8872 eram identidade de gene → **o Bloco C sai**.
-- `variante_mais_contexto` vs `so_variante`: se o ganho do contexto sumir, idem.
-
-**(1) `cabecas_sem_gnomad` vs `cabecas_so_gnomad`.** Se o ganho das cabeças vier das 8 dims de
-gnomAD, é circularidade herdada e não vale reportar como capacidade do modelo.
-
-**(3) MLP.** Se `so_cabecas_lineares` subir muito com MLP e pouco com ridge, as direções
-privilegiadas ajudam por viés indutivo — e o Bloco H fica. Se não, ele encolhe para as 10 dims MLP.
+- **`honestos_mais_compacto_d` vs `honestos`.** Se for positivo nas três células, o ganho é
+  defensável: uma base que nunca viu ClinVar, melhorada por sequência pura. É o número que vai para o
+  Eduardo. Se for zero, a conclusão honesta muda para *"o embedding reproduz conservação + SpliceAI,
+  não os supera"* — e a proposta passa a ser sobre **cobertura**, não sobre AUROC.
+- **`comparadores_sem_gnomad_mais_compacto_d`.** Isola se o "não acrescenta" do §5.7 dependia do
+  gnomAD circular estar dentro da base.
+- A célula que decide é **mlp/gene_transfer**: consumidor não-linear + generalização entre genes.
 
 ### Depois disso
 
+- **Documento para o Eduardo** — e só então comparar com a proposta dele. Precisa dizer as duas
+  metades: ganho consistente sobre conservação, ganho **zero** sobre o conjunto de comparadores, com
+  a ressalva de contaminação. Não reportar a macro sem os painéis.
 - **R3**: 4 kb vs 16 kb (4× de custo, só se o pooling largo mostrar ganho) e o **boost nativo**
   (`variant_edit_mask`) — 2× de extração.
 - **R4**: configuração vencedora sob o protocolo **completo** (treino gold+consensus, 5 runs de cada
   trilha). Extração de consensus: ~316 mil variantes × 4 forwards ≈ **3,5 h** a 4 kb.
-- **Documento para o Eduardo**, e só então comparar com a proposta dele.
 
----
+### Especificação candidata (o que os dados sustentam hoje)
+
+| bloco | dims | por quê |
+|---|---:|---|
+| `delta_focal_rcavg` | 384 | Δ = alt − ref no trunk pré-norma, **mediado com o reverse-complement** (grátis: mesmas dims, +0.0022 ridge / +0.0042 MLP) |
+| `heads_lin` + `heads_mlp` + `heads_ref` | 156 | as 7 cabeças lineares saem por W·Δ **exato e sem forward extra**; sob MLP 68 dims ≈ as 384 do trunk |
+| `subst` | 16 | one-hot de substituição, substitui as 64 dims de `h_pure` |
+| `delta_p512_max` | 384 | estabiliza sob bloqueio de gene (o ganho aparente de +0.135 era do ridge) |
+| **total** | **940** | = formato **D** |
+
+Fora, com número: `h_pure` (piso 0.4736, abaixo do acaso), registers (não sobem com MLP: 0.7883 →
+0.7865), tomadas por camada (L26 0.8475 < trunk 0.8884 sob MLP), concatenação RC (mediar bate).
 
 ## 8. Ambiente e fluxo (crucial)
 

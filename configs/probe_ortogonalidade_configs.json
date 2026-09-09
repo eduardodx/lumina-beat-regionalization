@@ -134,5 +134,86 @@
     "heads_ref",
     "subst",
     "delta_focal_rcavg"
+  ],
+  "_comment_3": "O recorte por ausencia de gnomAD (--subset gnomad:3) NAO funcionou: selecionou 3.563 variantes com 86,9% de patogenicas contra 54,9% no conjunto completo -- 28 benignas no painel missense. Ausencia de gnomAD e quase o rotulo, porque ACMG BA1/BS1 usam frequencia para chamar benigno. Erro-padrao de 0.025 no missense, maior diferenca observada de 1,2 SE: nada decidivel. Nao repetir esse desenho.",
+  "_comment_4": "A barra intermediaria correta, no dado INTEIRO e balanceado. 'honestos' = so preditores que nunca viram ClinVar: phyloP/phastCons e GERP (alinhamento entre especies), SpliceAI e Pangolin (treinados em uso de splice de RNA-seq/GTEx). FICAM DE FORA: REVEL (treinado em HGMD/ESP), PolyPhen2 (anotacao de doenca do UniProt), AlphaMissense (rotulos fracos derivados de frequencia gnomAD), CADD (calibrado contra conjuntos patogenicos conhecidos) e gnomAD (circular por BA1/BS1). Se o embedding acrescentar AQUI, o ganho e defensavel.",
+  "honestos": [
+    "phylop",
+    "spliceai",
+    "pangolin",
+    "other_predictors[2:3]",
+    "other_predictors[6:7]"
+  ],
+  "honestos_mais_v2": [
+    "phylop",
+    "spliceai",
+    "pangolin",
+    "other_predictors[2:3]",
+    "other_predictors[6:7]",
+    "delta_focal",
+    "delta_p25",
+    "delta_p512_max",
+    "ref_focal",
+    "ref_p512",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "honestos_mais_compacto_d": [
+    "phylop",
+    "spliceai",
+    "pangolin",
+    "other_predictors[2:3]",
+    "other_predictors[6:7]",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst",
+    "delta_focal_rcavg",
+    "delta_p512_max"
+  ],
+  "honestos_mais_cabecas": [
+    "phylop",
+    "spliceai",
+    "pangolin",
+    "other_predictors[2:3]",
+    "other_predictors[6:7]",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst"
+  ],
+  "comparadores_sem_gnomad": [
+    "alphamissense",
+    "cadd",
+    "other_predictors",
+    "pangolin",
+    "phylop",
+    "revel",
+    "spliceai"
+  ],
+  "comparadores_sem_gnomad_mais_compacto_d": [
+    "alphamissense",
+    "cadd",
+    "other_predictors",
+    "pangolin",
+    "phylop",
+    "revel",
+    "spliceai",
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst",
+    "delta_focal_rcavg",
+    "delta_p512_max"
+  ],
+  "compacto_d": [
+    "heads_lin",
+    "heads_mlp",
+    "heads_ref",
+    "subst",
+    "delta_focal_rcavg",
+    "delta_p512_max"
   ]
 }
