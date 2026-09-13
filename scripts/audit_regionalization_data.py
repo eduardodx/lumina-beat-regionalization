@@ -5,31 +5,34 @@ Roda no notebook (pandas + pyarrow; sem GPU, sem S3). So escreve o JSON de saida
 
 POR QUE EXISTE
 --------------
-O redesenho (tirar o adapter ClinVar e a fusion, regionalizar com gnomAD e ABraOM) passa a depender
-das colunas de frequencia e do T_nonBR congelado. Lendo o codigo, cinco fatos que o desenho precisa
-ficaram LIDOS mas nao MEDIDOS. Este script mede, sem supor:
+O redesenho (tirar o adapter ClinVar e a fusion, manter a adaptacao populacional) depende das colunas de
+frequencia e do T_nonBR congelado. Lendo o codigo, cinco fatos que o desenho precisa ficaram LIDOS mas
+nao MEDIDOS. Este script mede, sem supor:
 
   [A] af_gnomad condicional ao ABraOM. Em prepare_regional_clinvar_dataset.py o af_gnomad chega SO pelo
-      merge (how="inner") com o indice ABraOM v2, e depois vai por left-join ao ClinVar. Se isso vale no
-      dado, o "91% do br_only ausente do gnomAD" da Fase 0 quer dizer "ausente do indice ABraOM": o
-      gnomAD nunca foi consultado para essas variantes.
+      merge (how="inner") com o indice ABraOM v2, e depois vai por left-join ao ClinVar. E o join so e
+      TENTADO para SNVs (build_abraom_matches filtra is_snv): nao-SNV nunca tem abraom_present, af_abraom
+      nem af_gnomad, por construcao. Por isso [A] sai separado para SNV e nao-SNV -- misturar os dois
+      faria o bloco nao-SNV, vazio por construcao, parecer evidencia.
   [B] Pareamento indireto por ABraOM no T_nonBR. O matcher usa log10(af_gnomad.fillna(0)) na distancia.
-      Se [A] vale, essa feature carrega a presenca no ABraOM e os pares teriam casado por ela -- o que o
-      paragrafo 6.7 do Eduardo proibe ("nao parear por presenca no ABraOM"). Compara a concordancia de
-      abraom_present nos pares com a esperada se o matcher sorteasse dentro do estrato exato
-      (gene, label, tipo).
+      Se [A] vale, essa feature carrega a presenca no ABraOM, e os pares podem ter casado por ela -- o que
+      o paragrafo 6.7 do Eduardo proibe. Compara a concordancia de abraom_present nos pares com a
+      esperada se o matcher sorteasse dentro do estrato exato (gene, label, tipo), so nos estratos mistos.
   [C] Sobreposicao com o gold do Mosaic. A receita de extracao de embeddings foi escolhida no gold do
       Mosaic; se ele contem variantes do T_BR/T_nonBR, a escolha tocou o teste da regionalizacao.
-  [D] Composicao por tipo de variante. A receita de 172 dims foi validada SO em SNV.
+  [D] Composicao por tipo de variante E rotulo, no slice, nos membros BR dos pares e no controle. A
+      receita de 172 dims foi validada so em SNV; uma campanha principal so-SNV depende de quantas
+      BENIGNAS sobram, que e o lado que limita o poder.
   [E] (opcional, --abraom-tsv) Piso de AF do ABraOM: AF minima do TSV cru SABE-WGS-1171, e quantas
       variantes do T_BR estao no TSV cru mas marcadas abraom_present=False pelo indice v2.
 
 O QUE ESTE SCRIPT NAO PROVA
 ---------------------------
-[B] mede EXCESSO de concordancia sobre um sorteio dentro do estrato. O matcher real tambem usou
+[B] mede EXCESSO de concordancia sobre um sorteio dentro do estrato. (1) O matcher real tambem usou
 submitters, estrelas e consequencia, que podem correlacionar com a presenca no ABraOM por motivos
-legitimos. Excesso aqui e evidencia do mecanismo, nao prova; o teste decisivo e re-parear sem af_gnomad
-e comparar os dois T_nonBR.
+legitimos. (2) O z usa uma aproximacao binomial independente; o matcher sorteia sem reposicao e em
+ordem gulosa, entao o z e indicativo, nao um teste exato. (3) Nem a DIRECAO do efeito sobre a DiD sai
+daqui. O teste decisivo e re-parear com a anotacao de gnomAD corrigida e comparar os dois T_nonBR.
 
 USO (notebook)
 --------------
@@ -97,6 +100,11 @@ def key_chrom(keys):
 def snv_from_key(keys):
     parts = keys.astype("string").str.split(":")
     return (parts.str[2].str.len() == 1) & (parts.str[3].str.len() == 1)
+
+
+def snv_mask(frame, key_col: str = "variant_key"):
+    """Mascara numpy de SNV derivada do variant_key (nao depende do dtype de is_snv)."""
+    return snv_from_key(frame[key_col]).fillna(False).astype(bool).to_numpy()
 
 
 def build_key(chrom, pos, ref, alt):
@@ -198,7 +206,7 @@ def audit_pair_abraom_concordance(pairs, pool) -> dict:
         exp = float(np.where(br_p[mask], q[mask], 1.0 - q[mask]).mean())
         se = math.sqrt(max(exp * (1.0 - exp), 1e-12) / m)
         return {"n": m, "concordancia_observada": obs, "concordancia_esperada_sorteio_no_estrato": exp,
-                "excesso": obs - exp, "z": (obs - exp) / se}
+                "excesso": obs - exp, "z_aproximado": (obs - exp) / se}
 
     has_q = ~np.isnan(q)
     # So em estratos MISTOS (0<q<1) o matcher tem escolha; em estratos puros a concordancia e forcada.
@@ -215,14 +223,16 @@ def audit_pair_abraom_concordance(pairs, pool) -> dict:
         "todos_os_estratos": _block(has_q),
         "estratos_mistos": _block(mixed),
         "pares_sem_estrato_no_pool": int((~has_q).sum()),
+        "nota_incerteza": ("z por aproximacao binomial independente; o matcher sorteia sem reposicao e em "
+                           "ordem gulosa. Indicativo, nao teste exato; nao informa a direcao do efeito na DiD."),
     }
     blk = out["estratos_mistos"]
     if blk.get("n", 0) == 0:
         out["veredito"] = "sem estratos mistos: nao ha como o matcher ter escolhido por ABraOM"
-    elif blk["z"] > 3 and blk["excesso"] > 0.05:
-        out["veredito"] = ("EVIDENCIA FORTE de pareamento pela presenca no ABraOM (viola o 6.7): "
-                           "re-parear sem af_gnomad e comparar")
-    elif blk["z"] > 3:
+    elif blk["z_aproximado"] > 3 and blk["excesso"] > 0.05:
+        out["veredito"] = ("EVIDENCIA FORTE de pareamento associado a presenca no ABraOM (paragrafo 6.7): "
+                           "re-parear com gnomAD corrigido e comparar")
+    elif blk["z_aproximado"] > 3:
         out["veredito"] = "excesso detectavel mas pequeno (<0.05): registrar, re-parear e comparar"
     else:
         out["veredito"] = "sem evidencia de pareamento pela presenca no ABraOM"
@@ -262,14 +272,29 @@ def audit_overlap(mosaic: dict, targets: dict) -> dict:
             for tier, tset in mosaic.items()}
 
 
-def composition(df, key_col: str = "variant_key", type_col: str = "variant_type") -> dict:
+def composition(df, key_col: str = "variant_key", type_col: str = "variant_type", label_col: str = "label") -> dict:
+    """Contagens por tipo e por rotulo. O lado benigno e o que limita o poder de uma campanha so-SNV."""
+    import pandas as pd
+
     out: dict = {"n": int(len(df))}
+    lab = pd.to_numeric(df[label_col], errors="coerce") if label_col in df.columns else None
     if type_col in df.columns:
-        out["variant_type"] = {str(k): int(v) for k, v in df[type_col].value_counts(dropna=False).items()}
+        types = df[type_col].astype("string").fillna("NA")
+        out["variant_type"] = {str(k): int(v) for k, v in types.value_counts().items()}
+        if lab is not None:
+            out["variant_type_x_label"] = {
+                str(t): {"P": int(((types == t) & (lab == 1)).sum()), "B": int(((types == t) & (lab == 0)).sum())}
+                for t in types.unique()
+            }
     if key_col in df.columns:
         snv = snv_from_key(df[key_col]).fillna(False).astype(bool)
         out["snv_pelo_key"] = int(snv.sum())
         out["nao_snv_pelo_key"] = int((~snv).sum())
+        if lab is not None:
+            out["snv_P"] = int((snv & (lab == 1)).sum())
+            out["snv_B"] = int((snv & (lab == 0)).sum())
+            out["nao_snv_P"] = int((~snv & (lab == 1)).sum())
+            out["nao_snv_B"] = int((~snv & (lab == 0)).sum())
     return out
 
 
@@ -317,6 +342,7 @@ def audit_abraom_tsv(path: Path, br_main, chunksize: int = 2_000_000) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     import pandas as pd
+    import pyarrow.parquet as pq
 
     args = parse_args(argv)
     excl = str(args.exclude_chrom).strip().lower().removeprefix("chr")
@@ -327,17 +353,23 @@ def main(argv: list[str] | None = None) -> int:
     pairs = pd.read_parquet(args.pairs)
     print(f"[audit] T_BR (sem chr{excl}): {len(br):,} · pool nonBR: {len(nonbr):,} · pares: {len(pairs):,}")
 
-    print("\n[A] af_gnomad condicional ao ABraOM")
-    report["A_af_gnomad_condicional"] = [audit_af_gnomad_conditional(br, "br_only"),
-                                         audit_af_gnomad_conditional(nonbr, "nonbr_only")]
-    for blk in report["A_af_gnomad_condicional"]:
+    print("\n[A] af_gnomad condicional ao ABraOM (separado por SNV: o join do ABraOM so tenta SNV)")
+    blocks_a = []
+    for frame, name in ((br, "br_only"), (nonbr, "nonbr_only")):
+        snv = snv_mask(frame)
+        blocks_a.append(audit_af_gnomad_conditional(frame[snv], f"{name}/SNV"))
+        blocks_a.append(audit_af_gnomad_conditional(frame[~snv], f"{name}/nao-SNV"))
+    report["A_af_gnomad_condicional"] = blocks_a
+    for blk in blocks_a:
         if "erro" in blk:
             print(f"    {blk['slice']}: {blk['erro']}")
             continue
-        print(f"    {blk['slice']:<11} n={blk['n']:,}  abraom_present={blk['abraom_present']:,}  "
+        print(f"    {blk['slice']:<20} n={blk['n']:,}  abraom_present={blk['abraom_present']:,}  "
               f"af_gnomad preenchido={blk['af_gnomad_preenchido']:,}  zero/NA={blk['af_gnomad_zero_ou_na']:,}")
-        print(f"                P(af_gnomad preenchido | fora do ABraOM) = {blk['p_af_preenchido_se_abraom_ausente']}")
-        print(f"                -> {blk['veredito']}")
+        print(f"                         P(af_gnomad preenchido | fora do ABraOM) = "
+              f"{blk['p_af_preenchido_se_abraom_ausente']}  -> {blk['veredito']}")
+        if blk["slice"].endswith("nao-SNV") and blk["n"] > 0 and blk["abraom_present"] == 0:
+            print("                         (estrutural: build_abraom_matches so tenta SNV; nao-SNV nunca entra no ABraOM)")
 
     print("\n[B] pareamento indireto por ABraOM (paragrafo 6.7)")
     b = audit_pair_abraom_concordance(pairs, nonbr)
@@ -350,20 +382,30 @@ def main(argv: list[str] | None = None) -> int:
             if blk.get("n"):
                 print(f"    {label:<18} n={blk['n']:,}  observada={blk['concordancia_observada']:.3f}  "
                       f"esperada={blk['concordancia_esperada_sorteio_no_estrato']:.3f}  "
-                      f"excesso={blk['excesso']:+.3f}  z={blk['z']:.1f}")
+                      f"excesso={blk['excesso']:+.3f}  z~{blk['z_aproximado']:.1f}")
         print(f"    -> {b['veredito']}")
+        print(f"    ({b['nota_incerteza']})")
 
-    print("\n[D] composicao por tipo de variante")
-    report["D_composicao"] = {"t_br": composition(br), "t_nonbr_pareado": composition(
-        pairs.rename(columns={"nonbr_variant_key": "variant_key", "nonbr_variant_type": "variant_type"}))}
+    print("\n[D] composicao por tipo e rotulo (poder de uma campanha principal so-SNV)")
+    pair_br = pairs.rename(columns={"br_variant_key": "variant_key", "br_variant_type": "variant_type",
+                                    "br_label": "label"})
+    pair_nb = pairs.rename(columns={"nonbr_variant_key": "variant_key", "nonbr_variant_type": "variant_type",
+                                    "nonbr_label": "label"})
+    report["D_composicao"] = {"t_br_slice": composition(br), "t_br_pareado": composition(pair_br),
+                              "t_nonbr_pareado": composition(pair_nb)}
     for name, blk in report["D_composicao"].items():
-        print(f"    {name:<16} n={blk['n']:,}  snv={blk.get('snv_pelo_key')}  nao_snv={blk.get('nao_snv_pelo_key')}  "
-              f"tipos={blk.get('variant_type')}")
+        print(f"    {name:<16} n={blk['n']:,}  SNV P/B={blk.get('snv_P')}/{blk.get('snv_B')}  "
+              f"nao-SNV P/B={blk.get('nao_snv_P')}/{blk.get('nao_snv_B')}")
 
-    targets = {"t_br": set(br["variant_key"].astype(str)),
-               "t_nonbr": set(pairs["nonbr_variant_key"].astype(str)) if "nonbr_variant_key" in pairs.columns else set()}
+    targets = {"t_br_slice": set(br["variant_key"].astype(str))}
+    for side in ("br", "nonbr"):
+        col = f"{side}_variant_key"
+        if col in pairs.columns:
+            targets[f"t_{side}_pareado"] = set(pairs[col].astype(str))
     if args.splits is not None:
-        splits = pd.read_parquet(args.splits, columns=["variant_key", "split_within_gene"])
+        names = set(pq.ParquetFile(args.splits).schema_arrow.names)
+        cols = [c for c in ("variant_key", "split_within_gene", "label") if c in names]
+        splits = pd.read_parquet(args.splits, columns=cols)
         for name, grp in splits.groupby("split_within_gene"):
             targets[f"split_{name}"] = set(grp["variant_key"].astype(str))
         report["D_composicao"]["splits"] = {str(n): composition(g) for n, g in splits.groupby("split_within_gene")}
