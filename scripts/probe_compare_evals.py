@@ -7,7 +7,9 @@ antiga e a nova e mostra, por configuracao, a macro e o missense antes e depois,
 no ranking.
 
 ``--contrast A:B`` refaz as comparacoes em que as conclusoes se apoiaram: a diferenca A - B na
-avaliacao antiga, na nova, e se o SINAL se manteve. Uma conclusao que troca de sinal nao sobreviveu.
+avaliacao antiga, na nova, e se o SINAL se manteve, conferido separadamente na macro e no missense
+(uma diferenca pode se manter na macro e inverter no missense). Uma conclusao que troca de sinal nao
+sobreviveu; diferenca exatamente zero nao tem sinal e aparece como ``--``.
 
 USO
 ---
@@ -22,6 +24,8 @@ import json
 from pathlib import Path
 
 PANEL = "missense"
+METRICS = ("macro", PANEL)
+FLAG = {True: "mantido", False: "INVERTIDO", None: "--"}
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -51,6 +55,13 @@ def delta(a, b):
     return (a - b) if isinstance(a, (int, float)) and isinstance(b, (int, float)) else None
 
 
+def sign_kept(old, new):
+    """Se a diferenca manteve o sinal; ``None`` quando falta um lado ou um deles e exatamente zero."""
+    if not isinstance(old, (int, float)) or not isinstance(new, (int, float)) or old == 0 or new == 0:
+        return None
+    return (old > 0) == (new > 0)
+
+
 def ranks(configs: dict) -> dict:
     ordered = sorted((c for c in configs if configs[c].get("macro") is not None),
                      key=lambda c: -configs[c]["macro"])
@@ -77,10 +88,9 @@ def compare(old: dict, new: dict, contrasts: list[str]) -> dict:
         a, _, b = spec.partition(":")
         res: dict = {"contrast": spec}
         for label, src in (("old", old), ("new", new)):
-            res[f"macro_{label}"] = delta(value(src.get(a), "macro"), value(src.get(b), "macro"))
-            res[f"missense_{label}"] = delta(value(src.get(a), PANEL), value(src.get(b), PANEL))
-        mo, mn = res["macro_old"], res["macro_new"]
-        res["sinal_mantido"] = None if mo is None or mn is None else (mo > 0) == (mn > 0)
+            for metric in METRICS:
+                res[f"{metric}_{label}"] = delta(value(src.get(a), metric), value(src.get(b), metric))
+        res["sinal"] = {metric: sign_kept(res[f"{metric}_old"], res[f"{metric}_new"]) for metric in METRICS}
         out.append(res)
     return {"rows": rows, "contrasts": out,
             "so_no_antigo": sorted(set(old) - set(new)), "so_no_novo": sorted(set(new) - set(old))}
@@ -115,11 +125,12 @@ def main(argv: list[str] | None = None) -> int:
               f"({rows[0]['config']})")
 
     if res["contrasts"]:
-        print(f"\n{'contraste (A - B)':<48}{'macro ant':>10}{'macro nov':>10}{'miss ant':>10}{'miss nov':>10}  sinal")
+        print(f"\n{'contraste (A - B)':<48}{'macro ant':>10}{'macro nov':>10}{'miss ant':>10}{'miss nov':>10}"
+              f"  {'sinal macro':<13}sinal missense")
         for c in res["contrasts"]:
-            flag = {True: "mantido", False: "INVERTIDO", None: "--"}[c["sinal_mantido"]]
             print(f"{c['contrast']:<48}{_d(c['macro_old']):>10}{_d(c['macro_new']):>10}"
-                  f"{_d(c['missense_old']):>10}{_d(c['missense_new']):>10}  {flag}")
+                  f"{_d(c[PANEL + '_old']):>10}{_d(c[PANEL + '_new']):>10}"
+                  f"  {FLAG[c['sinal']['macro']]:<13}{FLAG[c['sinal'][PANEL]]}")
     return 0
 
 

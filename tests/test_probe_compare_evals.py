@@ -33,10 +33,25 @@ def test_contrast_flags_a_conclusion_that_flips_sign():
     old = {"cabecas": _cfg(0.88, 0.75), "hidden": _cfg(0.89, 0.78), "max": _cfg(0.90, 0.77)}
     new = {"cabecas": _cfg(0.90, 0.79), "hidden": _cfg(0.87, 0.76), "max": _cfg(0.91, 0.78)}
     res = compare(old, new, ["cabecas:hidden", "max:hidden", "falta:hidden"])
-    by = {c["contrast"]: c for c in res["contrasts"]}
-    assert by["cabecas:hidden"]["sinal_mantido"] is False, by["cabecas:hidden"]   # -0.01 -> +0.03
-    assert by["max:hidden"]["sinal_mantido"] is True, by["max:hidden"]            # +0.01 -> +0.04
-    assert by["falta:hidden"]["sinal_mantido"] is None, "config ausente nao pode virar mantido/invertido"
+    by = {c["contrast"]: c["sinal"] for c in res["contrasts"]}
+    assert by["cabecas:hidden"] == {"macro": False, "missense": False}, by  # -0.01 -> +0.03 nos dois
+    assert by["max:hidden"] == {"macro": True, "missense": False}, by       # macro +0.01 -> +0.04; missense -0.01 -> +0.02
+    assert by["falta:hidden"] == {"macro": None, "missense": None}, "config ausente nao pode virar mantido/invertido"
+
+
+def test_missense_flip_is_reported_even_when_macro_holds():
+    # caso real do rerun (mlp/gene_transfer): honestos_mais_cabecas - honestos_mais_v2
+    old = {"cabecas": _cfg(0.9372, 0.8513), "v2": _cfg(0.9257, 0.8386)}
+    new = {"cabecas": _cfg(0.9379, 0.8540), "v2": _cfg(0.9301, 0.8542)}
+    sinal = compare(old, new, ["cabecas:v2"])["contrasts"][0]["sinal"]
+    assert sinal == {"macro": True, "missense": False}, sinal
+
+
+def test_exact_zero_difference_has_no_sign():
+    old = {"a": _cfg(0.9, 0.8), "b": _cfg(0.9, 0.8)}
+    new = {"a": _cfg(0.91, 0.8), "b": _cfg(0.9, 0.81)}
+    sinal = compare(old, new, ["a:b"])["contrasts"][0]["sinal"]
+    assert sinal == {"macro": None, "missense": None}, sinal
 
 
 if __name__ == "__main__":
