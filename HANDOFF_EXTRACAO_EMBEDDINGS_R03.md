@@ -136,9 +136,12 @@ conferir no checkpoint se for usar.
 > **Probe MLP rerodado em 14/09 com o mesmo critério de seleção do ridge** (macro dos painéis, commit
 > `1615955`); os números de MLP desta seção já são os do rerun. A macro mudou 0.002 em média (máximo 0.012,
 > na conservação sozinha) e a ordem das configurações se manteve (correlação de postos ≥ 0.995 nas três
-> tabelas). Ressalvas na §5.7 (ordem da diluição no mlp/gene) e na §5.9 (registers). Na comparação com a
-> base `honestos` (run da §7), a vantagem das cabeças sobre o v2 no missense virou empate (+0.006/+0.013 →
-> −0.0004/−0.0002); a favor das cabeças ficam a macro (diluem menos o noncoding) e o tamanho.
+> tabelas), calculado das tabelas impressas com 4 casas; só a célula mlp/gene foi conferida nos JSONs. Ressalvas
+> na §5.7 (ordem da diluição no mlp/gene) e na §5.9 (registers). Na comparação com a base `honestos` (run da
+> §7), a diferença cabeças − v2 no missense foi de +0.006/+0.013 para −0.0004/−0.0002: valores muito próximos,
+> sem incerteza quantificada, e não equivalência (isolado, o v2 fica +0.027/+0.042 à frente no missense). As
+> cabeças perdem menos em noncoding que o v2 nessas avaliações, ainda com perda, e são 12× menores.
+> **Nenhuma diferença desta seção tem intervalo de confiança:** "dentro do ruído" é leitura, não medida.
 
 ### 5.1 Baselines — o que precisamos superar
 
@@ -259,7 +262,7 @@ No missense **empata com 4 colunas de conservação** — mas empatar sozinho n�
 **Doze medidas de ganho sobre conservação, todas positivas (+0.042 a +0.072). Onze sobre o conjunto
 de comparadores, nenhuma positiva além de ruído.** Nas células de MLP o dano tende a crescer com a
 dimensão — é **diluição**, não contradição —, mas a ordem não é estrita: no mlp/gene as cabeças (212
-dims, −0.0108) ficaram atrás do compacto C (596 dims, −0.0085), dentro do ruído. No mlp/core, parte do
+dims, −0.0108) ficaram atrás do compacto C (596 dims, −0.0085), diferença pequena e sem incerteza quantificada. No mlp/core, parte do
 ganho sobre conservação vem da própria base, que sozinha caiu de 0.8903 para 0.8780 com o critério
 macro. E o conjunto de comparadores contém REVEL, AlphaMissense, CADD, PolyPhen2 e PrimateAI (treinados
 em dados adjacentes ao ClinVar) mais o gnomAD (circular): "não acrescenta ao conjunto" é em parte
@@ -275,8 +278,8 @@ em dados adjacentes ao ClinVar) mais o gnomAD (circular): "não acrescenta ao co
 | C: + rc médio | 556 | 0.8875 | **0.9231** | 0.8764 | 0.9081 | 0.0467 |
 | D: + ambos | 940 | — | 0.9214 | 0.9065 | 0.9074 | 0.0149 |
 
-Sob MLP com ~6,5k exemplos, 2092 dims **pioram** a combinação. As diferenças entre B/C/D estão
-**dentro do ruído** (~2 mil variantes por painel, 5 execuções) e já comparamos configurações demais
+Sob MLP com ~6,5k exemplos, 2092 dims **pioram** a combinação. As diferenças entre B/C/D são
+**pequenas e sem incerteza quantificada** (~2 mil variantes por painel, 5 execuções) e já comparamos configurações demais
 no mesmo teste — escolher formato por essas casas decimais seria garimpo. Escolha por princípio:
 **D (940 dims)** é quase o melhor em toda célula e o segundo mais estável. Com o critério macro, a
 ordem dos formatos nas duas células de MLP não mudou (C > D > B > A).
