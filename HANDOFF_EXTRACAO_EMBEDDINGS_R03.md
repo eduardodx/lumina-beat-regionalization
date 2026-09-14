@@ -95,7 +95,8 @@ h_up **pré-norma** (384 dims): como o RMSNorm não é linear, as cabeças **nã
 dentro do span, o ridge com padronização por coluna muda a regularização efetiva e pode generalizar
 diferente. A frase antiga "um probe linear não pode ganhar com elas" não vale para os números da §5. O
 probe MLP compara o uso linear e não-linear das mesmas features; até 14/09 ele escolhia a época por um
-critério diferente do ridge (AUROC conjunta), corrigido para a macro dos painéis de discriminação.
+critério diferente do ridge (AUROC conjunta); foi corrigido para a macro dos painéis de discriminação e
+rerodado (nota no início da §5).
 
 ### 4.2 As camadas de atenção local NÃO são chamadas como módulos
 
@@ -131,6 +132,13 @@ conferir no checkpoint se for usar.
 ---
 
 ## 5. RESULTADOS medidos (todos sob o protocolo do Mosaic, `core_locus`, treino gold-only)
+
+> **Probe MLP rerodado em 14/09 com o mesmo critério de seleção do ridge** (macro dos painéis, commit
+> `1615955`); os números de MLP desta seção já são os do rerun. A macro mudou 0.002 em média (máximo 0.012,
+> na conservação sozinha) e a ordem das configurações se manteve (correlação de postos ≥ 0.995 nas três
+> tabelas). Ressalvas na §5.7 (ordem da diluição no mlp/gene) e na §5.9 (registers). Na comparação com a
+> base `honestos` (run da §7), a vantagem das cabeças sobre o v2 no missense virou empate (+0.006/+0.013 →
+> −0.0004/−0.0002); a favor das cabeças ficam a macro (diluem menos o noncoding) e o tamanho.
 
 ### 5.1 Baselines — o que precisamos superar
 
@@ -206,7 +214,7 @@ se auto-controla — se o conjunto de teste de gene fosse só mais difícil, tud
 - configurações **com** `ref_*` (podem decorar gene): queda média **−0.019**
 - configurações **sem** contexto (não podem): **+0.005**; a camada L26 até sobe (+0.013)
 
-E o bloco de contexto se paga **igual nas três trilhas**: +0.0166 (core), +0.0162 (gene), +0.0166
+E o bloco de contexto se paga **igual nas três trilhas**: +0.0166 (core), +0.0162 (gene), +0.0157
 (MLP). **O Bloco C fica.** Ressalva: cabeças e max-pool largo também caem (−0.018 a −0.021), porque
 `region_head` e o raio de ±512 carregam identidade regional — o contexto não está só no `ref_*`.
 
@@ -243,40 +251,45 @@ No missense **empata com 4 colunas de conservação** — mas empatar sozinho n�
 
 | adicionado a… | dims | ridge/core | mlp/core | ridge/gene | mlp/gene |
 |---|---:|---:|---:|---:|---:|
-| **conservação** + v2 | 2092 | +0.0723 | +0.0422 | +0.0589 | +0.0507 |
-| **conservação** + cabeças | 180 | +0.0476 | +0.0486 | +0.0420 | +0.0420 |
-| **comparadores** + v2 | 2132 | +0.0021 | −0.0085 | −0.0040 | −0.0189 |
-| **comparadores** + cabeças | 212 | −0.0009 | −0.0032 | −0.0040 | −0.0061 |
+| **conservação** + v2 | 2092 | +0.0723 | +0.0562 | +0.0589 | +0.0537 |
+| **conservação** + cabeças | 180 | +0.0476 | +0.0618 | +0.0420 | +0.0479 |
+| **comparadores** + v2 | 2132 | +0.0021 | −0.0067 | −0.0040 | −0.0180 |
+| **comparadores** + cabeças | 212 | −0.0009 | −0.0028 | −0.0040 | −0.0108 |
 
 **Doze medidas de ganho sobre conservação, todas positivas (+0.042 a +0.072). Onze sobre o conjunto
-de comparadores, nenhuma positiva além de ruído.** O dano cresce monotonicamente com a dimensão nas
-células de MLP — é **diluição**, não contradição. Mas o conjunto contém REVEL, AlphaMissense, CADD,
-PolyPhen2 e PrimateAI (treinados em dados adjacentes ao ClinVar) mais o gnomAD (circular): "não
-acrescenta ao conjunto" é em parte **"o conjunto já viu o gabarito"**.
+de comparadores, nenhuma positiva além de ruído.** Nas células de MLP o dano tende a crescer com a
+dimensão — é **diluição**, não contradição —, mas a ordem não é estrita: no mlp/gene as cabeças (212
+dims, −0.0108) ficaram atrás do compacto C (596 dims, −0.0085), dentro do ruído. No mlp/core, parte do
+ganho sobre conservação vem da própria base, que sozinha caiu de 0.8903 para 0.8780 com o critério
+macro. E o conjunto de comparadores contém REVEL, AlphaMissense, CADD, PolyPhen2 e PrimateAI (treinados
+em dados adjacentes ao ClinVar) mais o gnomAD (circular): "não acrescenta ao conjunto" é em parte
+**"o conjunto já viu o gabarito"**.
 
 ### 5.8 Formato: a dimensão virou a variável, e os decimais não decidem
 
 | formato | dims | ridge/core | mlp/core | ridge/gene | mlp/gene | amplitude |
 |---|---:|---:|---:|---:|---:|---:|
-| v2 completo | 2092 | 0.9294 | 0.9265 | 0.9197 | 0.9115 | 0.0179 |
-| A: cabeças | 172 | 0.8875 | 0.9118 | 0.8688 | 0.8822 | 0.0430 |
-| B: + max±512 | 556 | — | 0.9142 | 0.9050 | 0.9008 | **0.0134** |
-| C: + rc médio | 556 | 0.8875 | **0.9233** | 0.8764 | 0.9061 | 0.0469 |
-| D: + ambos | 940 | — | 0.9214 | 0.9065 | 0.9051 | 0.0163 |
+| v2 completo | 2092 | 0.9294 | 0.9259 | 0.9197 | 0.9125 | 0.0169 |
+| A: cabeças | 172 | 0.8875 | 0.9092 | 0.8688 | 0.8860 | 0.0404 |
+| B: + max±512 | 556 | — | 0.9135 | 0.9050 | 0.9005 | **0.0130** |
+| C: + rc médio | 556 | 0.8875 | **0.9231** | 0.8764 | 0.9081 | 0.0467 |
+| D: + ambos | 940 | — | 0.9214 | 0.9065 | 0.9074 | 0.0149 |
 
 Sob MLP com ~6,5k exemplos, 2092 dims **pioram** a combinação. As diferenças entre B/C/D estão
 **dentro do ruído** (~2 mil variantes por painel, 5 execuções) e já comparamos configurações demais
 no mesmo teste — escolher formato por essas casas decimais seria garimpo. Escolha por princípio:
-**D (940 dims)** é quase o melhor em toda célula e o segundo mais estável.
+**D (940 dims)** é quase o melhor em toda célula e o segundo mais estável. Com o critério macro, a
+ordem dos formatos nas duas células de MLP não mudou (C > D > B > A).
 
 ### 5.9 Correções que os resultados impuseram
 
 | o que eu afirmei | o que os dados mostraram |
 |---|---|
 | max-pool é o maior ganho de desenho (+0.135) | muleta de não-linearidade; valor real **+0.011** (§5.3) |
-| concatenar RC bate mediar (cos=0.64) | **mediar bate**: `rc_media` 0.9098 vs `rc_concatenado` 0.8926 (MLP) |
+| concatenar RC bate mediar (cos=0.64) | **mediar bate**: `rc_media` 0.9111 vs `rc_concatenado` 0.8949 (MLP) |
 | `proposta_sem_gnomad` mede circularidade | não media — ela também **adicionava** `delta_p512_max`. Ablação limpa: **−0.0016** (ridge) / **−0.0001** (MLP) |
 | o embedding empata com conservação no missense, logo não ganha ali | empata sozinho, mas **soma**: juntos vão a 0.8842 |
+| registers não sobem com MLP (0.7883 → 0.7865) | com o critério macro sobem um pouco (0.7948), ainda longe do trunk (0.8878): continuam fora |
 
 ### 5.10 Recorte por ausência de gnomAD — **experimento inválido, medida válida**
 
@@ -395,14 +408,14 @@ export WORK=~/testeArq/lumina-beat-regionalization && cd "$WORK" && git pull && 
 
 | bloco | dims | por quê |
 |---|---:|---|
-| `delta_focal_rcavg` | 384 | Δ = alt − ref no trunk pré-norma, **mediado com o reverse-complement** (grátis: mesmas dims, +0.0022 ridge / +0.0042 MLP) |
-| `heads_lin` + `heads_mlp` + `heads_ref` | 156 | as 7 cabeças lineares saem por W·Δ **exato e sem forward extra**; sob MLP 68 dims ≈ as 384 do trunk |
+| `delta_focal_rcavg` | 384 | Δ = alt − ref no trunk pré-norma, **mediado com o reverse-complement** (grátis: mesmas dims, +0.0022 ridge / +0.0037 MLP) |
+| `heads_lin` + `heads_mlp` + `heads_ref` | 156 | as 7 cabeças lineares saem por W·Δ **exato e sem forward extra**; sob MLP 68 dims ≈ as 384 do trunk (0.8817 vs 0.8878) |
 | `subst` | 16 | one-hot de substituição, substitui as 64 dims de `h_pure` |
 | `delta_p512_max` | 384 | estabiliza sob bloqueio de gene (o ganho aparente de +0.135 era do ridge) |
 | **total** | **940** | = formato **D** |
 
-Fora, com número: `h_pure` (piso 0.4736, abaixo do acaso), registers (não sobem com MLP: 0.7883 →
-0.7865), tomadas por camada (L26 0.8475 < trunk 0.8884 sob MLP), concatenação RC (mediar bate).
+Fora, com número: `h_pure` (piso 0.4736, abaixo do acaso), registers (0.7883 ridge / 0.7948 MLP,
+longe do trunk), tomadas por camada (L26 0.8571 < trunk 0.8878 sob MLP), concatenação RC (mediar bate).
 
 ## 8. Ambiente e fluxo (crucial)
 
