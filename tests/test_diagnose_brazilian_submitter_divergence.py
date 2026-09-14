@@ -1,8 +1,10 @@
-"""Prova que o diagnostico de submissor brasileiro reproduz a agregacao do Mosaic e separa cada motivo.
+"""Prova que o diagnostico de submissor brasileiro reproduz a agregacao do Mosaic e separa cada motivo, sem tratar
+ausencia de marcacao, pais nao resolvido ou correspondencia parcial como evidencia.
 
 Os testes puros so precisam de stdlib. Os de ponta a ponta usam o Mosaic real (pandas + pyarrow + pyyaml e um
 clone do lumina-mosaic no commit do release, via MOSAIC_ROOT ou ao lado deste repositorio):
     PYTHONPATH=. python tests/test_diagnose_brazilian_submitter_divergence.py
+Com REQUIRE_NO_SKIP=1, teste pulado conta como falha (use no notebook antes de rodar o diagnostico).
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -27,9 +30,6 @@ class Skip(Exception):
 
 ORGS = {"Dasa": "508087", "Mendelics": "500035"}
 INCLUDE = {"508087", "500035"}
-LISTED = "brasileira_na_lista_do_mosaic"
-UNRECOGNIZED = "brasileira_nao_reconhecida_pelo_matcher"
-OTHER = "nao_brasileira_pelo_registro"
 
 
 def _scv(scv: str, submitter: str, cls: str = "Pathogenic", origin: str = "germline:1", vid: str = "v"):
@@ -73,17 +73,20 @@ def test_validation_reports_every_mismatch():
     assert [d["variant_id"] for d in diverge] == ["b", "c"], diverge   # 'c' nem foi reproduzido: tambem diverge
 
 
-def test_classification_separates_coverage_mapping_and_definition():
+def test_classification_describes_marks_not_nationality():
     c = diag.classify
     assert c(True, True, False, False, False, False, False) == diag.OUTSIDE_MASTER
-    assert c(True, True, False, True, False, False, False) == diag.A1        # tabela v1 sem linha nenhuma
-    assert c(True, True, False, True, False, True, True) == diag.A2          # coberta, sem linha brasileira
+    assert c(True, True, False, True, False, False, False) == diag.A1        # v1 sem linha nenhuma
+    assert c(True, True, False, True, False, True, True) == diag.A2          # v1 coberta, sem linha brasileira
     assert c(False, False, False, True, True, False, True) == diag.B
-    assert c(True, False, True, True, True, False, True) == diag.C1          # v1 so BR, Mosaic compartilhada
-    assert c(True, True, False, True, True, True, True) == diag.C2           # v1 mista, Mosaic so BR
-    assert c(True, True, False, True, True, False, True) == diag.AGREE_BR
-    assert c(True, False, True, True, True, True, True) == diag.AGREE_BR
-    assert c(False, False, False, True, False, True, True) == diag.AGREE_NON_BR
+    assert c(True, False, True, True, True, False, True) == diag.C1          # v1 sem linha nao BR, Mosaic compart.
+    assert c(True, True, False, True, True, True, True) == diag.C2           # v1 com linha nao BR, Mosaic so marcadas
+    assert c(True, True, False, True, True, False, True) == diag.BOTH_MARK
+    assert c(True, False, True, True, True, True, True) == diag.BOTH_MARK
+    # nenhum dos dois marca: com e SEM dado na v1 -- nenhum dos casos e "nao brasileira confirmada"
+    assert c(False, False, False, True, False, True, True) == diag.NONE_MARK_COVERED
+    assert c(False, False, False, True, False, False, False) == diag.NONE_MARK_UNCOVERED
+    assert all("nao_br" not in name.split("_marca")[0] for name in (diag.NONE_MARK_COVERED, diag.NONE_MARK_UNCOVERED))
 
 
 def test_set_priority_keeps_paired_members_apart_from_unpaired_slice():
@@ -92,63 +95,105 @@ def test_set_priority_keeps_paired_members_apart_from_unpaired_slice():
         ["t_br_pareado", "t_br_slice", "split_train", "nenhum"]
 
 
-def test_submitter_lookup_handles_semicolons_truncation_and_missing_list():
-    joined = "Laboratorio de Genetica e Diagnostico Molecular; Hospital Israelita Albert Einstein;Mendelics"
-    einstein = _canon("Laboratorio de Genetica e Diagnostico Molecular; Hospital Israelita Albert Einstein")
-    assert diag.submitter_in_list(einstein, joined, _canon) is True
-    assert diag.submitter_in_list(_canon("GeneDx"), joined, _canon) is False
-    assert diag.submitter_in_list(_canon("GeneDx"), "Dasa;Mendelics;...(+3)", _canon) is None   # truncada
-    assert diag.submitter_in_list(_canon("Dasa"), "Dasa;Mendelics;...(+3)", _canon) is True
-    assert diag.submitter_in_list(_canon("Dasa"), float("nan"), _canon) is False                 # sem lista
+def test_submitter_presence_separates_exact_hint_and_indeterminate():
+    p = diag.submitter_presence
+    joined = "Dasa;Laboratorio de Genetica e Diagnostico Molecular; Hospital Israelita Albert Einstein;Mendelics"
+    assert p("lab", "Laboratorio ABC") == diag.PARTIAL                       # o falso positivo apontado na revisao
+    assert p("Dasa", "Dasa Laboratories") == diag.PARTIAL
+    assert p("Laboratorio de Genetica e Diagnostico Molecular; Hospital Israelita Albert Einstein", joined) == diag.EXACT
+    assert p("Dasa", joined) == diag.EXACT and p("Mendelics", joined) == diag.EXACT
+    assert p("GeneDx", joined) == diag.ABSENT
+    assert p("Alpha;Beta", "Alpha;Beta;Gamma") == diag.SEMICOLON_AMBIGUOUS   # podem ser dois nomes vizinhos
+    assert p("Diagnósticos da América", "Diagnosticos da America;Mendelics") == diag.EXACT
+    assert p("GeneDx", "Dasa;Mendelics;...(+3)") == diag.TRUNCATED           # truncada: ausencia nao se afirma
+    assert p("Mendelics", "Dasa;Mendelics;...(+3)") == diag.EXACT
+    for missing in (float("nan"), None, "", "   "):
+        assert p("Dasa", missing) == diag.NO_LIST, missing
 
 
-def test_country_lookup_separates_unrecognized_from_non_brazilian():
+def test_country_lookup_keeps_unresolved_apart_from_non_brazilian():
     header = "#organization\torganization ID\tinstitution type\tstreet address\tcity\tcountry\n"
     body = ("Dasa\t508087\tlab\t\tSao Paulo\tBrazil\n"
             "Laboratorio Novo\t999\tlab\t\tRecife\tBrazil\n"
             "GeneDx\t26957\tlab\t\tGaithersburg\tUnited States\n"
             "Duplicado\t1\tlab\t\tX\tBrazil\n"
             "Duplicado\t2\tlab\t\tY\tPortugal\n"
+            "Sem Pais\t3\tlab\t\tZ\t\n"
             "linha\tquebrada\n")
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "org.txt"
         path.write_text(header + body, encoding="utf-8")
         countries, meta = diag.load_organization_countries(path, _canon)
-    assert meta == {"organizacoes": 5, "linhas_ignoradas": 1}, meta
+    assert meta == {"organizacoes": 6, "linhas_ignoradas": 1}, meta
     st = diag.institution_status
-    assert st(ORGS.get("Dasa"), INCLUDE, countries.get(_canon("Dasa"))) == LISTED
-    assert st(None, INCLUDE, countries.get(_canon("Laboratorio Novo"))) == UNRECOGNIZED
-    assert st(None, INCLUDE, countries.get(_canon("GeneDx"))) == OTHER
-    assert st(None, INCLUDE, countries.get(_canon("Duplicado"))) == "pais_ambiguo"
-    assert st(None, INCLUDE, countries.get(_canon("Sem Registro"))) == "sem_registro_de_pais"
+    assert st(ORGS.get("Dasa"), INCLUDE, countries.get(_canon("Dasa"))) == diag.LISTED
+    assert st(None, INCLUDE, countries.get(_canon("Laboratorio Novo"))) == diag.REGISTRY_BRAZIL_UNLISTED
+    assert st(None, INCLUDE, countries.get(_canon("GeneDx"))) == diag.REGISTRY_NOT_BRAZIL
+    assert st(None, INCLUDE, countries.get(_canon("Duplicado"))) == diag.COUNTRY_AMBIGUOUS
+    assert st(None, INCLUDE, countries.get(_canon("Sem Pais"))) == diag.COUNTRY_UNRESOLVED     # pais vazio
+    assert st(None, INCLUDE, countries.get(_canon("Nunca Visto"))) == diag.COUNTRY_UNRESOLVED  # sem registro
 
 
 def _rows(*specs):
-    """(is_br, org_id, passa_filtro, status, na_tabela). Instituicao da lista => is_br True, como no Mosaic."""
+    """(is_br, org_id, passa_filtro, status, presenca). Instituicao da lista => is_br True, como no Mosaic."""
     return [{"is_br_mosaic": b, "org_id_mosaic": o, "passa_filtro_pb": f, "status_instituicao": s,
              "submissor_na_tabela_v1": t} for b, o, f, s, t in specs]
 
 
-def test_evidence_per_category():
+def test_evidence_does_not_promote_hints_or_unknown_countries():
     ev = diag.variant_evidence
-    # A2: a instituicao brasileira estava na lista da tabela v1 (mapeamento) ou nao (release/cobertura)
-    assert ev(diag.A2, _rows((True, "1", True, LISTED, True))) == "submissor_br_presente_na_tabela_v1"
-    assert ev(diag.A2, _rows((True, "1", True, LISTED, False))) == "submissor_br_ausente_da_tabela_v1"
-    assert ev(diag.A2, _rows((True, "1", True, LISTED, None))) == "indeterminado_lista_truncada"
-    # B: flags nao exclusivas
-    assert ev(diag.B, _rows((True, "1", False, LISTED, True), (False, None, True, OTHER, True))) \
-        == "instituicao_da_lista_fora_do_filtro_pb"
-    assert ev(diag.B, _rows((False, None, True, UNRECOGNIZED, True), (True, "1", False, LISTED, True))) \
-        == "instituicao_da_lista_fora_do_filtro_pb+submissor_brasileiro_nao_reconhecido"
-    assert ev(diag.B, _rows((False, None, True, OTHER, True))) == "sem_evidencia_brasileira_no_release"
-    # C1: a submissao nao brasileira do filtro estava na tabela v1?
-    assert ev(diag.C1, _rows((True, "1", True, LISTED, True), (False, None, True, OTHER, False))) \
-        == "submissor_nao_br_ausente_da_tabela_v1"
-    # C2: Mosaic so BR com SCV nao brasileira => ela esta fora do filtro P/B
-    assert ev(diag.C2, _rows((True, "1", True, LISTED, True), (False, None, False, OTHER, True))) \
-        == "nao_br_so_fora_do_filtro_pb"
-    assert ev(diag.C2, _rows((True, "1", True, LISTED, True))) == "sem_scv_nao_br_no_release"
-    assert ev(diag.A1, []) == "tabela_v1_sem_linhas_da_variante"
+    L, BR_OUT, NOT_BR, UNRES = diag.LISTED, diag.REGISTRY_BRAZIL_UNLISTED, diag.REGISTRY_NOT_BRAZIL, diag.COUNTRY_UNRESOLVED
+    # A2: so presenca exata conta como presenca
+    assert ev(diag.A2, _rows((True, "1", True, L, diag.EXACT))) == "submissor_marcado:presente_exato"
+    assert ev(diag.A2, _rows((True, "1", True, L, diag.PARTIAL))) == "submissor_marcado:so_indicio_parcial_ou_ambiguo"
+    assert ev(diag.A2, _rows((True, "1", True, L, diag.SEMICOLON_AMBIGUOUS))) == \
+        "submissor_marcado:so_indicio_parcial_ou_ambiguo"
+    assert ev(diag.A2, _rows((True, "1", True, L, diag.TRUNCATED))) == "submissor_marcado:indeterminado"
+    assert ev(diag.A2, _rows((True, "1", True, L, diag.NO_LIST))) == "submissor_marcado:indeterminado"
+    assert ev(diag.A2, _rows((True, "1", True, L, diag.ABSENT))) == "submissor_marcado:ausente"
+    assert ev(diag.A2, _rows((True, "1", True, L, diag.ABSENT), (True, "2", True, L, diag.EXACT))) == \
+        "submissor_marcado:presente_exato"
+    # B: flags nao exclusivas; pais nao resolvido nao vira "nao brasileira"
+    assert ev(diag.B, _rows((True, "1", False, L, diag.EXACT), (False, None, True, NOT_BR, diag.ABSENT))) == \
+        "scv_da_lista_fora_do_filtro_pb"
+    assert ev(diag.B, _rows((False, None, True, BR_OUT, diag.ABSENT), (True, "1", False, L, diag.EXACT))) == \
+        "scv_da_lista_fora_do_filtro_pb+pais_brazil_no_ncbi_fora_da_lista"
+    assert ev(diag.B, _rows((False, None, True, UNRES, diag.ABSENT), (False, None, True, NOT_BR, diag.ABSENT))) == \
+        "pais_nao_resolvido_em_alguma_scv"
+    assert ev(diag.B, _rows((False, None, True, NOT_BR, diag.ABSENT))) == "so_nao_brasileiras_pelo_registro_ncbi"
+    # C1: presenca e status do lado nao marcado
+    assert ev(diag.C1, _rows((True, "1", True, L, diag.EXACT), (False, None, True, NOT_BR, diag.ABSENT))) == \
+        "submissor_nao_marcado:ausente|status:nao_brasileira_pelo_registro_ncbi"
+    assert ev(diag.C1, _rows((True, "1", True, L, diag.EXACT), (False, None, True, UNRES, diag.EXACT))) == \
+        "submissor_nao_marcado:presente_exato|status:pais_nao_resolvido"
+    # C2: a SCV nao marcada esta fora do filtro; com pais desconhecido, o status diz isso (nao "nao_br")
+    assert ev(diag.C2, _rows((True, "1", True, L, diag.EXACT), (False, None, False, UNRES, diag.ABSENT))) == \
+        "scv_nao_marcada_fora_do_filtro_pb|status:pais_nao_resolvido"
+    assert ev(diag.C2, _rows((True, "1", True, L, diag.EXACT))) == "sem_scv_nao_marcada_no_release"
+    assert ev(diag.A1, []) == "v1_sem_linhas_da_variante"
+
+
+def test_scope_scan_sees_unlisted_brazilian_institution_even_when_pipelines_agree():
+    countries = {_canon("Laboratorio Novo"): "Brazil", _canon("GeneDx"): "United States"}
+    calls: Counter[str] = Counter()
+
+    def org_of(name):
+        calls[name] += 1
+        return ORGS.get(name)
+
+    scvs = {
+        "1": [_scv("S1", "Laboratorio Novo")],                          # nenhum dos pipelines marca: a varredura ve
+        "2": [_scv("S2", "Dasa")],
+        "3": [_scv("S3", "Laboratorio Novo", "Uncertain significance")],  # fora do filtro: nao conta
+        "4": [_scv("S4", "Laboratorio Novo"), _scv("S5", "GeneDx")],
+    }
+    vids = {"concordam_sem_marca": ["1"], "lista": ["2"], "vus": ["3"], "outra": ["4"]}
+    flagged, per_status, unlisted = diag.scan_unlisted_brazil(
+        vids, scvs, is_whitelisted=_whitelist, org_of=org_of, include_ids=INCLUDE, canon=_canon, countries=countries)
+    assert flagged == {"concordam_sem_marca": True, "lista": False, "vus": False, "outra": True}, flagged
+    assert per_status == {diag.REGISTRY_BRAZIL_UNLISTED: 2, diag.LISTED: 1, diag.REGISTRY_NOT_BRAZIL: 1}, per_status
+    assert unlisted == {"Laboratorio Novo": 2}, unlisted
+    assert calls["Laboratorio Novo"] == 1, calls   # cache por submissor
 
 
 def _mosaic_root() -> Path:
@@ -264,19 +309,25 @@ def _run(publish_wrong: bool):
 def test_end_to_end_with_real_mosaic_functions():
     rc, rep, evidence = _run(publish_wrong=False)
     assert rc == 0, rep
-    assert rep["reproducao"] == {"exemplos": 6, "concordam": 6, "divergem": 0, "status": "fiel"}, rep["reproducao"]
-    assert rep["categorias"] == {diag.A2: 1, diag.B: 2, diag.C1: 1, diag.AGREE_NON_BR: 1, diag.OUTSIDE_MASTER: 1}, \
-        rep["categorias"]
+    assert rep["reproducao"]["concordam"] == 6 and rep["reproducao"]["divergem"] == 0, rep["reproducao"]
+    assert rep["reproducao"]["status"].startswith("fiel"), rep["reproducao"]
+    assert rep["categorias"] == {diag.A2: 1, diag.B: 2, diag.C1: 1, diag.NONE_MARK_COVERED: 1,
+                                 diag.OUTSIDE_MASTER: 1}, rep["categorias"]
     ev = rep["evidencia_por_categoria"]
-    assert ev[diag.A2] == {"submissor_br_presente_na_tabela_v1": 1}, ev
-    assert ev[diag.B] == {"instituicao_da_lista_fora_do_filtro_pb": 1, "submissor_brasileiro_nao_reconhecido": 1}, ev
-    assert ev[diag.C1] == {"submissor_nao_br_ausente_da_tabela_v1": 1}, ev
+    assert ev[diag.A2] == {"submissor_marcado:presente_exato": 1}, ev
+    assert ev[diag.B] == {"scv_da_lista_fora_do_filtro_pb": 1, "pais_brazil_no_ncbi_fora_da_lista": 1}, ev
+    assert ev[diag.C1] == {"submissor_nao_marcado:ausente|status:nao_brasileira_pelo_registro_ncbi": 1}, ev
     assert rep["categorias_por_conjunto_v1"]["t_br_pareado"] == {diag.B: 1}, rep["categorias_por_conjunto_v1"]
     assert rep["membros_mosaic_por_conjunto_v1"] == {"br_clinical_evidence/case": {"split_train": 1},
                                                      "br_clinical_evidence/control": {"t_nonbr_pareado": 1}}, rep
+    scope = rep["escopo_lista_br"]
+    assert scope["scvs_do_filtro_por_status"] == {diag.LISTED: 3, diag.REGISTRY_BRAZIL_UNLISTED: 1,
+                                                  diag.REGISTRY_NOT_BRAZIL: 5}, scope
+    assert scope["submissores_pais_brazil_fora_da_lista"] == [["Laboratorio Novo de Genomica", 1]], scope
+    assert scope["variantes_por_categoria"][diag.B] == {"nao": 1, "sim": 1}, scope
     assert set(evidence["categoria"]) == {diag.A2, diag.B, diag.C1}, evidence
     novo = evidence[evidence["submitter"] == "Laboratorio Novo de Genomica"]
-    assert list(novo["status_instituicao"]) == [UNRECOGNIZED], novo
+    assert list(novo["status_instituicao"]) == [diag.REGISTRY_BRAZIL_UNLISTED], novo
 
 
 def test_end_to_end_stops_when_reproduction_is_not_faithful():
@@ -302,4 +353,7 @@ if __name__ == "__main__":
     ran = len(tests) - failed - len(skipped)
     tail = f"  |  {len(skipped)} PULADO(S), sem cobertura: {', '.join(skipped)}" if skipped else ""
     print(f"\n{ran}/{len(tests) - len(skipped)} passaram{tail}")
+    if skipped and os.environ.get("REQUIRE_NO_SKIP"):
+        print("REQUIRE_NO_SKIP: teste pulado conta como falha")
+        sys.exit(1)
     sys.exit(1 if failed else 0)
