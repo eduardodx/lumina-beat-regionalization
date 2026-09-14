@@ -140,7 +140,7 @@ rótulos em treino, seleção ou calibração.
 
 | | A: T_BR v2 (PDF) | B: `br_clinical_evidence` | B: `br_population_observed` |
 |---|---|---|---|
-| Construto | só submissor brasileiro | participação de instituição brasileira | presença no ABraOM |
+| Construto | só submissor brasileiro | participação de instituição brasileira (a maioria compartilhada, segundo o Mosaic) | presença no ABraOM |
 | Tiers | todos os rótulos P/B | consensus | gold |
 | Tamanho | reconstruir (v1 pareado SNV: 2.774 P / 529 B) | 3.119 casos: 2.808 P / 311 B | 1.889 casos: 89 P / 1.800 B; só 751 pareados |
 | Pareamento | gene, tipo, consequência + AF | rótulo, painel, bin gnomAD | rótulo, painel, bin gnomAD |
@@ -148,9 +148,23 @@ rótulos em treino, seleção ou calibração.
 | Formato | M0–M2 com M1 como baseline causal | base × regionalizado: declarar como M1 e M2 entram no manifesto do consumidor | idem |
 | Trabalho | reconstrução completa | pronto; excluir membros do treino | pronto; excluir membros do treino |
 
-**[PROPOSTO] Opção C:** `br_clinical_evidence` como teste **confirmatório**; `br_population_observed` como
-**exploratório**; T_BR v2 BR-only como contraste secundário, se o Eduardo quiser o construto do PDF. Checar o
-poder com 311 benignas antes de congelar.
+**[PROPOSTO] T_BR v2 (opção A) como teste principal; o track `brazil` do Mosaic como avaliação complementar.**
+Revisado em 14/09, depois de conferir o código do Mosaic: o `br_clinical_evidence` mede **participação** de
+instituição brasileira, só no tier consensus (exclui gold), e o próprio protocolo do Mosaic registra que "a
+maioria é `br_lab_shared`" (`protocol.py`), isto é, variantes que laboratórios não brasileiros também
+classificaram. É outro construto, não o BR-only que o PDF (§5.7) escolheu para o teste de interação. A proposta
+anterior (`br_clinical_evidence` confirmatório) fica registrada como alternativa. Condições, declaradas antes de
+qualquer resultado de modelo:
+
+1. **Tamanho e poder:** recalcular o poder do ΔAUROC com os tamanhos do T_BR v2 (método da
+   `docs/justificativa_endpoint_auroc.md`). Se não atingir o mínimo declarado, o resultado é exploratório; não
+   se troca o teste principal por outro que "funcione melhor".
+2. **Independência:** a extração foi escolhida no gold do Mosaic, que no v1 continha 280 BR + 226 nonBR
+   pareados. Reportar o contraste principal também **sem** as variantes de teste que estavam nesse gold
+   (análise de sensibilidade pré-declarada).
+3. `br_population_observed` continua exploratório (sobreposto ao ABraOM por construção).
+4. Construir os dois candidatos na etapa de dados e excluir a **união** deles dos splits (§7): a decisão só
+   atribui papéis e não obriga a refazer os splits.
 
 Benchmarks complementares mantidos: chr8 e BRCA1/BRCA2/TP53 (PDF §11–12; descritivos abaixo dos mínimos).
 
@@ -171,13 +185,48 @@ A auditoria (bloco [F]) mostrou que as duas definições em uso discordam:
 | Mosaic `br_lab_any` | SCV do ClinVar 2026-06 cujo submissor casa com a lista **revisada** de instituições; só SCVs que passam no filtro de classificação P/B |
 | Pipeline regional `has_brazilian_submitter` | coluna `cohort` do `eval_unified.parquet` (lumina-benchmarks), **sem revisão**, release desconhecido |
 
-**Causas candidatas, ainda não separadas:** diferença de release, mapeamento de instituições, ou quais classes
-de SCV contam (uma VUS submetida por laboratório brasileiro não conta no Mosaic).
+**Como cada lado marca (conferido no código em 14/09):**
 
-**Diagnóstico:** a pasta `interim/` do passo `build-labels` do Mosaic (`assertions.parquet` com `submitter`,
-`org_id` e `is_br` por SCV; `org_match.json`; `org_unresolved.json`). Não está publicada no S3. **Plano B:**
-reproduzir o `is_br` com o código do Mosaic a partir do `submission_summary_2026-06`, só para as variantes
-divergentes.
+- **Mosaic** (`labels.py`, `orgs.py`, `examples.py`): uma SCV é brasileira se o submissor casa, por chave
+  canônica e sem ambiguidade, com uma instituição `include: true` da lista (60 instituições, congelada em
+  2026-08-22 a partir do `organization_summary`) ou com um alias revisado. Só contam SCVs que contribuem para o
+  agregado, têm origem germinativa e classificação P/B. A agregação usa todas as `VariationID` da variante:
+  `br_lab_any` = alguma SCV brasileira; `br_lab_only` = todas; `br_lab_shared` = alguma, mas não todas.
+- **Limite do Mosaic:** o matcher só indexa instituições incluídas. Submissor não reconhecido e instituição
+  comprovadamente não brasileira recebem o mesmo `org_id` nulo, e o build só falha para não reconhecidos com
+  ≥ 50 SCVs cujo nome contenha um termo-gatilho ou compartilhe palavras com as instituições incluídas.
+- **Pipeline regional v1:** `has_brazilian_submitter` = alguma linha do `eval_unified.parquet` com
+  `cohort == brazilian`, sem filtro de classe no agrupamento (não verificado se a tabela já vem filtrada). Nos
+  splits v1, variante **sem linha** na tabela regional virou `False` (`fillna(False)`): "sem dado" contou como
+  não brasileira.
+
+**Leitura do [F]:** o pool de treino v1 já excluía toda variante com `has_brazilian_submitter`, inclusive as
+"mixed". Os 1.250 casos do Mosaic no treino v1 **não** se explicam pela diferença any × only: pela nossa
+definição, nenhuma submissão brasileira foi vista neles.
+
+**Causas candidatas, ainda não separadas:** cobertura da tabela regional (variante ausente virou não
+brasileira), mapeamento de instituições, classe de SCV (VUS, somática, sem contribuição para o agregado),
+release, e a definição any × only (que explica parte da diferença no T_BR, não no treino).
+
+**[PROPOSTO] Diagnóstico direcionado** (não depende do Eduardo):
+
+1. **Reprodução validada antes de qualquer conclusão.** Refazer o `is_br` por SCV com as funções e a
+   configuração do Mosaic em `814e7f0`, a partir do `submission_summary_2026-06` (sha256 fixado em
+   `config/sources.yaml`) e das `clinvar_variation_ids` publicadas no `pb_examples.parquet` (o mesmo índice do
+   build; confirmar que a coluna existe no release do notebook). Validar contra os `br_lab_any/only/shared`
+   publicados em **todos** os exemplos; se não bater 100%, parar e pedir a pasta `interim/` ao Eduardo. O passo
+   de catálogo não é refeito: ele depende de um `variation_allele.txt.gz` fixado pela data do FTP, não de um
+   arquivo mensal arquivado.
+2. **Tabela de evidência das variantes divergentes**, uma linha por SCV: chave canônica, `VariationID`, SCV,
+   submissor, classificação, review status, origem, se contribui, se passa no filtro, `org_id` do Mosaic,
+   `cohort` da nossa tabela para o par (`VariationID`, submissor) e data da última avaliação.
+3. **Motivo por variante**, separando: cobertura; instituição reconhecida por um lado e não pelo outro; **não
+   reconhecida pelo matcher** × **comprovadamente não brasileira** (país no `organization_summary`); classe de
+   SCV; release (SCV presente só numa fonte); any × only; chave.
+4. Nenhuma correção automática: o relatório alimenta a definição e a reconstrução dos dados.
+
+A pasta `interim/` (`assertions.parquet`, `org_match.json`, `org_unresolved.json`) continua sendo a fonte
+preferida; se o Eduardo a enviar, ela substitui o passo 1.
 
 **[FIXADO] Qualquer que seja a definição:** submissões brasileiras ficam fora de treino, validação e calibração
 (PDF §4.2).
@@ -187,8 +236,11 @@ divergentes.
 ## 7. Splits de treino, validação e calibração — [PROPOSTO]
 
 - Fonte: ClinVar 2026-06, rótulos P/LP × B/LB, variante canônica GRCh38.
-- Excluir: variantes com submissão brasileira (§6); chr8; **todos** os membros de teste; se o track do Mosaic
-  for usado, também os controles e as variantes do mesmo `overlap_cluster_id`.
+- Status brasileiro calculado para **toda** variante a partir do `submission_summary` completo, com a definição
+  resolvida na §6. Ausência de dado não conta como não brasileira (no v1, contava).
+- Excluir: variantes com submissão brasileira (enquanto a §6 não estiver resolvida, as marcadas por qualquer uma
+  das duas definições); chr8; **todos** os membros dos candidatos a teste: T_BR v2, T_nonBR v2 e o track
+  `brazil` do Mosaic, com controles e variantes do mesmo `overlap_cluster_id`.
 - Só SNV na campanha principal. A auditoria [D] mostrou que o custo é pequeno: nos pares v1, SNV fica com
   2.774 P / 529 B de 3.104 P / 547 B (perde 18 benignas); os pares de indel tinham só 18 benignas.
 - 80/10/10 por variante canônica ([ABERTO]: ou por gene), manifestos sha256 e gate de sobreposição zero,
@@ -206,19 +258,26 @@ divergentes.
   **estrita** de REF (sem o fallback ±1 do harness antigo).
 - **Não é vencedora estabelecida.** Na pesquisa: (a) o probe MLP escolhia a época pela AUROC conjunta da
   validação e o ridge pela macro dos painéis. Corrigido (`1615955`) e rerodado em 14/09: a macro mudou 0,002
-  em média e a ordem das configurações se manteve (correlação de postos ≥ 0,995). Sobre a base honesta, as
-  cabeças continuam somando no missense (+0,033 core / +0,037 gene), mas a vantagem delas sobre o embedding
-  de 2092 dims no missense **virou empate**; a favor das 172 dims ficam diluir menos o noncoding e ser 12×
-  menor; (b) a premissa "as cabeças estão no span, então um probe linear não ganha" não se
+  em média e a ordem das configurações se manteve (correlação de postos ≥ 0,995), calculado das tabelas
+  impressas (só a célula mlp/gene foi conferida nos JSONs). Somadas à base honesta, as cabeças continuam
+  acrescentando no missense (+0,033 core / +0,037 gene); nessa comparação, a diferença para o embedding de 2092
+  dims no missense foi de +0,006/+0,013 para −0,0004/−0,0002: valores muito próximos, **sem incerteza
+  quantificada** e sem demonstrar equivalência (isoladas, as 2092 dims ficam à frente no missense: +0,027 core /
+  +0,042 gene; e nada foi medido depois da adaptação populacional). As 172 dims perdem menos em noncoding que o
+  v2 nessas avaliações (−0,003/−0,025 contra −0,018/−0,053), ainda com perda e sem causa demonstrada, e são
+  12× menores; (b) a premissa "as cabeças estão no span, então um probe linear não ganha" não se
   aplicava à comparação feita (`delta_focal` é h_up **pré-norma**; as cabeças leem o trunk **pós-norma**);
   (c) as nove diferenças positivas vêm de avaliações correlacionadas, sem controle de multiplicidade.
 - **Seleção** em dados de desenvolvimento (train/validation), **nunca** nos testes, com critério declarado
   antes. Comparar com a extração antiga (two-tower pós-norma + média de ±64 bp): no MLP da pesquisa, a aproximação
-  dela sem LoRA (`infra_atual_pos_norma`, 896 dims) empata com as 172 dims na macro e fica +0,015 no
-  missense. Rodar um piloto com um adapter
+  dela sem LoRA (`infra_atual_pos_norma`, 896 dims) fica +0,0015 acima das 172 dims na macro e +0,015 no
+  missense, sem incerteza quantificada. Rodar um piloto com um adapter
   para checar se a leitura sobrevive à adaptação, e escolher com um critério que não favoreça o M0.
 - **Congelar UMA extração** para todos os braços (extração diferente por braço confundiria fonte com
   representação).
+- **[PROPOSTO] Busca encerrada no benchmark da pesquisa:** nenhuma configuração nova de extração no gold do
+  Mosaic. A única comparação que resta é a candidata compacta × a leitura antiga completa, no desenvolvimento,
+  depois do piloto (§12, etapa 5).
 - **Identidade do cache:** checkpoint + adapter + versão do extrator (janela, focal, RC, validação de REF) +
   chaves das variantes. Mudar o Mosaic (rótulos, splits) permite reaproveitar embeddings; mudar backbone,
   adapter ou janela exige extrair de novo.
@@ -245,9 +304,15 @@ divergentes.
 - **Secundárias:** AP, MCC, Brier, com TP/TN/FP/FN, sensibilidade e especificidade.
 - **Intervalos:** bootstrap pareado (por matched set; por `overlap_cluster_id` no Mosaic), 10.000 réplicas;
   análise de sensibilidade à dependência por gene.
-- **[PROPOSTO] Critério de sucesso** (escala AUROC, `docs/decisoes_eduardo_fase0.md` C1): ΔAUROC BR-específico
-  > 0, IC 95% excluindo zero, ganho ≥ 0,02, mesma direção em ≥ 2 de 3 seeds. Guardrails: AP e AUROC não
-  regridem mais de 0,02; Brier não piora mais de 0,01; nenhuma classe colapsa.
+- **[PROPOSTO] Critério de sucesso** (escala AUROC), proposto por nós em `docs/decisoes_eduardo_fase0.md` C1 e
+  ainda sem confirmação do Eduardo. A redação anterior ("ganho ≥ 0,02") não dizia **qual** ganho; declarar
+  separadamente:
+  1. **Interação:** ΔAUROC BR-específico (M2 vs M1) ≥ 0,02, IC 95% excluindo zero, mesma direção em ≥ 2 de 3
+     seeds. O 0,02 foi pensado nesta escala: o prior de ~0,027 é uma diferença-em-diferenças.
+  2. **Ganho no conjunto brasileiro:** G_BR = AUROC(M2, T_BR) − AUROC(M1, T_BR) > 0, reportado com IC. Sem ele,
+     uma interação positiva pode vir só de piora no controle.
+  3. **Guardrails, em T_BR e em T_nonBR:** AP e AUROC não regridem mais de 0,02; Brier não piora mais de 0,01;
+     nenhuma classe colapsa.
 - **[FIXADO] Baselines diagnósticas separadas:** regra de presença no ABraOM e AF explícita (gnomAD, ABraOM).
   Elas medem quanto uma regra populacional simples já explica — e é por elas que se enxerga a circularidade.
 - **[FIXADO]** Enquanto extração e Mosaic mudarem, resultados contam como **desenvolvimento**. Cada comparação
@@ -270,7 +335,22 @@ divergentes.
 
 ---
 
-## 12. Gates antes do treino completo
+## 12. Ordem de execução e gates
+
+**[PROPOSTO] Ordem** (revisão externa de 14/09):
+
+| Etapa | Trabalho | Critério para avançar |
+|---|---|---|
+| 1. Divergência brasileira | diagnóstico da §6 | entender quais diferenças são de definição, cobertura, versão ou erro |
+| 2. Dados v2 | gnomAD independente do ABraOM, fonte ABraOM verificada, REF estrito, BR-only / shared / nonBR, candidatos a teste e exclusões (§5, §7) | contagens, cobertura e sobreposições verificadas |
+| 3. Desenho mínimo | teste principal, objetivo populacional, gerador, sampler global, orçamento, critério de sucesso | contrato executável, sem decisões implícitas |
+| 4. Piloto pequeno de M1/M2 | gradientes, aprendizado populacional (§2) e compatibilidade da extração | evidência de que os adapters aprendem a tarefa definida |
+| 5. Extração congelada e campanha | candidata compacta × leitura antiga completa (§8); depois M0, M1, M2 | mesma receita e protocolo entre braços |
+
+Não dependem do Eduardo: a etapa 1, localizar e inspecionar o ABraOM, verificar mapeamentos e preparar código.
+Teste principal, loss e critério de sucesso vão a ele como propostas concretas.
+
+**Gates antes do treino completo:**
 
 1. Só os parâmetros previstos recebem gradiente (log de parâmetros treináveis; o smoke do M0 antigo pegou
    7,5M de parâmetros do backbone treináveis sem querer).
@@ -299,6 +379,7 @@ preciso definir a regra de combinação (sequencial, merge, fusion) e repetir a 
 | Domínio | SNV + indel + MNV | só SNV na campanha principal | pesquisa + auditoria [D] |
 | Validação de REF | fallback ±1 | estrita | revisão |
 | Fonte ClinVar | master regional (release desconhecido) | ClinVar 2026-06 via Mosaic | proposta |
+| Teste principal | T_BR v1 (BR-only pela coluna `cohort`) | T_BR v2 BR-only reconstruído; track `brazil` do Mosaic complementar | construto do PDF (§5) |
 
 ---
 
@@ -314,11 +395,11 @@ preciso definir a regra de combinação (sequencial, merge, fusion) e repetir a 
 
 | # | Pendência | Quem | Bloqueia |
 |---|---|---|---|
-| 1 | Diagnóstico da divergência de submissor brasileiro (pasta `interim/` do Mosaic) | Eduardo (arquivos), Claude (script) | §5, §6, §7 |
-| 2 | Decisão (0): conjunto de teste | Eduardo | §5, §7 |
+| 1 | Diagnóstico da divergência de submissor brasileiro (§6; a `interim/` do Mosaic, se vier, substitui a reprodução) | Claude (script), Gabriel (notebook); Eduardo (`interim/`, opcional) | §5, §6, §7 |
+| 2 | Decisão (0): conjunto de teste (proposta: T_BR v2 principal, Mosaic complementar) | Eduardo | §5, §7 |
 | 3 | Loss do adapter populacional e gerador de janelas | Eduardo | §2, §3 |
 | 4 | Definição do "global", bins de AF e AN do ABraOM | Eduardo, Gabriel | §3 |
-| 5 | Critério de sucesso em AUROC | Eduardo | §10 |
+| 5 | Critério de sucesso: interação e ganho em T_BR declarados separadamente | Eduardo | §10 |
 | 6 | O pré-treino do R03 viu o chr8? | Eduardo (repositório de treino) | §11 |
 | 7 | Localizar o TSV do SABE-WGS-1171 | Gabriel, Eduardo | §3, §4 |
 | 8 | ~~Rerodar os probes MLP com o critério macro e comparar~~ feito em 14/09 (resultado no §8) | Gabriel (notebook) | — |
