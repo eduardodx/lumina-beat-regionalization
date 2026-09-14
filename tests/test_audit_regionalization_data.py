@@ -1,6 +1,7 @@
 """Prova que a auditoria de dados da regionalizacao detecta cada problema E nao dispara em falso.
 
-Precisa de numpy + pandas (+ pyarrow ou fastparquet para o teste ponta-a-ponta):
+Precisa de numpy + pandas; os testes que escrevem/leem parquet precisam de pyarrow, porque o script
+usa pyarrow.parquet para ler schemas (fastparquet sozinho NAO basta):
     PYTHONPATH=. python tests/test_audit_regionalization_data.py
 
 Cada detector tem um caso positivo (o problema existe) e um controle (nao existe). Um detector que
@@ -26,6 +27,7 @@ except ImportError:  # pragma: no cover
 from scripts.audit_regionalization_data import (  # noqa: E402
     audit_abraom_tsv,
     audit_af_gnomad_conditional,
+    audit_mosaic_brazil_overlap,
     audit_overlap,
     audit_pair_abraom_concordance,
     build_key,
@@ -38,14 +40,12 @@ class Skip(Exception):
     """Teste nao executado por falta de dependencia. NAO e um PASS -- o runner conta separado."""
 
 
-def _require_parquet_engine() -> None:
-    for module in ("pyarrow", "fastparquet"):
-        try:
-            __import__(module)
-            return
-        except ImportError:
-            continue
-    raise Skip("sem engine de parquet (pyarrow/fastparquet)")
+def _require_pyarrow() -> None:
+    """O script importa pyarrow.parquet (schemas); com so fastparquet ele falharia -- entao pula aqui."""
+    try:
+        import pyarrow.parquet  # noqa: F401
+    except ImportError:
+        raise Skip("sem pyarrow: o script le schemas com pyarrow.parquet") from None
 
 
 def _slice(n: int, seed: int, *, conditional: bool) -> pd.DataFrame:
@@ -55,7 +55,7 @@ def _slice(n: int, seed: int, *, conditional: bool) -> pd.DataFrame:
     present = (rng.random(n) < 0.3) & ~non_snv
     af = rng.random(n) * 0.2
     if conditional:
-        af_gnomad = np.where(present, af, np.nan)                      # o pipeline regional real
+        af_gnomad = np.where(present, af, np.nan)                           # o pipeline regional real
     else:
         af_gnomad = np.where((rng.random(n) < 0.9) & ~non_snv, af, np.nan)  # gnomAD consultado para SNVs
     keys = [f"{1 + i % 20}:{1000 + i}:{'AT:A' if non_snv[i] else 'A:G'}" for i in range(n)]
@@ -108,20 +108,21 @@ def _pool_and_pairs(seed: int, *, match_on_abraom: bool):
     return pool, pairs
 
 
-def test_flags_pairs_matched_on_abraom_presence():
+def test_flags_excess_when_pairs_copy_abraom_presence():
     pool, pairs = _pool_and_pairs(3, match_on_abraom=True)
     res = audit_pair_abraom_concordance(pairs, pool)
     blk = res["estratos_mistos"]
     assert blk["concordancia_observada"] == 1.0, blk
     assert abs(blk["concordancia_esperada_sorteio_no_estrato"] - 0.5) < 1e-9, blk
-    assert res["veredito"].startswith("EVIDENCIA FORTE"), res["veredito"]
+    assert res["veredito"].startswith("EXCESSO acima"), res["veredito"]
+    assert "nao prova" in res["veredito"], "o veredito tem de dizer que e descritivo"
 
 
 def test_does_not_flag_pairs_drawn_ignoring_abraom():
     pool, pairs = _pool_and_pairs(4, match_on_abraom=False)
     res = audit_pair_abraom_concordance(pairs, pool)
     assert abs(res["estratos_mistos"]["excesso"]) < 0.05, res["estratos_mistos"]
-    assert res["veredito"].startswith("sem evidencia"), res["veredito"]
+    assert res["veredito"].startswith("sem excesso"), res["veredito"]
 
 
 def test_pure_strata_cannot_be_blamed_on_the_matcher():
@@ -174,8 +175,43 @@ def test_abraom_tsv_reports_floor_and_index_gap():
     assert res["t_br_abraom_present_mas_fora_do_tsv_cru"] == 1, res
 
 
+def test_abraom_af_lattice_exposes_a_denominator_other_than_nominal():
+    """O TSV nao traz AN. Uma AF de 1/2000 num cohort nominal de 2342 alelos so aparece pela grade."""
+    an = 2342
+    with tempfile.TemporaryDirectory() as d:
+        tsv = Path(d) / "abraom.tsv"
+        rows = [f"1\t{10 + i}\tA\tG\t{af!r}" for i, af in enumerate((1 / an, 2 / an, 5 / an, 1 / 2000))]
+        tsv.write_text("chrom\tpos\tref\talt\taf_abraom\n" + "\n".join(rows) + "\n", encoding="utf-8")
+        br = pd.DataFrame({"variant_key": ["9:1:A:G"], "abraom_present": [False]})
+        res = audit_abraom_tsv(tsv, br, chunksize=3, nominal_an=an)
+    grade = res["grade_af"]
+    assert abs(grade["frac_af_positiva_multiplo_de_1_sobre_an_nominal"] - 0.75) < 1e-9, grade
+    smallest = [v for v, _ in grade["menores_af_distintas"]]
+    assert smallest[:2] == [round(1 / an, 7), 0.0005], smallest
+
+
+def test_mosaic_brazil_members_in_our_training_split_are_flagged():
+    """O contrato do track brazil proibe treinar em membros e controles: sobreposicao com split_train e alerta."""
+    _require_pyarrow()
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        pd.DataFrame({"variant_id": ["v1", "v2", "v3"], "study_id": ["br_clinical_evidence"] * 3,
+                      "member_role": ["case", "control", "control"]}).to_parquet(tmp / "mem.parquet")
+        pd.DataFrame({"variant_id": ["v1", "v2", "v3"], "chrom": ["chr1", "chr2", "chr3"],
+                      "pos_1based": [10, 20, 30], "ref": ["A", "C", "G"], "alt": ["G", "T", "A"]}
+                     ).to_parquet(tmp / "pb.parquet")
+        clean = audit_mosaic_brazil_overlap(tmp / "mem.parquet", tmp / "pb.parquet",
+                                            {"split_train": {"9:9:A:C"}, "t_br_slice": {"1:10:A:G"}})
+        dirty = audit_mosaic_brazil_overlap(tmp / "mem.parquet", tmp / "pb.parquet",
+                                            {"split_train": {"2:20:C:T"}, "t_br_slice": {"1:10:A:G"}})
+    assert clean["grupos"]["br_clinical_evidence/case"]["t_br_slice"] == 1, clean
+    assert clean["veredito"].startswith("nenhum membro"), clean["veredito"]
+    assert dirty["grupos"]["br_clinical_evidence/control"]["split_train"] == 1, dirty
+    assert dirty["veredito"].startswith("membros do track brazil caem"), dirty["veredito"]
+
+
 def test_main_end_to_end_writes_report():
-    _require_parquet_engine()
+    _require_pyarrow()
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         br = _slice(300, 5, conditional=True)
@@ -191,20 +227,23 @@ def test_main_end_to_end_writes_report():
         nonbr.to_parquet(tmp / "nonbr.parquet")
         pairs.to_parquet(tmp / "pairs.parquet")
         # i=1 do slice BR e SNV: chrom 2, pos 1001 (i=0 e a delecao sintetica)
-        pd.DataFrame({"chrom": ["chr2"], "pos_1based": [1001], "ref": ["A"], "alt": ["G"],
-                      "label_tier": ["gold"]}).to_parquet(tmp / "pb.parquet")
+        pd.DataFrame({"variant_id": ["m1"], "chrom": ["chr2"], "pos_1based": [1001], "ref": ["A"], "alt": ["G"],
+                      "label_tier": ["consensus"]}).to_parquet(tmp / "pb.parquet")
+        pd.DataFrame({"variant_id": ["m1"], "study_id": ["br_clinical_evidence"], "member_role": ["case"]}
+                     ).to_parquet(tmp / "mem.parquet")
         out = tmp / "audit.json"
         rc = main(["--br", str(tmp / "br.parquet"), "--nonbr", str(tmp / "nonbr.parquet"),
                    "--pairs", str(tmp / "pairs.parquet"), "--mosaic-examples", str(tmp / "pb.parquet"),
-                   "--out", str(out)])
+                   "--mosaic-brazil-membership", str(tmp / "mem.parquet"), "--out", str(out)])
         assert rc == 0
         rep = json.loads(out.read_text(encoding="utf-8"))
-    assert rep["C_sobreposicao_mosaic"]["gold"]["t_br_slice"] == 1, rep["C_sobreposicao_mosaic"]
-    assert rep["B_pareamento_abraom"]["veredito"].startswith("EVIDENCIA FORTE"), rep["B_pareamento_abraom"]
+    assert rep["C_sobreposicao_mosaic"]["consensus"]["t_br_slice"] == 1, rep["C_sobreposicao_mosaic"]
+    assert rep["B_pareamento_abraom"]["veredito"].startswith("EXCESSO acima"), rep["B_pareamento_abraom"]
     blocks = {b["slice"]: b for b in rep["A_af_gnomad_condicional"]}
     assert blocks["br_only/SNV"]["veredito"].startswith("CONFIRMADO"), blocks["br_only/SNV"]
     assert blocks["br_only/nao-SNV"]["abraom_present"] == 0, blocks["br_only/nao-SNV"]
     assert rep["D_composicao"]["t_br_pareado"]["n"] == len(pairs), rep["D_composicao"]["t_br_pareado"]
+    assert rep["F_mosaic_brazil"]["grupos"]["br_clinical_evidence/case"]["t_br_slice"] == 1, rep["F_mosaic_brazil"]
 
 
 if __name__ == "__main__":

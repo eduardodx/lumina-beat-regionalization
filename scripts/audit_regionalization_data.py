@@ -1,38 +1,41 @@
 #!/usr/bin/env python3
 """Auditoria READ-ONLY dos dados da regionalizacao R03, antes do redesenho sem adapter ClinVar e sem fusion.
 
-Roda no notebook (pandas + pyarrow; sem GPU, sem S3). So escreve o JSON de saida.
+Roda no notebook (pandas + pyarrow, este obrigatorio; sem GPU, sem S3). So escreve o JSON de saida.
 
 POR QUE EXISTE
 --------------
 O redesenho (tirar o adapter ClinVar e a fusion, manter a adaptacao populacional) depende das colunas de
-frequencia e do T_nonBR congelado. Lendo o codigo, cinco fatos que o desenho precisa ficaram LIDOS mas
-nao MEDIDOS. Este script mede, sem supor:
+frequencia, do T_nonBR congelado e de qual conjunto de teste sera usado. Lendo o codigo, varios fatos que o
+desenho precisa ficaram LIDOS mas nao MEDIDOS. Este script mede, sem supor:
 
   [A] af_gnomad condicional ao ABraOM. Em prepare_regional_clinvar_dataset.py o af_gnomad chega SO pelo
       merge (how="inner") com o indice ABraOM v2, e depois vai por left-join ao ClinVar. E o join so e
       TENTADO para SNVs (build_abraom_matches filtra is_snv): nao-SNV nunca tem abraom_present, af_abraom
-      nem af_gnomad, por construcao. Por isso [A] sai separado para SNV e nao-SNV -- misturar os dois
-      faria o bloco nao-SNV, vazio por construcao, parecer evidencia.
-  [B] Pareamento indireto por ABraOM no T_nonBR. O matcher usa log10(af_gnomad.fillna(0)) na distancia.
-      Se [A] vale, essa feature carrega a presenca no ABraOM, e os pares podem ter casado por ela -- o que
-      o paragrafo 6.7 do Eduardo proibe. Compara a concordancia de abraom_present nos pares com a
-      esperada se o matcher sorteasse dentro do estrato exato (gene, label, tipo), so nos estratos mistos.
-  [C] Sobreposicao com o gold do Mosaic. A receita de extracao de embeddings foi escolhida no gold do
-      Mosaic; se ele contem variantes do T_BR/T_nonBR, a escolha tocou o teste da regionalizacao.
-  [D] Composicao por tipo de variante E rotulo, no slice, nos membros BR dos pares e no controle. A
-      receita de 172 dims foi validada so em SNV; uma campanha principal so-SNV depende de quantas
-      BENIGNAS sobram, que e o lado que limita o poder.
-  [E] (opcional, --abraom-tsv) Piso de AF do ABraOM: AF minima do TSV cru SABE-WGS-1171, e quantas
-      variantes do T_BR estao no TSV cru mas marcadas abraom_present=False pelo indice v2.
+      nem af_gnomad, por construcao. Por isso [A] sai separado para SNV e nao-SNV.
+  [B] Pareamento associado ao ABraOM no T_nonBR. O matcher usa log10(af_gnomad.fillna(0)) na distancia.
+      Compara a concordancia de abraom_present nos pares com a esperada se o matcher sorteasse dentro do
+      estrato exato (gene, label, tipo), so nos estratos mistos. Os vereditos sao DESCRITIVOS.
+  [C] Sobreposicao com o Mosaic por tier. A receita de extracao de embeddings foi escolhida no gold.
+  [D] Composicao por tipo de variante E rotulo, no slice, nos membros BR dos pares e no controle. Uma
+      campanha principal so-SNV depende de quantas BENIGNAS sobram.
+  [E] (opcional, --abraom-tsv) ABraOM cru SABE-WGS-1171: AF minima, grade de AF e cobertura do T_BR.
+  [F] (opcional, --mosaic-brazil-membership) Track `brazil` do Mosaic: dois estudos brasileiros ja
+      pareados (br_clinical_evidence = consensus com instituicao brasileira; br_population_observed = gold
+      presente no ABraOM), com contrato que PROIBE usar membership, controles e rotulos em treino, selecao
+      ou calibracao. Mede quantos casos e controles de cada estudo caem nos nossos splits e nos T_BR/T_nonBR
+      antigos. Se o track virar teste, essa sobreposicao tem de sair do treino antes de qualquer cabeca.
 
 O QUE ESTE SCRIPT NAO PROVA
 ---------------------------
 [B] mede EXCESSO de concordancia sobre um sorteio dentro do estrato. (1) O matcher real tambem usou
 submitters, estrelas e consequencia, que podem correlacionar com a presenca no ABraOM por motivos
 legitimos. (2) O z usa uma aproximacao binomial independente; o matcher sorteia sem reposicao e em
-ordem gulosa, entao o z e indicativo, nao um teste exato. (3) Nem a DIRECAO do efeito sobre a DiD sai
-daqui. O teste decisivo e re-parear com a anotacao de gnomAD corrigida e comparar os dois T_nonBR.
+ordem gulosa, entao o z e indicativo, nao um teste. (3) Nada aqui da a DIRECAO de um efeito sobre a DiD.
+O teste decisivo e re-parear preservando as demais regras e comparar os dois T_nonBR.
+[E] O TSV do ABraOM NAO traz AC nem AN, so a AF. O denominador real so e inferido pela grade de AF
+(quantas AF viram inteiro ao multiplicar pelo AN nominal). AN por sitio, cobertura e filtros precisam da
+fonte original antes de definir bins de frequencia.
 
 USO (notebook)
 --------------
@@ -41,6 +44,7 @@ USO (notebook)
         --pairs ~/artifacts/fase0/t_nonbr_matched_soft.parquet \
         --splits ~/artifacts/fase0/clinvar_splits/clinvar_splits_combined.parquet \
         --mosaic-examples ~/mosaic-v1/pb_examples.parquet \
+        --mosaic-brazil-membership ~/mosaic-v1/studies/brazil/membership.parquet \
         --out ~/artifacts/redesenho/audit_dados.json
 
 Passe em --nonbr o MESMO arquivo que o matcher usou: o baseline de [B] e calculado nesse pool.
@@ -55,6 +59,7 @@ from collections import Counter
 from pathlib import Path
 
 AF_THRESHOLDS = (0.0005, 0.001, 0.005, 0.01)
+ABRAOM_NOMINAL_AN = 2 * 1171   # SABE-WGS-1171 diploide, todos chamados -- so o nominal, ver [E]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -64,7 +69,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--pairs", type=Path, required=True, help="T_nonBR congelado (t_nonbr_matched_soft)")
     p.add_argument("--splits", type=Path, default=None, help="clinvar_splits_combined.parquet")
     p.add_argument("--mosaic-examples", type=Path, default=None, help="pb_examples.parquet do release Mosaic")
+    p.add_argument("--mosaic-brazil-membership", type=Path, default=None,
+                   help="studies/brazil/membership.parquet do release Mosaic (exige --mosaic-examples)")
     p.add_argument("--abraom-tsv", type=Path, default=None, help="SABE1171.Abraom.clean.tsv (opcional)")
+    p.add_argument("--abraom-nominal-an", type=int, default=ABRAOM_NOMINAL_AN)
     p.add_argument("--exclude-chrom", default="8")
     p.add_argument("--out", type=Path, required=True)
     return p.parse_args(argv)
@@ -165,7 +173,7 @@ def audit_af_gnomad_conditional(df, name: str) -> dict:
 
 
 # ------------------------------------------------------------------------------------------------
-# [B] pareamento indireto por ABraOM
+# [B] pareamento associado ao ABraOM
 # ------------------------------------------------------------------------------------------------
 
 
@@ -224,18 +232,19 @@ def audit_pair_abraom_concordance(pairs, pool) -> dict:
         "estratos_mistos": _block(mixed),
         "pares_sem_estrato_no_pool": int((~has_q).sum()),
         "nota_incerteza": ("z por aproximacao binomial independente; o matcher sorteia sem reposicao e em "
-                           "ordem gulosa. Indicativo, nao teste exato; nao informa a direcao do efeito na DiD."),
+                           "ordem gulosa. Indicativo, nao teste; nao informa a direcao de efeito na DiD."),
     }
     blk = out["estratos_mistos"]
     if blk.get("n", 0) == 0:
         out["veredito"] = "sem estratos mistos: nao ha como o matcher ter escolhido por ABraOM"
     elif blk["z_aproximado"] > 3 and blk["excesso"] > 0.05:
-        out["veredito"] = ("EVIDENCIA FORTE de pareamento associado a presenca no ABraOM (paragrafo 6.7): "
-                           "re-parear com gnomAD corrigido e comparar")
+        out["veredito"] = ("EXCESSO acima do sorteio no estrato (descritivo, z aproximado): compativel com "
+                           "pareamento associado a presenca no ABraOM, nao prova. Decisivo: re-parear "
+                           "preservando as demais regras e comparar")
     elif blk["z_aproximado"] > 3:
-        out["veredito"] = "excesso detectavel mas pequeno (<0.05): registrar, re-parear e comparar"
+        out["veredito"] = "EXCESSO pequeno acima do sorteio (<0.05, descritivo): registrar e comparar re-pareando"
     else:
-        out["veredito"] = "sem evidencia de pareamento pela presenca no ABraOM"
+        out["veredito"] = "sem excesso acima do sorteio no estrato (descritivo)"
     if "br__af_bin" in pairs.columns and "nonbr__af_bin" in pairs.columns:
         a = (pairs["br__af_bin"].astype("string") == "ausente").fillna(False)
         b = (pairs["nonbr__af_bin"].astype("string") == "ausente").fillna(False)
@@ -245,31 +254,68 @@ def audit_pair_abraom_concordance(pairs, pool) -> dict:
 
 
 # ------------------------------------------------------------------------------------------------
-# [C] sobreposicao com o Mosaic, [D] composicao, [E] ABraOM cru
+# [C] sobreposicao com o Mosaic, [D] composicao, [E] ABraOM cru, [F] track brazil
 # ------------------------------------------------------------------------------------------------
 
 
-def mosaic_keys(path: Path) -> dict:
+def mosaic_example_keys(path: Path):
+    """pb_examples do Mosaic com a chave regional (chrom:pos:ref:alt, chrom sem prefixo)."""
     import pandas as pd
     import pyarrow.parquet as pq
 
     names = set(pq.ParquetFile(path).schema_arrow.names)
-    need = ["chrom", "pos_1based", "ref", "alt"]
+    need = ["variant_id", "chrom", "pos_1based", "ref", "alt"]
     miss = [c for c in need if c not in names]
     if miss:
         raise SystemExit(f"{path}: faltam {miss}")
     cols = need + (["label_tier"] if "label_tier" in names else [])
     df = pd.read_parquet(path, columns=cols)
-    keys = build_key(df["chrom"], df["pos_1based"], df["ref"], df["alt"])
+    df["key"] = build_key(df["chrom"], df["pos_1based"], df["ref"], df["alt"])
+    return df
+
+
+def mosaic_keys(path: Path) -> dict:
+    df = mosaic_example_keys(path)
     if "label_tier" not in df.columns:
-        return {"todos": set(keys.dropna().astype(str))}
+        return {"todos": set(df["key"].dropna().astype(str))}
     tier = df["label_tier"].astype("string")
-    return {str(t): set(keys[tier == t].dropna().astype(str)) for t in sorted(tier.dropna().unique())}
+    return {str(t): set(df.loc[tier == t, "key"].dropna().astype(str)) for t in sorted(tier.dropna().unique())}
 
 
 def audit_overlap(mosaic: dict, targets: dict) -> dict:
     return {tier: {name: len(keys & tset) for name, keys in targets.items()} | {"n_mosaic": len(tset)}
             for tier, tset in mosaic.items()}
+
+
+def audit_mosaic_brazil_overlap(membership_path: Path, examples_path: Path, targets: dict) -> dict:
+    """Membros do track brazil (por estudo e papel) que caem nos nossos splits e testes."""
+    import pandas as pd
+    import pyarrow.parquet as pq
+
+    names = set(pq.ParquetFile(membership_path).schema_arrow.names)
+    need = ["variant_id", "study_id", "member_role"]
+    miss = [c for c in need if c not in names]
+    if miss:
+        raise SystemExit(f"{membership_path}: faltam {miss}")
+    mem = pd.read_parquet(membership_path, columns=need)
+    ex = mosaic_example_keys(examples_path)[["variant_id", "key"]]
+    mem = mem.merge(ex, on="variant_id", how="left")
+    out: dict = {"membros": int(len(mem)), "sem_chave_no_pb_examples": int(mem["key"].isna().sum()), "grupos": {}}
+    train_like = [name for name in targets if name.startswith("split_")]
+    contaminated = []
+    for (study, role), grp in mem.groupby(["study_id", "member_role"]):
+        keys = set(grp["key"].dropna().astype(str))
+        blk = {"n": int(len(grp))} | {name: len(keys & tset) for name, tset in targets.items()}
+        out["grupos"][f"{study}/{role}"] = blk
+        hits = {name: blk[name] for name in train_like if blk.get(name)}
+        if hits:
+            contaminated.append(f"{study}/{role} {hits}")
+    out["veredito"] = (
+        "membros do track brazil caem nos nossos splits: se o track for usado como teste, excluir antes de "
+        "treinar (o contrato do Mosaic proibe treino, selecao e calibracao neles) -> " + "; ".join(contaminated)
+        if contaminated else "nenhum membro do track brazil nos splits informados"
+    )
+    return out
 
 
 def composition(df, key_col: str = "variant_key", type_col: str = "variant_type", label_col: str = "label") -> dict:
@@ -298,15 +344,16 @@ def composition(df, key_col: str = "variant_key", type_col: str = "variant_type"
     return out
 
 
-def audit_abraom_tsv(path: Path, br_main, chunksize: int = 2_000_000) -> dict:
+def audit_abraom_tsv(path: Path, br_main, chunksize: int = 2_000_000, nominal_an: int = ABRAOM_NOMINAL_AN) -> dict:
     import pandas as pd
 
     br_keys = set(br_main["variant_key"].astype(str))
     present = (dict(zip(br_main["variant_key"].astype(str), as_bool(br_main["abraom_present"])))
                if "abraom_present" in br_main.columns else {})
-    n_rows = n_pos = 0
+    n_rows = n_pos = lattice_ok = 0
     min_pos = None
     below: Counter = Counter()
+    small_afs: Counter = Counter()
     hits: dict[str, float] = {}
     reader = pd.read_csv(path, sep="\t", usecols=["chrom", "pos", "ref", "alt", "af_abraom"],
                          dtype={"chrom": str, "ref": str, "alt": str}, chunksize=chunksize)
@@ -316,19 +363,29 @@ def audit_abraom_tsv(path: Path, br_main, chunksize: int = 2_000_000) -> dict:
         pos_mask = (af > 0).fillna(False)
         n_pos += int(pos_mask.sum())
         if pos_mask.any():
-            m = float(af[pos_mask].min())
+            pos_af = af[pos_mask]
+            m = float(pos_af.min())
             min_pos = m if min_pos is None else min(min_pos, m)
+            k = pos_af * nominal_an
+            lattice_ok += int(((k - k.round()).abs() < 0.01).sum())
+            small_afs.update(pos_af[pos_af < 0.005].round(7).tolist())
         for t in AF_THRESHOLDS:
             below[t] += int((pos_mask & (af < t)).sum())
         keys = build_key(chunk["chrom"], pd.to_numeric(chunk["pos"], errors="coerce"), chunk["ref"], chunk["alt"])
         sel = keys.isin(br_keys).fillna(False).to_numpy(dtype=bool)
-        for k, a in zip(keys[sel].astype(str), af[sel]):
-            hits[k] = float(a)
-    in_tsv_absent_index = sorted(v for k, v in hits.items() if present and not present.get(k, False))
-    in_index_absent_tsv = sum(1 for k, flag in present.items() if flag and k not in hits)
+        for key, a in zip(keys[sel].astype(str), af[sel]):
+            hits[key] = float(a)
+    in_tsv_absent_index = sorted(v for key, v in hits.items() if present and not present.get(key, False))
+    in_index_absent_tsv = sum(1 for key, flag in present.items() if flag and key not in hits)
     return {
         "linhas_tsv": n_rows, "af_positiva": n_pos, "af_minima_positiva": min_pos,
         "af_positiva_abaixo_de": {str(t): below[t] for t in AF_THRESHOLDS},
+        "grade_af": {
+            "an_nominal": nominal_an,
+            "frac_af_positiva_multiplo_de_1_sobre_an_nominal": (lattice_ok / n_pos) if n_pos else None,
+            "menores_af_distintas": [[v, c] for v, c in sorted(small_afs.items())[:10]],
+            "nota": "o TSV nao traz AC/AN; AN real, cobertura e filtros precisam da fonte original",
+        },
         "t_br_n": len(br_keys), "t_br_no_tsv_cru": len(hits),
         "t_br_no_tsv_cru_mas_abraom_present_false": len(in_tsv_absent_index),
         "af_dessas": ({"min": in_tsv_absent_index[0], "mediana": in_tsv_absent_index[len(in_tsv_absent_index) // 2],
@@ -371,7 +428,7 @@ def main(argv: list[str] | None = None) -> int:
         if blk["slice"].endswith("nao-SNV") and blk["n"] > 0 and blk["abraom_present"] == 0:
             print("                         (estrutural: build_abraom_matches so tenta SNV; nao-SNV nunca entra no ABraOM)")
 
-    print("\n[B] pareamento indireto por ABraOM (paragrafo 6.7)")
+    print("\n[B] pareamento associado ao ABraOM (paragrafo 6.7) -- descritivo")
     b = audit_pair_abraom_concordance(pairs, nonbr)
     report["B_pareamento_abraom"] = b
     if "erro" in b:
@@ -411,20 +468,35 @@ def main(argv: list[str] | None = None) -> int:
         report["D_composicao"]["splits"] = {str(n): composition(g) for n, g in splits.groupby("split_within_gene")}
 
     if args.mosaic_examples is not None:
-        print("\n[C] sobreposicao com o Mosaic (a receita de extracao foi escolhida no gold)")
+        print("\n[C] sobreposicao com o Mosaic por tier (a receita de extracao foi escolhida no gold)")
         report["C_sobreposicao_mosaic"] = audit_overlap(mosaic_keys(args.mosaic_examples), targets)
         for tier, blk in report["C_sobreposicao_mosaic"].items():
             print(f"    {tier:<10} " + "  ".join(f"{k}={v:,}" for k, v in blk.items()))
 
     if args.abraom_tsv is not None:
-        print("\n[E] ABraOM cru (SABE-WGS-1171): piso de AF e cobertura do T_BR")
-        e = audit_abraom_tsv(args.abraom_tsv, br)
+        print("\n[E] ABraOM cru (SABE-WGS-1171): piso, grade de AF e cobertura do T_BR")
+        e = audit_abraom_tsv(args.abraom_tsv, br, nominal_an=args.abraom_nominal_an)
         report["E_abraom_cru"] = e
+        g = e["grade_af"]
         print(f"    linhas={e['linhas_tsv']:,}  AF minima positiva={e['af_minima_positiva']}  "
               f"abaixo de={e['af_positiva_abaixo_de']}")
+        print(f"    grade: fracao multipla de 1/{g['an_nominal']} = {g['frac_af_positiva_multiplo_de_1_sobre_an_nominal']}  "
+              f"menores AF distintas={g['menores_af_distintas'][:5]}  ({g['nota']})")
         print(f"    T_BR no TSV cru: {e['t_br_no_tsv_cru']:,} de {e['t_br_n']:,} · "
               f"no cru mas abraom_present=False: {e['t_br_no_tsv_cru_mas_abraom_present_false']:,} "
               f"(AF {e['af_dessas']}) · abraom_present mas fora do cru: {e['t_br_abraom_present_mas_fora_do_tsv_cru']:,}")
+
+    if args.mosaic_brazil_membership is not None:
+        print("\n[F] track brazil do Mosaic: membros nos nossos splits e testes")
+        if args.mosaic_examples is None:
+            print("    --mosaic-brazil-membership exige --mosaic-examples (a chave vem do pb_examples)")
+        else:
+            f = audit_mosaic_brazil_overlap(args.mosaic_brazil_membership, args.mosaic_examples, targets)
+            report["F_mosaic_brazil"] = f
+            print(f"    membros={f['membros']:,}  sem chave no pb_examples={f['sem_chave_no_pb_examples']:,}")
+            for grupo, blk in sorted(f["grupos"].items()):
+                print(f"    {grupo:<42} " + "  ".join(f"{k}={v:,}" for k, v in blk.items()))
+            print(f"    -> {f['veredito']}")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
