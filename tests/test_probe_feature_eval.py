@@ -437,6 +437,78 @@ def test_subset_rejects_bad_criteria():
         raise AssertionError("recorte vazio deveria ser erro")
 
 
+def test_selection_criterion_is_macro_over_discrimination_panels():
+    """O criterio de selecao e a macro dos paineis de discriminacao, NAO a AUROC conjunta.
+
+    Scores que separam PAINEIS mas nao discriminam DENTRO deles: a AUROC conjunta sai alta (plof, quase
+    so P, ganha score alto; synonymous, quase so B, ganha score baixo) e a macro sai 0.5. Era exatamente
+    a diferenca entre o criterio antigo do MLP e o do ridge.
+    """
+    from eval.embedding_probe.stats import auroc
+    from scripts.probe_feature_eval import selection_macro
+
+    scores, labels, panels = [], [], []
+    for panel, level in (("missense", 0.7), ("splice", 0.5), ("noncoding", 0.3)):
+        for i in range(40):                      # dentro do painel: score constante, rotulo 50/50
+            scores.append(level); labels.append(i % 2); panels.append(panel)
+    for _ in range(60):                          # guardas: separaveis so pelo painel
+        scores.append(0.95); labels.append(1); panels.append("plof")
+        scores.append(0.05); labels.append(0); panels.append("synonymous")
+
+    pos = [s for s, y in zip(scores, labels) if y == 1]
+    neg = [s for s, y in zip(scores, labels) if y == 0]
+    pooled = auroc(pos, neg)
+    macro = selection_macro(scores, labels, panels)
+    assert pooled > 0.75, f"o cenario deveria inflar a AUROC conjunta, deu {pooled:.3f}"
+    assert abs(macro - 0.5) < 1e-9, f"sem discriminacao dentro dos paineis a macro tem de ser 0.5, deu {macro}"
+
+
+def test_mlp_is_selected_by_the_same_criterion_as_ridge():
+    """O MLP recebe os paineis da validation e escolhe a epoca por ``selection_macro``.
+
+    Roda sem torch: troca ``mlp_scores`` por um duble que registra o que recebeu, e confere no codigo que o
+    probe real seleciona pela mesma funcao do ridge. O treino real e coberto pelo teste do XOR (com torch).
+    """
+    import inspect
+
+    import scripts.probe_feature_eval as pfe
+
+    source = inspect.getsource(pfe.mlp_scores)
+    assert "selection_macro(" in source, "mlp_scores deixou de selecionar pela macro dos paineis"
+    assert "auroc(sv[" not in source, "a selecao do MLP voltou a AUROC conjunta"
+
+    seen = []
+
+    def fake_mlp(X_tr, y_tr, X_val, y_val, X_test, *, val_panels, seed, hidden=64):
+        seen.append(list(val_panels))
+        rng = np.random.default_rng(seed)
+        return rng.normal(size=len(X_val)), rng.normal(size=len(X_test)), 0.5
+
+    rng = np.random.default_rng(0)
+    n = 600
+    meta = {
+        "folds": [i % 5 for i in range(n)],
+        "tiers": ["gold"] * n,
+        "units": [f"u{i}" for i in range(n)],
+        "labels": [int(rng.random() < 0.5) for _ in range(n)],
+        "panels": [PANELS[i % 3] for i in range(n)],
+    }
+    X = rng.normal(size=(n, 4))
+    args = Namespace(train_tiers="gold", seed=1, lambda_range=(-5.0, 6.0), n_lambda=12)
+
+    original = pfe.mlp_scores
+    pfe.mlp_scores = fake_mlp
+    try:
+        res = pfe.evaluate_config(X, meta, ["fake"], args, use_mlp=True)
+    finally:
+        pfe.mlp_scores = original
+
+    assert len(seen) == 5, f"o MLP deveria rodar nas 5 execucoes, rodou {len(seen)}"
+    assert all(p and set(p) <= set(PANELS) for p in seen), "os paineis da validation nao chegaram ao MLP"
+    assert all(r["selection"] == pfe.SELECTION_CRITERION for r in res["per_run"]), res["per_run"]
+    assert all(r["val_macro"] == 0.5 for r in res["per_run"]), "a macro de selecao do MLP tem de ser registrada"
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

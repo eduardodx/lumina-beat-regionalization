@@ -85,7 +85,7 @@
   "camada_L26_saida": [
     "L26"
   ],
-  "_q2_cabecas": "as 68 dims lineares estao no span do trunk -- um probe LINEAR nao pode ganhar com elas; comparar com --mlp",
+  "_q2_cabecas": "uso linear x nao-linear das mesmas cabecas (rodar com e sem --mlp). NAO vale 'estao no span, entao o ridge nao ganha': delta_focal e h_up PRE-norma e as cabecas leem o trunk POS-norma, e a padronizacao muda a regularizacao do ridge mesmo dentro do span",
   "so_hidden": [
     "delta_focal"
   ],

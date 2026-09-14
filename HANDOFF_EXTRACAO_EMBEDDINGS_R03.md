@@ -89,9 +89,13 @@ e no R03 está **ligado** (`conservation_delta_head_enabled: True`).
 Travado em teste (`test_linear_head_identity_is_exact`), com a contraprova de que **não** vale para
 as três MLP (`test_mlp_heads_are_not_in_the_linear_span`).
 
-**Ressalva honesta:** as 68 dims lineares **não são informação nova** (estão no span das 448). São
-*direções privilegiadas* — o valor é eficiência amostral, não conteúdo. Um probe **linear** não pode
-ganhar com elas; só um não-linear revela. É por isso que existe o probe MLP.
+**Ressalva (corrigida em 14/09):** as 68 dims lineares estão no span das **448 dims pós-norma** e, contra
+esse bloco, não trazem informação nova. Mas a comparação que fizemos foi contra o `delta_focal`, que é o
+h_up **pré-norma** (384 dims): como o RMSNorm não é linear, as cabeças **não** estão no span dele. E mesmo
+dentro do span, o ridge com padronização por coluna muda a regularização efetiva e pode generalizar
+diferente. A frase antiga "um probe linear não pode ganhar com elas" não vale para os números da §5. O
+probe MLP compara o uso linear e não-linear das mesmas features; até 14/09 ele escolhia a época por um
+critério diferente do ridge (AUROC conjunta), corrigido para a macro dos painéis de discriminação.
 
 ### 4.2 As camadas de atenção local NÃO são chamadas como módulos
 

@@ -123,17 +123,37 @@ def ridge_scores(X_tr, y_tr, evals, lambdas):
     return out
 
 
-def mlp_scores(X_tr, y_tr, X_val, y_val, X_test, *, seed: int, hidden: int = 64):
-    """Probe nao-linear minimo. Retorna ``(scores_val, scores_test)``.
+SELECTION_CRITERION = "macro_auroc_paineis_discriminacao"
 
-    Existe para UMA pergunta: as 68 dims das cabecas lineares estao no span do trunk, entao um probe
-    LINEAR nao pode ganhar nada com elas -- se ajudarem, e por vies indutivo sob dados escassos, e so
-    um modelo nao-linear revela isso. O teste ``test_mlp_probe_learns_what_ridge_cannot`` verifica
-    que este probe de fato aprende o que o ridge nao aprende; sem essa verificacao ele nao serviria
-    para a pergunta que motiva sua existencia.
 
-    Early stop pela AUROC da validation. Semeado, mas NAO deterministico como o ridge -- por isso o
-    ridge segue sendo o probe de ranking e este serve so a pergunta linear-vs-nao-linear.
+def selection_macro(scores, labels, panels):
+    """Criterio UNICO de selecao na validation: o ridge escolhe lambda e o MLP escolhe a epoca por ele.
+
+    E a macro AUROC NAO ponderada de missense, splice e noncoding -- a regra de selecao do protocolo do
+    Mosaic. Ate 14/09 o MLP parava pela AUROC CONJUNTA de toda a validation, que inclui os paineis de
+    guarda (plof quase so P, synonymous quase so B). Esses paineis se separam pelo proprio tipo de
+    variante: a AUROC conjunta premiava separar paineis, nao discriminar dentro deles, e os dois probes
+    deixavam de ser comparaveis. Devolve None se algum painel de discriminacao ficar sem as duas classes
+    -- melhor nao selecionar do que selecionar por uma macro incompleta.
+    """
+    per_panel = panel_auroc(list(scores), list(labels), list(panels))
+    return macro_auroc({k: v["auroc"] for k, v in per_panel.items()})
+
+
+def mlp_scores(X_tr, y_tr, X_val, y_val, X_test, *, val_panels, seed: int, hidden: int = 64):
+    """Probe nao-linear minimo. Retorna ``(scores_val, scores_test, macro_val)`` ou ``None``.
+
+    Serve para comparar o uso LINEAR e NAO-LINEAR das mesmas features. NAO vale a leitura antiga de que
+    "as 68 dims das cabecas lineares estao no span do trunk, logo um probe linear nao ganha com elas":
+    (1) o bloco comparado, ``delta_focal``, e o h_up PRE-norma, enquanto as cabecas leem o trunk
+    POS-norma -- o RMSNorm nao e linear, entao elas nem estao no span do que foi comparado; (2) mesmo
+    dentro do span, o ridge com padronizacao por coluna muda a regularizacao efetiva e pode generalizar
+    diferente. O teste ``test_mlp_probe_learns_what_ridge_cannot`` garante que este probe aprende o que
+    o ridge nao aprende.
+
+    A epoca e escolhida por ``selection_macro`` na validation -- o MESMO criterio do lambda do ridge.
+    Devolve ``None`` se nenhuma avaliacao teve macro definida; a execucao e pulada, como no ridge.
+    Semeado, mas NAO deterministico como o ridge.
     """
     import numpy as np
     import torch
@@ -143,14 +163,14 @@ def mlp_scores(X_tr, y_tr, X_val, y_val, X_test, *, seed: int, hidden: int = 64)
     yt = torch.tensor(y_tr, dtype=torch.float32).unsqueeze(1)
     xv = torch.tensor(X_val, dtype=torch.float32)
     xe = torch.tensor(X_test, dtype=torch.float32)
-    yv = np.asarray(y_val)
+    yv = np.asarray(y_val).tolist()
     net = torch.nn.Sequential(
         torch.nn.Linear(xt.shape[1], hidden), torch.nn.GELU(),
         torch.nn.Dropout(0.1), torch.nn.Linear(hidden, 1),
     )
     opt = torch.optim.Adam(net.parameters(), lr=3e-3, weight_decay=1e-4)
     lossf = torch.nn.BCEWithLogitsLoss()
-    best, best_out, patience = -1.0, None, 0
+    best, best_out, patience = None, None, 0
     for epoch in range(600):
         net.train()
         opt.zero_grad()
@@ -162,16 +182,16 @@ def mlp_scores(X_tr, y_tr, X_val, y_val, X_test, *, seed: int, hidden: int = 64)
         with torch.no_grad():
             sv = net(xv).squeeze(1).numpy()
             se = net(xe).squeeze(1).numpy()
-        score = auroc(sv[yv == 1].tolist(), sv[yv == 0].tolist()) if 0 < yv.sum() < len(yv) else 0.0
-        if score > best:
+        score = selection_macro(sv.tolist(), yv, val_panels)
+        if score is not None and (best is None or score > best):
             best, best_out, patience = score, (sv, se), 0
         else:
             patience += 1
             if patience >= 10:
                 break
     if best_out is None:
-        return np.zeros(len(X_val)), np.zeros(len(X_test))
-    return best_out
+        return None
+    return best_out[0], best_out[1], best
 
 
 # ------------------------------------------------------------------------------------------------
@@ -354,16 +374,18 @@ def evaluate_config(X, meta, blocks, args, *, use_mlp=False) -> dict:
         pte = [panels[i] for i in te]
 
         if use_mlp:
-            sv, st = mlp_scores(Xtr, ytr, Xva, yva, Xte, seed=args.seed + run)
-            best = {"lambda": None, "val_macro": None, "val": sv, "test": st}
+            out = mlp_scores(Xtr, ytr, Xva, yva, Xte, val_panels=pva, seed=args.seed + run)
+            if out is None:  # nenhuma epoca deu macro completa na validation
+                continue
+            sv, st, m = out
+            best = {"lambda": None, "val_macro": m, "val": sv, "test": st}
         else:
             lo, hi = args.lambda_range
             lambdas = (len(tr) * np.logspace(lo, hi, args.n_lambda)).tolist()
             paths = ridge_scores(Xtr, ytr, [Xva, Xte], lambdas)
             best = None
             for lam, (sv, st) in paths.items():
-                m = macro_auroc({k: v["auroc"] for k, v in
-                                 panel_auroc(sv.tolist(), yva.tolist(), pva).items()})
+                m = selection_macro(sv.tolist(), yva.tolist(), pva)
                 if m is not None and (best is None or m > best["val_macro"]):
                     best = {"lambda": lam, "val_macro": m, "val": sv, "test": st}
             if best is None:  # nenhum lambda deu macro completa na validation
@@ -371,7 +393,7 @@ def evaluate_config(X, meta, blocks, args, *, use_mlp=False) -> dict:
 
         test_panels = panel_auroc(best["test"].tolist(), yte, pte)
         per_run.append({"run_id": run, "lambda": best["lambda"], "val_macro": best["val_macro"],
-                        "sizes": split.sizes, "panels": test_panels})
+                        "selection": SELECTION_CRITERION, "sizes": split.sizes, "panels": test_panels})
         chosen.append(best["lambda"])
 
     if not per_run:
