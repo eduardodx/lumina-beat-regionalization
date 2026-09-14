@@ -205,12 +205,17 @@ divergentes.
   one-hot de base e substituição) —, janela de 4 kb, convenção focal do Mosaic (`L//2 − 1`), validação
   **estrita** de REF (sem o fallback ±1 do harness antigo).
 - **Não é vencedora estabelecida.** Na pesquisa: (a) o probe MLP escolhia a época pela AUROC conjunta da
-  validação e o ridge pela macro dos painéis — critérios diferentes, correção na branch
-  `embedding-probe-mosaic`; (b) a premissa "as cabeças estão no span, então um probe linear não ganha" não se
+  validação e o ridge pela macro dos painéis. Corrigido (`1615955`) e rerodado em 14/09: a macro mudou 0,002
+  em média e a ordem das configurações se manteve (correlação de postos ≥ 0,995). Sobre a base honesta, as
+  cabeças continuam somando no missense (+0,033 core / +0,037 gene), mas a vantagem delas sobre o embedding
+  de 2092 dims no missense **virou empate**; a favor das 172 dims ficam diluir menos o noncoding e ser 12×
+  menor; (b) a premissa "as cabeças estão no span, então um probe linear não ganha" não se
   aplicava à comparação feita (`delta_focal` é h_up **pré-norma**; as cabeças leem o trunk **pós-norma**);
   (c) as nove diferenças positivas vêm de avaliações correlacionadas, sem controle de multiplicidade.
 - **Seleção** em dados de desenvolvimento (train/validation), **nunca** nos testes, com critério declarado
-  antes. Comparar com a extração antiga (two-tower pós-norma + média de ±64 bp). Rodar um piloto com um adapter
+  antes. Comparar com a extração antiga (two-tower pós-norma + média de ±64 bp): no MLP da pesquisa, a aproximação
+  dela sem LoRA (`infra_atual_pos_norma`, 896 dims) empata com as 172 dims na macro e fica +0,015 no
+  missense. Rodar um piloto com um adapter
   para checar se a leitura sobrevive à adaptação, e escolher com um critério que não favoreça o M0.
 - **Congelar UMA extração** para todos os braços (extração diferente por braço confundiria fonte com
   representação).
@@ -316,4 +321,4 @@ preciso definir a regra de combinação (sequencial, merge, fusion) e repetir a 
 | 5 | Critério de sucesso em AUROC | Eduardo | §10 |
 | 6 | O pré-treino do R03 viu o chr8? | Eduardo (repositório de treino) | §11 |
 | 7 | Localizar o TSV do SABE-WGS-1171 | Gabriel, Eduardo | §3, §4 |
-| 8 | Rerodar os probes MLP com o critério macro e comparar | Gabriel (notebook) | §8 |
+| 8 | ~~Rerodar os probes MLP com o critério macro e comparar~~ feito em 14/09 (resultado no §8) | Gabriel (notebook) | — |
