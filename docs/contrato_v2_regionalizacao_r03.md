@@ -141,36 +141,63 @@ rótulos em treino, seleção ou calibração.
 | | A: T_BR v2 (PDF) | B: `br_clinical_evidence` | B: `br_population_observed` |
 |---|---|---|---|
 | Construto | só submissor brasileiro | participação de instituição brasileira (a maioria compartilhada, segundo o Mosaic) | presença no ABraOM |
-| Tiers | todos os rótulos P/B | consensus | gold |
-| Tamanho | reconstruir (v1 pareado SNV: 2.774 P / 529 B) | 3.119 casos: 2.808 P / 311 B | 1.889 casos: 89 P / 1.800 B; só 751 pareados |
+| Tiers | todos os rótulos P/B; **na prática, 1 estrela** (§5.1) | consensus | gold |
+| Tamanho | só brasileira com rótulo gold/consensus: **63 (62 P / 1 B)**; com 1 estrela: a medir (o v1 pareado SNV tinha 2.774 P / 529 B, com a marcação v1) | 3.119 casos: 2.808 P / 311 B | 1.889 casos: 89 P / 1.800 B; só 751 pareados |
 | Pareamento | gene, tipo, consequência + AF | rótulo, painel, bin gnomAD | rótulo, painel, bin gnomAD |
 | Independência da extração | no v1, 280 BR + 226 nonBR pareados estavam no gold usado na seleção | **intocado** (consensus) | **inteiro dentro** da seleção (gold); sobreposto ao ABraOM por construção |
 | Formato | M0–M2 com M1 como baseline causal | base × regionalizado: declarar como M1 e M2 entram no manifesto do consumidor | idem |
 | Trabalho | reconstrução completa | pronto; excluir membros do treino | pronto; excluir membros do treino |
 
-**[PROPOSTO] T_BR v2 (opção A) como teste principal; o track `brazil` do Mosaic como avaliação complementar.**
-Revisado em 14/09, depois de conferir o código do Mosaic: o `br_clinical_evidence` mede **participação** de
-instituição brasileira, só no tier consensus (exclui gold), e o próprio protocolo do Mosaic registra que "a
-maioria é `br_lab_shared`" (`protocol.py`), isto é, variantes que laboratórios não brasileiros também
-classificaram. É outro construto, não o BR-only que o PDF (§5.7) escolheu para o teste de interação. A proposta
-anterior (`br_clinical_evidence` confirmatório) fica registrada como alternativa. Condições, declaradas antes de
-qualquer resultado de modelo:
+### 5.1 O que o diagnóstico de 14/09 mudou
 
-1. **Tamanho e poder:** recalcular o poder do ΔAUROC com os tamanhos do T_BR v2 (método da
-   `docs/justificativa_endpoint_auroc.md`). Se não atingir o mínimo declarado, o resultado é exploratório; não
-   se troca o teste principal por outro que "funcione melhor".
+A proposta anterior (T_BR v2 só brasileira como principal, track `brazil` complementar) dependia de haver
+variantes só brasileiras em número suficiente. O diagnóstico (§6) mediu que isso não acontece com rótulos de
+qualidade:
+
+- **Com os rótulos do Mosaic (gold + consensus) e o filtro de SCV dele, só 63 variantes são só brasileiras: 62 P
+  e 1 B**, todas consensus. As que têm participação brasileira somam 3.119 (2.808 P / 311 B), das quais 3.056 são
+  compartilhadas. Nenhuma variante gold tem marcação brasileira.
+- **É estrutural.** Consensus exige pelo menos dois submissores sem conflito, e o agregado de uma variante gold vem
+  do painel de especialistas. Uma variante só brasileira costuma ter um único submissor (1 estrela), tier que o
+  Mosaic exclui por qualidade de rótulo.
+- **O T_BR v1 confirma.** Dos 1.782 membros BR pareados que estão no Mosaic, 929 são compartilhados, 832 não têm
+  marcação brasileira pelo filtro e só 21 são só brasileiros. Dos 1.688 SNVs do slice T_BR v1 fora do Mosaic,
+  1.446 (86%) tinham `max_review_status_rank_aggregate` = 1 no release da v1 (173 com 2, 32 com 3, 37 sem valor).
+- **Hipótese, não medida:** a variante só brasileira de submissor único é onde um laboratório brasileiro mais
+  provavelmente usou frequência local (ABraOM) para chamar benigno. É onde o sinal regional esperado é maior e
+  também onde a circularidade é maior.
+
+Revisar a proposta agora é legítimo: nenhum modelo rodou, e tamanho e qualidade de rótulo não são resultado.
+
+**[ABERTO] Decisão (0), reformulada: construto e qualidade de rótulo juntos.**
+
+- **A′ — só brasileira com rótulos de 1 estrela** (construto do PDF). Exige declarar a política de rótulo (P/B de
+  submissor único), parear também por estrelas (PDF §6.3), prever um controle de circularidade (por exemplo, a
+  DiD estratificada por presença no ABraOM) e medir o tamanho no ClinVar 2026-06 antes de decidir.
+- **B — participação (`br_clinical_evidence`).** Pronto, rótulo consensus, pares materializados, 311 benignas.
+  Mede outro construto: a maioria das variantes é compartilhada com laboratórios internacionais, o que pode diluir
+  um efeito regional.
+- **C — as duas**, com a principal escolhida antes de qualquer modelo, por tamanho e qualidade de rótulo.
+
+**[PROPOSTO] Próximo passo:** medir A′ (pendência 9). Se A′ não tiver o poder mínimo, a principal é B e A′ fica
+exploratória. Se tiver, a escolha entre A′ (construto do PDF, rótulo mais fraco, circularidade maior) e B (rótulo
+melhor, sinal possivelmente diluído) é do Eduardo. Condições que valem para qualquer escolha:
+
+1. **Tamanho e poder:** recalcular o poder do ΔAUROC com os tamanhos reais (método da
+   `docs/justificativa_endpoint_auroc.md`). Depois de declarada a principal, não se troca o teste por outro que
+   "funcione melhor".
 2. **Independência:** a extração foi escolhida no gold do Mosaic, que no v1 continha 280 BR + 226 nonBR
    pareados. Reportar o contraste principal também **sem** as variantes de teste que estavam nesse gold
    (análise de sensibilidade pré-declarada).
 3. `br_population_observed` continua exploratório (sobreposto ao ABraOM por construção).
-4. Construir os dois candidatos na etapa de dados e excluir a **união** deles dos splits (§7): a decisão só
-   atribui papéis e não obriga a refazer os splits.
+4. Construir os candidatos na etapa de dados e excluir a **união** deles dos splits (§7): a decisão só atribui
+   papéis e não obriga a refazer os splits.
 
 Benchmarks complementares mantidos: chr8 e BRCA1/BRCA2/TP53 (PDF §11–12; descritivos abaixo dos mínimos).
 
 ---
 
-## 6. Definição de submissor brasileiro — **[ABERTO] até o diagnóstico**
+## 6. Definição de submissor brasileiro — **[ABERTO]**, com diagnóstico feito em 14/09
 
 A auditoria (bloco [F]) mostrou que as duas definições em uso discordam:
 
@@ -204,29 +231,48 @@ A auditoria (bloco [F]) mostrou que as duas definições em uso discordam:
 "mixed". Os 1.250 casos do Mosaic no treino v1 **não** se explicam pela diferença any × only: pela nossa
 definição, nenhuma submissão brasileira foi vista neles.
 
-**Causas candidatas, ainda não separadas:** cobertura da tabela regional (variante ausente virou não
-brasileira), mapeamento de instituições, classe de SCV (VUS, somática, sem contribuição para o agregado),
-release, e a definição any × only (que explica parte da diferença no T_BR, não no treino).
+**Diagnóstico executado em 14/09** (`scripts/diagnose_brazilian_submitter_divergence.py`, commit `3419bea`;
+saídas em `~/artifacts/redesenho/diagnostico_submissor_br/` no notebook). O `is_br` do Mosaic foi refeito com as
+funções e a configuração do próprio Mosaic (`814e7f0`) e o `submission_summary_2026-06` conferido por sha256, e
+**bateu com as flags publicadas em 326.826 de 326.826 exemplos**. Isso confirma compatibilidade com as flags, não a
+correção geográfica das instituições. As categorias descrevem **marcações**, não nacionalidade.
 
-**[PROPOSTO] Diagnóstico direcionado** (não depende do Eduardo):
+| Categoria | Variantes | Leitura |
+|---|---:|---|
+| A1: Mosaic marca; a v1 não tem linha da variante | 1.580 (1.187 no treino v1) | cobertura: só 9.602 dos 190.005 exemplos do Mosaic presentes no master v1 (5%) tinham linha na tabela regional |
+| A2: Mosaic marca; a v1 tem linhas, nenhuma brasileira | 133 | a submissão brasileira (Dasa em 101) não estava na tabela v1; as listas v1 mais comuns só têm laboratórios internacionais |
+| B: a v1 marca; o Mosaic não | 1.134 | todas com SCV de instituição da lista fora do filtro do Mosaic (abaixo) |
+| C1: a v1 sem linha não brasileira; Mosaic compartilhada | 1.026 | as submissões internacionais (Labcorp/Invitae, GeneDx, Ambry) não estavam na tabela v1 |
+| C2: a v1 com linha não brasileira; Mosaic só marcadas | 6 | — |
+| Os dois marcam, com a mesma divisão | 206 | — |
 
-1. **Reprodução validada antes de qualquer conclusão.** Refazer o `is_br` por SCV com as funções e a
-   configuração do Mosaic em `814e7f0`, a partir do `submission_summary_2026-06` (sha256 fixado em
-   `config/sources.yaml`) e das `clinvar_variation_ids` publicadas no `pb_examples.parquet` (o mesmo índice do
-   build; confirmar que a coluna existe no release do notebook). Validar contra os `br_lab_any/only/shared`
-   publicados em **todos** os exemplos; se não bater 100%, parar e pedir a pasta `interim/` ao Eduardo. O passo
-   de catálogo não é refeito: ele depende de um `variation_allele.txt.gz` fixado pela data do FTP, não de um
-   arquivo mensal arquivado.
-2. **Tabela de evidência das variantes divergentes**, uma linha por SCV: chave canônica, `VariationID`, SCV,
-   submissor, classificação, review status, origem, se contribui, se passa no filtro, `org_id` do Mosaic,
-   `cohort` da nossa tabela para o par (`VariationID`, submissor) e data da última avaliação.
-3. **Motivo por variante**, separando: cobertura; instituição reconhecida por um lado e não pelo outro; **não
-   reconhecida pelo matcher** × **comprovadamente não brasileira** (país no `organization_summary`); classe de
-   SCV; release (SCV presente só numa fonte); any × only; chave.
-4. Nenhuma correção automática: o relatório alimenta a definição e a reconstrução dos dados.
+- **Onde a v1 tinha dado, ela concordou:** marcou brasileira 1.238 das 1.371 variantes cobertas que o Mosaic marca.
+  Não apareceu erro de mapeamento de instituição. "Não brasileira" na v1 era, quase sempre, "sem dado".
+- **Por que o Mosaic não conta as SCVs brasileiras de B** (1.336 SCVs): não é classificação (só 6 não são P/B).
+  959 têm origem não germinativa (921 `unknown`; Mendelics em 924 das suas 980) e 630 não contribuem para o agregado
+  (entre elas, Dasa 124, INCA 55, Einstein 52 e A.C.Camargo 33); 253 têm as duas coisas.
+- **Escopo da lista do Mosaic:** nenhuma SCV P/B de instituição com país Brazil no NCBI fora da lista, em todos os
+  exemplos; mas 138.306 das 932.402 SCVs P/B (15%) têm país não resolvido. Nas variantes divergentes, os 96
+  submissores com país não resolvido não contêm nenhum termo-gatilho do Mosaic (os maiores são OMIM, ARUP,
+  GeneReviews, SickKids e ENIGMA). A lista não fica validada de forma completa.
+- **Pontos da política do Mosaic a confirmar com o Eduardo:**
+  (a) `origin_has_germline` só aceita o termo literal `germline`: `de novo`, `biparental`, `maternal`, `inherited` e
+  `unknown` ficam fora (conferido no código; não encontrei documentação dessa escolha);
+  (b) nenhuma variante gold recebe marcação brasileira; explicação provável: quando há painel de especialistas, o
+  ClinVar marca as demais SCVs como não contribuindo para o agregado, e o filtro exige contribuição;
+  (c) a URL do `submission_summary_2026-06` em `config/sources.yaml` aponta para `archive/2026/`, que não existe
+  (os bytes batem com o arquivo em `archive/`).
 
-A pasta `interim/` (`assertions.parquet`, `org_match.json`, `org_unresolved.json`) continua sendo a fonte
-preferida; se o Eduardo a enviar, ela substitui o passo 1.
+**[PROPOSTO] Definição para a v2, com dois usos:**
+
+1. **Exclusão de treino, validação e calibração (vazamento): ampla.** Qualquer SCV de instituição da lista, de
+   qualquer classificação, origem ou contribuição, tira a variante do treino. O custo é perder variantes do treino;
+   o erro contrário é vazamento. Cobre também o que a v1 contava.
+2. **Pertencimento ao teste: segue o construto da §5.** Para participação (B), vale o filtro do Mosaic, já
+   materializado nos pares. Para só brasileira com 1 estrela (A′), declarar o filtro antes; proposta: P/B e não
+   exclusivamente somática (a origem `unknown` conta, como no PDF §5.5), com sensibilidade usando o filtro do Mosaic.
+
+A pasta `interim/` do Mosaic deixou de ser necessária para o diagnóstico: a reprodução bateu.
 
 **[FIXADO] Qualquer que seja a definição:** submissões brasileiras ficam fora de treino, validação e calibração
 (PDF §4.2).
@@ -238,15 +284,16 @@ preferida; se o Eduardo a enviar, ela substitui o passo 1.
 - Fonte: ClinVar 2026-06, rótulos P/LP × B/LB, variante canônica GRCh38.
 - Status brasileiro calculado para **toda** variante a partir do `submission_summary` completo, com a definição
   resolvida na §6. Ausência de dado não conta como não brasileira (no v1, contava).
-- Excluir: variantes com submissão brasileira (enquanto a §6 não estiver resolvida, as marcadas por qualquer uma
-  das duas definições); chr8; **todos** os membros dos candidatos a teste: T_BR v2, T_nonBR v2 e o track
-  `brazil` do Mosaic, com controles e variantes do mesmo `overlap_cluster_id`.
+- Excluir: variantes com qualquer SCV de instituição brasileira da lista, de qualquer classificação, origem ou
+  contribuição (§6, uso 1); chr8; **todos** os membros dos candidatos a teste (T_BR v2, T_nonBR v2 e o track
+  `brazil` do Mosaic, com controles e variantes do mesmo `overlap_cluster_id`).
 - Só SNV na campanha principal. A auditoria [D] mostrou que o custo é pequeno: nos pares v1, SNV fica com
   2.774 P / 529 B de 3.104 P / 547 B (perde 18 benignas); os pares de indel tinham só 18 benignas.
 - 80/10/10 por variante canônica ([ABERTO]: ou por gene), manifestos sha256 e gate de sobreposição zero,
   reaproveitando `scripts/build_clinvar_splits.py`.
 - Referência histórica v1: 839.310 / 104.734 / 104.633 (sha256 `02aeb8ba…` / `d7f7bd73…` / `f6a172e5…`).
-  **Não reutilizar:** contêm membros do track brazil e usam a definição antiga de submissor brasileiro.
+  **Não reutilizar:** usam a marcação v1 de submissor brasileiro; o treino v1 contém 1.252 variantes marcadas
+  pelo Mosaic (1.187 delas sem nenhuma linha na tabela regional).
 
 ---
 
@@ -375,11 +422,11 @@ preciso definir a regra de combinação (sequencial, merge, fusion) e repetir a 
 | Extração | two-tower pós-norma + média ±64 bp → `RegimeAHead` | candidata de 172 dims, validada no desenvolvimento | pesquisa de extração |
 | Frequência gnomAD | condicional ao índice ABraOM | gnomAD v4.1 real com status | auditoria [A] |
 | Pareamento T_nonBR | usava a AF condicional | reconstruir ou usar o Mosaic | auditoria [B] (excesso descritivo de +0,126 nos estratos mistos) |
-| Submissor brasileiro | coluna `cohort` sem revisão | lista revisada (pendente de diagnóstico) | auditoria [F] |
+| Submissor brasileiro | coluna `cohort` sem revisão, com linha para só 5% das variantes | lista revisada do Mosaic, por SCV; exclusão ampla do treino | diagnóstico de 14/09 (§6) |
 | Domínio | SNV + indel + MNV | só SNV na campanha principal | pesquisa + auditoria [D] |
 | Validação de REF | fallback ±1 | estrita | revisão |
 | Fonte ClinVar | master regional (release desconhecido) | ClinVar 2026-06 via Mosaic | proposta |
-| Teste principal | T_BR v1 (BR-only pela coluna `cohort`) | T_BR v2 BR-only reconstruído; track `brazil` do Mosaic complementar | construto do PDF (§5) |
+| Teste principal | T_BR v1 (BR-only pela coluna `cohort`) | a decidir: participação (Mosaic, consensus) ou só brasileira com rótulos de 1 estrela | §5.1: com rótulo gold/consensus, só brasileira tem 1 benigna |
 
 ---
 
@@ -395,11 +442,14 @@ preciso definir a regra de combinação (sequencial, merge, fusion) e repetir a 
 
 | # | Pendência | Quem | Bloqueia |
 |---|---|---|---|
-| 1 | Diagnóstico da divergência de submissor brasileiro (§6; a `interim/` do Mosaic, se vier, substitui a reprodução) | Claude (script), Gabriel (notebook); Eduardo (`interim/`, opcional) | §5, §6, §7 |
-| 2 | Decisão (0): conjunto de teste (proposta: T_BR v2 principal, Mosaic complementar) | Eduardo | §5, §7 |
+| 1 | ~~Diagnóstico da divergência de submissor brasileiro~~ feito em 14/09 (§6) | Claude, Gabriel | — |
+| 2 | Decisão (0): construto do teste e qualidade de rótulo (§5.1) | Eduardo | §5, §7 |
 | 3 | Loss do adapter populacional e gerador de janelas | Eduardo | §2, §3 |
 | 4 | Definição do "global", bins de AF e AN do ABraOM | Eduardo, Gabriel | §3 |
 | 5 | Critério de sucesso: interação e ganho em T_BR declarados separadamente | Eduardo | §10 |
 | 6 | O pré-treino do R03 viu o chr8? | Eduardo (repositório de treino) | §11 |
 | 7 | Localizar o TSV do SABE-WGS-1171 | Gabriel, Eduardo | §3, §4 |
 | 8 | ~~Rerodar os probes MLP com o critério macro e comparar~~ feito em 14/09 (resultado no §8) | Gabriel (notebook) | — |
+| 9 | Medir o tamanho de só brasileira com rótulos de 1 estrela no ClinVar 2026-06 (precisa do `variant_summary_2026-06`, 439 MB) | Claude (script), Gabriel (notebook) | §5 |
+| 10 | Filtro de SCV para pertencimento ao teste (§6, uso 2) | Eduardo | §5, §6 |
+| 11 | Confirmar com o Eduardo os pontos da política do Mosaic (origens germinativas, contribuição em gold, URL no `sources.yaml`) | Gabriel, Eduardo | §6 |
