@@ -3,6 +3,11 @@
 > **Status:** rascunho para discussão com o Eduardo. **Nada aqui está congelado.**
 > Data: 2026-09-14 · Branch: `new_regionalization` · Autor: Gabriel (com Claude) · Revisor externo: consultado.
 >
+> **Atualização 2026-09-15:** a rota em decisão está em `docs/proposta_mosaic_regionalizacao_desenvolvimento.md`.
+> Se o Eduardo aprovar, ela substitui aqui a fonte de treino (§4, §7), a decisão do conjunto de teste (§5), os
+> detalhes de avaliação (§10) e a pendência 9 (§15). Já fixado pelo Gabriel: o R03 publicado
+> (`best_checkpoint.pt`, passo 71.000) como checkpoint-base comum e o `croma-bioai/lumina-mosaic` como benchmark.
+>
 > **Legenda de cada item:**
 > **[FIXADO]** decidido (por instrução do Eduardo/Gabriel ou por exigência do protocolo) ·
 > **[PROPOSTO]** recomendação com evidência, aguarda aprovação ·
