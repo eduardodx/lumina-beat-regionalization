@@ -15,8 +15,13 @@ recomendação nossa · **[ABERTO]** decisão necessária antes de implementar.
 ## 0. Resumo
 
 - **[FIXADO]** Backbone: R03 publicado (`best_checkpoint.pt`, passo 71.000). Benchmark: `croma-bioai/lumina-mosaic`.
-- **[FIXADO — Eduardo, 15/09]** Avaliação nos dois estudos brasileiros do Mosaic (`br_clinical_evidence` e
-  `br_population_observed`), medindo **participação** de instituições brasileiras. O teste só-BR fica para depois.
+- **[FIXADO — Eduardo, 15/09]** Avaliação nos dois estudos brasileiros do Mosaic, que respondem perguntas
+  **diferentes** e nunca se somam: `br_clinical_evidence` mede **participação de instituições brasileiras** e é a
+  avaliação principal; `br_population_observed` mede **presença no ABraOM**. O teste só-BR fica para depois.
+- **[FIXADO]** Esta é uma **campanha derivada do Mosaic**, segundo a orientação do Eduardo: desenvolvimento no
+  `core_locus` depois das exclusões e avaliação nos estudos brasileiros congelados. O código publicado continua
+  declarando `release_training_allowed = False`; encaixar no formato `base` × `regionalized` não é o mesmo que
+  cumprir integralmente o protocolo publicado, e a diferença é declarada, não contornada.
 - **[FIXADO — Eduardo, 15/09]** **Um único adapter populacional misto**, treinado em global + ABraOM na proporção
   aproximada de 60% global / 40% Brasil. As etapas separadas (adapter global puro e adapter ABraOM puro) são
   puladas: ficam como ablação de atribuição, se o resultado principal for positivo.
@@ -136,25 +141,43 @@ Fonte: partição `core_locus` do release v1, na agenda oficial de cinco execuç
 | validação | `core_fold` 1 · só gold | 2.453 | 1.182 | 1.271 |
 | teste do core | `core_fold` 0 · só gold | 1.758 | 1.199 | 559 |
 
-Os números são de referência do guia: recontar na execução. O teste do core (fold 0) **não** é o estudo brasileiro —
-serve como verificação de sanidade da cabeça e, junto com a validação, como o único lugar onde se escolhe extração,
-early stopping, Platt e limiar. Nada disso toca os estudos brasileiros.
+Os números são de referência do guia e são o **ponto de partida**, não o tamanho do treino: recontar depois das
+exclusões.
+
+**Papel de cada recorte [FIXADO]:**
+
+| Recorte | Uso permitido |
+|---|---|
+| folds 2, 3 e 4 | treinar a cabeça |
+| fold 1, gold | escolher extração e hiperparâmetros, early stopping, ajustar Platt e limiar |
+| fold 0, gold | avaliar **depois** de congeladas todas as escolhas |
+| estudos brasileiros | avaliar os sistemas já congelados |
+
+O fold 0 não participa de nenhuma escolha: se orientar qualquer mudança, deixa de ser teste reservado e vira
+desenvolvimento.
 
 Regras obrigatórias sobre esse recorte:
 
 1. **Excluir todos os membros dos dois estudos brasileiros** (casos, casos sem controle e controles) e **todas as
-   variantes dos seus `overlap_cluster_id`**. A exclusão por cluster é a mesma unidade atômica que o `core_locus`
-   usa, então não quebra a agenda de folds. Sem isso, `study_membership_used_for_training = False` e
-   `study_labels_used_for_training = False` ficam violados e o estudo perde a validade.
+   variantes dos seus `overlap_cluster_id`**, nos **três** papéis — treino, validação/calibração e teste reservado.
+   A exclusão por cluster é a mesma unidade atômica que o `core_locus` usa, então não quebra a agenda de folds. Vale
+   em especial para o `br_population_observed`, que é gold e portanto cai justamente na validação e no teste gold.
+   Sem isso, `study_membership_used_for_training = False` e `study_labels_used_for_training = False` ficam violados
+   e o estudo perde a validade.
 2. **Excluir qualquer variante com SCV de instituição da lista brasileira do Mosaic**, de qualquer classificação,
    origem ou contribuição (regra ampla; ausência de informação não vira "não brasileira").
 3. Aplicar `sequence_eligible = True` nos três papéis (o modelo exige janela de sequência; os 118 inelegíveis do
    release são consensus).
 4. chr8 fora, se continuar reservado (decisão E).
 
-Medir e registrar o custo de cada exclusão. Identidade do snapshot para o manifesto: ID próprio, hash lógico das
-linhas, cutoff = o do release (ClinVar 2026-06), origem = "derivado do `core_locus` do release v1, autorizado pelo
-mantenedor em 15/09/2026", e a lista de exclusões aplicadas.
+Medir e registrar o custo de cada exclusão. O G2 verifica, depois de aplicá-las: nenhuma variante e nenhum cluster
+dos estudos em qualquer um dos três recortes; tamanhos e P/B por painel em cada papel; e presença das duas classes
+em missense, splice e noncoding na validação. Se a validação não sustentar a seleção planejada, isso se resolve
+**antes** de treinar — e nunca trocando de fold depois de ver resultado de modelo.
+
+Identidade do snapshot para o manifesto: ID próprio, hash lógico das linhas, cutoff = o do release (ClinVar
+2026-06), origem = "derivado do `core_locus` do release v1, segundo a orientação do mantenedor em 15/09/2026", e a
+lista de exclusões aplicadas.
 
 ### 4.3 Dados populacionais [PROPOSTO]
 
@@ -175,22 +198,24 @@ mantenedor em 15/09/2026", e a lista de exclusões aplicadas.
 Desenho fixado: **MLM com máscaras em span sobre as mutações**, com as mutações em **posições aleatórias da janela**
 (não centralizadas). Um único adapter, treinado na mistura ≈60% global / 40% ABraOM.
 
-Parâmetros a declarar antes de treinar, todos no manifesto do gerador:
+Parâmetros a declarar antes de treinar, todos no manifesto do gerador. São **propostas nossas**, não especificação
+do Eduardo:
 
-| Parâmetro | Proposta |
+| Parâmetro | Proposta para o piloto |
 |---|---|
-| Comprimento da janela | 4.096 bp, o mesmo da extração, para o cache servir aos dois usos |
-| Posição da mutação | deslocamento aleatório dentro da janela, com margem mínima das bordas |
-| Variantes por janela | 1 a k, amostradas da fonte sorteada; registrar a distribuição |
-| Mistura | proporção de **instâncias de variante** por fonte: 0,6 gnomAD / 0,4 ABraOM. É parâmetro: 1,0/0,0 dá o braço global puro (MG) |
+| Comprimento da janela | 4.096 bp, o mesmo comprimento de contexto da extração, para o adapter treinar no regime em que será usado. Não é compartilhamento de cache: janela sintética mascarada e embedding de avaliação são artefatos diferentes |
+| Variantes por janela | **uma variante focal por janela**, o que torna equivalentes as três leituras da mistura e permite auditá-la |
+| Posição da variante | **deslocar o início da janela** em torno da variante, preservando a coordenada genômica e o contexto real. A mutação **não** é transportada para outra posição da sequência |
+| Mistura | **60% das janelas** de fonte global / 40% ABraOM. É parâmetro: 100/0 dá o braço global puro (MG). Declarar sempre a unidade (janelas, aqui) |
 | Amostragem por frequência | estratificada por bin de AF, para o adapter ver o espectro populacional e não só variantes raras |
-| Span de máscara | spans curtos cobrindo a posição variante **mais** uma fração de spans em posições de referência, para o modelo não aprender o atalho "posição mascarada = variante" |
-| Loss | relatada separadamente em posições variantes e de referência (exigência do contrato v2 §2) |
+| Alvo | a sequência sintética recebe o **alelo alternativo** na posição da variante; o modelo reconstrói as bases mascaradas do span, isto é, o alelo aplicado mais o contexto de referência coberto |
+| Span de máscara | spans curtos cobrindo a posição variante, **mais** uma fração de spans em posições só de referência. Motivo: sem eles, mascarar passa a coincidir com "aqui há variante" — é um risco a investigar no piloto, não um efeito demonstrado |
+| Loss | definir o **peso** de posições variantes e de referência (não basta relatar separado) e reportar as duas curvas (contrato v2 §2) |
+| Validação do adapter | populacional, separada por **loci/janelas** do treino, para não medir memorização. Nunca o estudo brasileiro |
 | Congelamento | só o LoRA do adapter recebe gradiente; cabeças nativas congeladas (`freeze_native_feature_heads`) |
 | Orçamento e seeds | idênticos em qualquer braço comparado; registrar seed por execução |
 
-Ordem: smoke sintético, depois piloto pequeno com uma seed, depois a execução da campanha. A validação do adapter é
-populacional e separada — nunca o estudo brasileiro.
+Ordem: smoke sintético, depois piloto pequeno com uma seed, depois a execução da campanha.
 
 ### 5.2 Extração [PROPOSTO]
 
@@ -246,8 +271,8 @@ registrar a escolha.
 - **Métricas com limiar** (MCC, sensibilidade, especificidade) e **Brier:** só com os limiares e calibradores
   congelados no desenvolvimento, com proveniência.
 - **Baselines diagnósticas:** presença no ABraOM e AF (gnomAD, ABraOM), pontuadas nos mesmos pares, fora dos sistemas.
-- **Sanidade no `core_locus`:** AUROC/AUPRC de M0 e MR no teste do core (fold 0, gold), para mostrar que a cabeça
-  funciona e que o adapter não degradou o desempenho geral.
+- **Sanidade no `core_locus`:** AUROC/AUPRC de M0 e MR no teste do core (fold 0, gold), pontuado **só depois** de
+  congeladas todas as escolhas, para mostrar que a cabeça funciona e que o adapter não degradou o desempenho geral.
 
 ### 6.5 Margem e precisão [ABERTO]
 
@@ -291,7 +316,11 @@ candidatos no estudo.
 | G6 | Sistemas congelados, manifesto do consumidor, margens e regra de bootstrap declaradas | os sete campos de `required_consumer_manifest` preenchidos; nada ajustado depois de ver o estudo |
 | G7 | Avaliação única nos dois estudos | saídas da seção 6 |
 
-G0, G1 e G2 não dependem de mais nenhuma decisão. Não iniciar treino completo nem pontuar o estudo antes do G6.
+G0, G1 e G2 não dependem de mais nenhuma decisão. Duas regras separadas, para a ordem não ficar circular:
+
+- **antes de treinar:** receita, dados e critério de seleção aprovados e registrados (G0 a G2, mais o smoke do G4);
+- **antes de pontuar os estudos brasileiros:** sistemas, calibradores, limiares, margens e regra de bootstrap
+  congelados (G6). Depois disso, nada é ajustado.
 
 **Não são pré-requisitos nesta rota:** contar só-BR de 1 estrela, explicar cada inconsistência histórica da v1, mudar
 a política do Mosaic e refazer os pares. O `variant_summary` não é mais necessário: o snapshot da cabeça vem do
@@ -309,6 +338,15 @@ a política do Mosaic e refazer os pares. O `variant_summary` não é mais neces
    spans em posições de referência, amostragem estratificada por AF e como registrar a mistura 60/40 no manifesto.
 4. **Ciência do custo de pular etapas:** sem o braço global puro, o ganho não é atribuível ao componente brasileiro.
    A ablação é a mesma receita com mistura 100/0, uma execução, quando o resultado principal justificar.
+
+### Confirmação operacional curta para encaminhar
+
+"Vamos seguir com M0 versus adapter misto e treinamento da cabeça no `core_locus`. Retiraremos os estudos
+brasileiros e seus clusters também da validação, e o fold de teste não vai selecionar nada — só avalia depois de
+congelado. No piloto, proponho uma variante focal por janela, 60% das janelas globais e 40% ABraOM, variando a
+posição da variante pelo deslocamento da janela. Manteremos o chr8 reservado por enquanto. O resultado inicial
+avalia a mistura; a contribuição específica do ABraOM fica para a ablação. Falta o arquivo do ABraOM
+(`SABE1171.Abraom.clean.tsv`) para rodar o piloto."
 
 Pontos do Mosaic para registrar, sem bloquear a campanha: a URL do `submission_summary_2026-06` no `sources.yaml`
 aponta para uma pasta que não existe; `origin_has_germline` só aceita a origem literal `germline` (`de novo`,

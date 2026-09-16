@@ -3,10 +3,22 @@
 > **Status:** rascunho para discussão com o Eduardo. **Nada aqui está congelado.**
 > Data: 2026-09-14 · Branch: `new_regionalization` · Autor: Gabriel (com Claude) · Revisor externo: consultado.
 >
-> **Atualização 2026-09-15:** a rota em decisão está em `docs/proposta_mosaic_regionalizacao_desenvolvimento.md`.
-> Se o Eduardo aprovar, ela substitui aqui a fonte de treino (§4, §7), a decisão do conjunto de teste (§5), os
-> detalhes de avaliação (§10) e a pendência 9 (§15). Já fixado pelo Gabriel: o R03 publicado
+> **Atualização 2026-09-16 — leia isto antes de implementar qualquer coisa deste contrato.** O Eduardo respondeu em
+> 15/09 e a rota vigente é `docs/proposta_mosaic_regionalizacao_desenvolvimento.md`. Nesta campanha, aquele plano
+> **substitui** deste contrato:
+>
+> - **a arquitetura e o contraste principal:** valem **M0 (`base`) × MR (`regionalized`, adapter populacional
+>   misto ≈60/40 global/ABraOM)**. A escada M0/M1/M2 e o contraste **M2 × M1 não valem mais** nesta campanha; o
+>   braço global puro (MG) fica como ablação de atribuição adiada;
+> - **a fonte de treino da cabeça** (§4, §7): folds de treino do `core_locus` do release, com as exclusões da §4.2
+>   do plano, em vez dos splits v1;
+> - **o conjunto de teste** (§5): os dois estudos brasileiros do Mosaic, congelados;
+> - **a avaliação** (§10), os **critérios de sucesso** e os **gates** (§15, pendência 9).
+>
+> Onde este contrato e o plano discordarem, **vale o plano**. Já fixado pelo Gabriel: o R03 publicado
 > (`best_checkpoint.pt`, passo 71.000) como checkpoint-base comum e o `croma-bioai/lumina-mosaic` como benchmark.
+> A campanha é **derivada** do Mosaic: o código publicado mantém `release_training_allowed = False`, e treinar no
+> `core_locus` segue a orientação do mantenedor, registrada no manifesto.
 >
 > **Legenda de cada item:**
 > **[FIXADO]** decidido (por instrução do Eduardo/Gabriel ou por exigência do protocolo) ·
