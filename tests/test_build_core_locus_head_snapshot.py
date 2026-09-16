@@ -182,15 +182,19 @@ def _write_release(root: Path, frame: pd.DataFrame, membros: list[str]) -> None:
     membership.to_parquet(root / "studies/brazil/membership.parquet", index=False)
 
 
-def _write_broad(tmp: Path, root: Path, ids: list[str], *, manifesto: bool = True, sha: str | None = None) -> Path:
-    """Lista da regra ampla com o manifesto que o G2 exige (sha256 do pb_examples do MESMO release)."""
+def _write_broad(tmp: Path, root: Path, ids: list[str], *, manifesto: bool = True, sha: str | None = None,
+                 trocar_conteudo: list[str] | None = None) -> Path:
+    """Lista da regra ampla com o manifesto que o G2 exige (sha256 do pb_examples e da propria lista)."""
     list_path = tmp / "broad.txt"
     list_path.write_text("\n".join(sorted(ids)) + "\n", encoding="utf-8")
     if manifesto:
         g2.broad_manifest_path(list_path).write_text(json.dumps({
             "n_variantes": len(ids),
+            "lista_sha256": g2.sha256_file(list_path),
             "pb_examples_sha256": sha if sha is not None else g2.sha256_file(root / "pb_examples.parquet"),
         }), encoding="utf-8")
+    if trocar_conteudo is not None:  # mesmo tamanho, ainda superconjunto, conteudo diferente
+        list_path.write_text("\n".join(sorted(trocar_conteudo)) + "\n", encoding="utf-8")
     return list_path
 
 
@@ -245,6 +249,15 @@ def test_lista_ampla_que_nao_cobre_o_br_lab_any_do_release_reprova():
 def test_lista_ampla_vazia_reprova():
     rc, report, _ = _run(_frame(), [], broad=lambda tmp, root: _write_broad(tmp, root, []))
     assert rc == 2 and report is None
+
+
+def test_lista_ampla_com_conteudo_trocado_reprova_mesmo_mantendo_tamanho():
+    """Tamanho e superconjunto nao amarram o conteudo: e o sha256 da lista que fecha."""
+    frame = _frame([_row("var:brasileira", 2, 1, tier="consensus", br=True),
+                    _row("var:outra", 3, 0, tier="consensus")])
+    rc, report, snapshot = _run(frame, [], broad=lambda tmp, root: _write_broad(
+        tmp, root, ["var:t3p", "var:brasileira"], trocar_conteudo=["var:outra", "var:brasileira"]))
+    assert rc == 2 and snapshot is None, report
 
 
 def test_lista_ampla_sem_manifesto_ou_de_outro_release_reprova():

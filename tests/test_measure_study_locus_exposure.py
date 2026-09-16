@@ -24,13 +24,19 @@ class Skip(Exception):
     """Teste nao executado por falta de dependencia. NAO e um PASS -- o runner conta separado."""
 
 
-def _snapshot(rows):
-    return pd.DataFrame(rows, columns=["variant_id", "role", "binary_label", "overlap_cluster_id"])
+def _snapshot(rows, positions=None):
+    frame = pd.DataFrame(rows, columns=["variant_id", "role", "binary_label", "overlap_cluster_id"])
+    frame["chrom"] = "chr1"
+    frame["pos_1based"] = positions if positions is not None else range(1000, 1000 + len(frame))
+    return frame
 
 
-def _members(rows):
-    return pd.DataFrame(rows, columns=["variant_id", "study_id", "member_role", "matched_variant_id",
-                                       "binary_label", "primary_panel", "overlap_cluster_id"])
+def _members(rows, positions=None):
+    frame = pd.DataFrame(rows, columns=["variant_id", "study_id", "member_role", "matched_variant_id",
+                                        "binary_label", "primary_panel", "overlap_cluster_id"])
+    frame["chrom"] = "chr1"
+    frame["pos_1based"] = positions if positions is not None else range(1000, 1000 + len(frame))
+    return frame
 
 
 def test_conta_so_o_treino_e_separa_p_de_b():
@@ -90,6 +96,57 @@ def test_casos_sem_par_ficam_fora_da_comparacao_pareada():
     snapshot = _snapshot([("var:t1", "train", 1, "cl_1")])
     got = exp.paired_comparison(exp.join_exposure(members, exp.train_exposure_by_cluster(snapshot)), CLINICAL)
     assert got["pares"] == 1, got
+
+
+def test_empate_perfeito_nao_pode_ser_lido_como_assimetria():
+    """Se todo par empata, fracao_caso_maior = 0 -- que e igualdade, nao assimetria extrema."""
+    got = exp.pair_stats([(7, 7), (3, 3), (0, 0)])
+    d = got["diferenca_caso_menos_controle"]
+    assert d["fracao_caso_maior"] == 0.0 and d["fracao_caso_menor"] == 0.0 and d["fracao_empate"] == 1.0
+    assert d["pares_diferentes"] == 0 and d["fracao_caso_maior_entre_diferentes"] is None, d
+
+
+def test_fracao_entre_pares_diferentes_ignora_os_empates():
+    got = exp.pair_stats([(5, 5), (5, 5), (9, 1), (1, 2)])
+    d = got["diferenca_caso_menos_controle"]
+    assert d["fracao_empate"] == 0.5 and d["pares_diferentes"] == 2
+    assert d["fracao_caso_maior"] == 0.25 and d["fracao_caso_maior_entre_diferentes"] == 0.5, d
+    assert d["mediana_abs"] == 0.5, d  # magnitudes 0, 0, 1, 8 -> mediana entre 0 e 1
+
+
+def test_comparacao_estratifica_por_rotulo_e_painel():
+    members = _members([
+        ("var:a", CLINICAL, "case", "var:b", 1, "missense", "cl_1"),
+        ("var:b", CLINICAL, "control", "var:a", 1, "missense", "cl_2"),
+        ("var:c", CLINICAL, "case", "var:d", 0, "splice", "cl_2"),
+        ("var:d", CLINICAL, "control", "var:c", 0, "splice", "cl_1"),
+    ])
+    snapshot = _snapshot([("var:t1", "train", 1, "cl_1"), ("var:t2", "train", 1, "cl_1")])
+    got = exp.paired_comparison(exp.join_exposure(members, exp.train_exposure_by_cluster(snapshot)), CLINICAL)
+    assert set(got["por_rotulo"]) == {"0", "1"} and set(got["por_painel"]) == {"missense", "splice"}
+    assert got["por_rotulo"]["1"]["diferenca_caso_menos_controle"]["fracao_caso_maior"] == 1.0
+    assert got["por_rotulo"]["0"]["diferenca_caso_menos_controle"]["fracao_caso_menor"] == 1.0
+
+
+def test_janela_nao_e_cluster():
+    """Duas variantes do mesmo cluster podem estar longe demais para caber na mesma janela."""
+    members = _members([("var:a", CLINICAL, "case", "var:b", 1, "missense", "cl_grande")], positions=[10_000])
+    snapshot = _snapshot([("var:perto", "train", 1, "cl_grande"), ("var:longe", "train", 1, "cl_grande")],
+                         positions=[11_000, 400_000])
+    joined = exp.window_exposure(exp.join_exposure(members, exp.train_exposure_by_cluster(snapshot)),
+                                 snapshot, radius_bp=2048)
+    assert int(joined.loc[0, "n_treino"]) == 2, "as duas dividem cluster"
+    assert int(joined.loc[0, "n_janela"]) == 1, "so uma cabe na janela"
+    assert int(joined.loc[0, "n_janela_P"]) == 1
+
+
+def test_janela_ignora_outro_cromossomo():
+    members = _members([("var:a", CLINICAL, "case", "var:b", 1, "missense", "cl_1")], positions=[10_000])
+    snapshot = _snapshot([("var:t", "train", 1, "cl_1")], positions=[10_050])
+    snapshot["chrom"] = "chr2"
+    joined = exp.window_exposure(exp.join_exposure(members, exp.train_exposure_by_cluster(snapshot)),
+                                 snapshot, radius_bp=2048)
+    assert int(joined.loc[0, "n_janela"]) == 0, joined
 
 
 def test_describe_marca_a_fracao_sem_exposicao():

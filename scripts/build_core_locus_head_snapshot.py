@@ -317,7 +317,12 @@ def broad_manifest_path(list_path: Path) -> Path:
 
 
 def validate_broad_list(
-    broad: set[str], frame: pd.DataFrame, *, manifest: dict[str, Any] | None, pb_examples_sha256: str
+    broad: set[str],
+    frame: pd.DataFrame,
+    *,
+    manifest: dict[str, Any] | None,
+    pb_examples_sha256: str,
+    list_sha256: str | None = None,
 ) -> list[str]:
     """A lista so libera o snapshot se for valida: nao vazia, superconjunto do br_lab_any e do MESMO release.
 
@@ -346,6 +351,13 @@ def validate_broad_list(
             )
         if manifest.get("n_variantes") != len(broad):
             problems.append(f"manifesto declara {manifest.get('n_variantes')} variantes, lista tem {len(broad)}")
+        # Tamanho e superconjunto nao amarram o CONTEUDO: trocar ids mantendo os dois passaria sem o sha256.
+        if list_sha256 is not None and manifest.get("lista_sha256") not in (None, list_sha256):
+            problems.append(
+                f"manifesto declara lista_sha256 {manifest.get('lista_sha256')}, mas o arquivo tem {list_sha256}"
+            )
+        elif manifest.get("lista_sha256") is None:
+            problems.append("manifesto sem lista_sha256: gere a lista de novo com a versao atual do script")
     return problems
 
 
@@ -433,7 +445,8 @@ def main(argv: list[str] | None = None) -> int:
         if manifest_path.exists():
             broad_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         broad_problems = validate_broad_list(
-            broad_br, frame, manifest=broad_manifest, pb_examples_sha256=pb_examples_sha256
+            broad_br, frame, manifest=broad_manifest, pb_examples_sha256=pb_examples_sha256,
+            list_sha256=sha256_file(list_path),
         )
 
     entry_problems = study_problems + broad_problems
@@ -511,6 +524,9 @@ def main(argv: list[str] | None = None) -> int:
             "origem": "derivado do core_locus do release v1, segundo a orientacao do mantenedor em 15/09/2026",
         },
         "pronto_para_congelar": pronto,
+        "significado_de_pronto_para_congelar":
+            "passou nas checagens da politica ESCOLHIDA e as entradas sao validas. Nao e aprovacao cientifica da "
+            "politica de isolamento por locus, que e decidida e declarada fora deste script.",
         "pendencias": [] if broad_br is not None else ["regra ampla brasileira nao aplicada "
                                                        "(--broad-br-variant-ids)"],
         "saidas": {"relatorio": str(report_path)},
@@ -547,6 +563,9 @@ def main(argv: list[str] | None = None) -> int:
         "hash_composicao": report["identidade"]["hash_composicao"],
         "hash_conteudo": report["identidade"]["hash_conteudo"],
         "pronto_para_congelar": pronto,
+        "significado_de_pronto_para_congelar":
+            "passou nas checagens da politica ESCOLHIDA e as entradas sao validas. Nao e aprovacao cientifica da "
+            "politica de isolamento por locus, que e decidida e declarada fora deste script.",
         "pendencias": report["pendencias"],
         "saidas": report["saidas"],
     }, ensure_ascii=False, indent=2))

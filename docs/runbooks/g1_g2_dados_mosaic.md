@@ -86,7 +86,9 @@ o que não é publicado é o snapshot.
 O que olhar no relatório:
 
 - `pronto_para_congelar: true` — só sai `true` com a lista da regra ampla **validada**: não vazia, superconjunto do
-  `br_lab_any` do release e com manifesto apontando para o mesmo `pb_examples`;
+  `br_lab_any` do release e com manifesto que casa o `pb_examples` **e o sha256 da própria lista**. Ele significa
+  "as entradas são válidas e as checagens da política escolhida passaram", **não** que a política de isolamento
+  por locus foi aprovada — essa decisão é científica e fica fora do script;
 - `identidade`: `hash_composicao` (quem está em cada recorte), `hash_conteudo` (todas as colunas) e
   `arquivo_sha256`. O primeiro não muda se um rótulo mudar — por isso os três;
 - `depois_das_exclusoes`: quanto sobrou em cada papel e quantos clusters;
@@ -102,9 +104,13 @@ O chr8 sai por padrão (decisão E ainda pendente). Para medir o custo de mantê
 export WORK=~/testeArq/lumina-beat-regionalization && set -o pipefail && PYTHONPATH="$WORK" python3 "$WORK"/scripts/measure_study_locus_exposure.py --snapshot ~/artifacts/redesenho/g2_core_snapshot_nenhum/core_head_snapshot.parquet --brazil-variants ~/artifacts/redesenho/g1_brazil_studies/brazil_study_variants.parquet --out-dir ~/artifacts/redesenho/g2_exposicao 2>&1 | tee ~/exposicao.log; echo "exit=${PIPESTATUS[0]}"
 ```
 
-O número que decide é `fracao_caso_maior` no estudo clínico: perto de 0,5 significa exposição simétrica entre
-casos e controles, que é o que precisamos para a interação. Longe disso é risco a declarar — não é prova de
-contaminação, e não se corrige refazendo pares.
+Ler `maior`, `menor` e `empate` juntos: empate perfeito dá `fracao_caso_maior = 0`, que é igualdade e não
+assimetria. Onde há diferença, olhar `fracao_caso_maior_entre_diferentes` e a magnitude (`mediana_abs`), por
+rótulo e por painel. O bloco `por_janela` vale mais que o `por_cluster`: componente conectado encadeia variantes
+distantes, e compartilhar cluster não é compartilhar a janela de 4.096 bp que o modelo lê.
+
+Assimetria é risco a declarar, não prova de contaminação; e simetria **não** garante que a exposição seja
+inofensiva, porque M0 e MR podem aproveitar os mesmos loci de formas diferentes.
 
 ## Regras que não mudam
 

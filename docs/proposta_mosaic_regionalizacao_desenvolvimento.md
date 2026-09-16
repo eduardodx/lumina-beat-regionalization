@@ -176,21 +176,34 @@ Executado no release real (`run_id=0`), o custo da exclusão dos **vizinhos de c
 
 | Recorte | Antes | Membros | Vizinhos de cluster | Sobra se excluir vizinhos |
 |---|---:|---:|---:|---:|
-| treino | 196.010 (33.897 P) | −5.164 | **−153.663 (28.656 P)** | 35.044, só **1.704 P** |
-| validação | 2.453 (1.182 P) | −741 | −1.710 (37 clusters de 38) | ~1 variante |
-| teste do core | 1.758 (1.199 P) | −400 | −1.358 (29 clusters de 31) | ~0 |
+| treino | 196.010 (33.897 P) | −5.164 (3.412 P) | **−153.663 (28.656 P)** | 35.044, só **1.704 P** |
+| validação | 2.453 (1.182 P) | −741 (37 P) | −1.710 (37 clusters de 38) | ~1 variante |
+| teste do core | 1.758 (1.199 P) | −400 (25 P) | −1.358 (29 clusters de 31) | ~0 |
 
-Os clusters do Mosaic são componentes conectados em até 32 kb, e os membros cobrem os genes clinicamente
-sequenciados — que é exatamente onde vivem os patogênicos do ClinVar. Excluir vizinhos **nos três recortes** zera a
-validação; excluir **só no treino** custa 95% dos patogênicos e ainda deixa validação e teste cheios dos mesmos
-loci, treinando o modelo longe dos loci onde ele será selecionado e avaliado.
+Atribuição correta das perdas no treino: a exclusão de vizinhos sozinha leva **28.656 dos 33.897 patogênicos
+iniciais (84,5%)**, ou 94% dos que restam depois da exclusão dos membros; os ~95% acumulados até 1.704 P somam
+todas as exclusões. Os clusters do Mosaic são componentes conectados em até 32 kb, e os membros cobrem os genes
+clinicamente sequenciados — que é onde vivem os patogênicos do ClinVar.
 
-**Decisão [PROPOSTO, a declarar antes de treinar]:** excluir apenas os **membros** (mais a regra ampla e o chr8) e
-**medir** a exposição de locus em vez de tentar zerá-la (`scripts/measure_study_locus_exposure.py`). O protocolo
-exige que membership e rótulos não entrem no treino, e isso continua cumprido. A exposição de locus é idêntica
-para o sistema base e o regionalizado, que compartilham o snapshot: o que poderia atravessar a interação é ela ser
-**assimétrica entre casos e controles**, já que o pareamento do Mosaic é por rótulo, painel e bin de AF, nunca por
-gene. Essa assimetria é medida, declarada e, se for grande, vira análise de sensibilidade pré-declarada.
+Excluir vizinhos **nos três recortes** é inviável: zera a validação. Excluir **só no treino** é uma proteção real
+(a cabeça não treina em clusters presentes no estudo) e treinar e avaliar em loci disjuntos é justamente o desenho
+de transferência do `core_locus` — o problema é o custo e a mudança de distribuição, não incoerência. 1.704
+positivos não provam, por si, que o treino seria inútil; provam que a composição precisa ser estudada antes.
+
+**Proposta [a declarar antes de treinar, ainda não aprovada]:** rodar `nenhum` como **diagnóstico** — excluindo
+sempre membros, regra ampla e chr8 — e **medir** a exposição de locus
+(`scripts/measure_study_locus_exposure.py`) em duas unidades: o `overlap_cluster_id` e a **janela real** de
+±2.048 bp, porque componente conectado encadeia variantes distantes e compartilhar cluster não é compartilhar a
+janela de 4.096 bp que o modelo lê. A medida principal é a comparação par a par entre caso e controle,
+estratificada por rótulo e painel, publicando maior, menor e empate.
+
+**O que essa medida não resolve:** snapshot compartilhado **não** faz o risco desaparecer no contraste M0 × MR —
+as representações são diferentes e podem aproveitar os mesmos loci de formas diferentes, então exposição igual não
+implica efeito igual. A assimetria caso × controle é um mecanismo, não o único. Aceitar exposição numa campanha de
+desenvolvimento é diferente de demonstrar que ela é inofensiva, e a distinção fica declarada nas afirmações (§7).
+
+**`pronto_para_congelar` do G2 não decide isto:** ele diz que as entradas são válidas e que as checagens da
+política escolhida passaram, não que a política de isolamento por locus foi aprovada.
 
 Medir e registrar o custo de cada exclusão. O G2 verifica, depois de aplicá-las: nenhuma variante dos estudos em
 qualquer um dos três recortes (e nenhum cluster, onde a política os excluir); tamanhos e P/B por painel em cada
@@ -320,6 +333,9 @@ candidatos no estudo.
 - Não poderá ser afirmado: resultado em só-BR, em pacientes brasileiros ou na população brasileira nacional;
   generalização independente; o estudo populacional como evidência independente.
 - A interação não elimina diferenças entre laboratórios ou mecanismos de rotulação.
+- Se a campanha aceitar loci compartilhados entre o treino da cabeça e os estudos (§4.2), isso é declarado como
+  **campanha de desenvolvimento com exposição de locus medida**, não como evidência de que a exposição é
+  inofensiva. O relato traz as duas unidades (cluster e janela) e a comparação caso × controle.
 - Tier consensus não prova ausência de exposição. Conferir casos, controles e clusters contra o histórico: a pesquisa
   de extração usou gold, e o treino da cabeça agora usa os folds de treino do `core_locus`.
 
