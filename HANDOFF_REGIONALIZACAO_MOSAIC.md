@@ -2,8 +2,9 @@
 
 > **Para quem pega num chat novo: este doc é auto-contido.** Leia inteiro antes de tocar em código.
 > Datado **2026-09-16**. Autor: Gabriel (dev, TCC). Gestor: Eduardo (mantém o Mosaic).
-> Branch: **`new_regionalization`**. Último commit da frente: `848d2dc`.
-> Nada está treinando. A campanha está parada esperando cinco decisões do Eduardo (§4).
+> Branch: **`new_regionalization`**.
+> Nada está treinando. **O Eduardo respondeu em 15/09 e fechou as decisões A, B, C e D** (§4); G0, G1 e G2 estão
+> desbloqueados.
 
 ---
 
@@ -39,9 +40,14 @@ Pergunta da campanha (proposta): a adaptação populacional com ABraOM produz ga
   reconferir o arquivo carregado em cada run.
 - **Benchmark:** `https://github.com/croma-bioai/lumina-mosaic`. Código no commit `814e7f0`; dados no release
   `clinvar-pb-capability-suite/v1` (`~/mosaic-v1/` no notebook). Código e dados têm identidades separadas.
-- **Sistemas:** M0 (R03 puro), M1 (R03 + adapter populacional global), M2 (R03 + adapter ABraOM). Os adapters são
-  **ramos paralelos do mesmo R03**; M2 não parte de M1. As cabeças clínicas H0/H1/H2 são treinadas **separadamente**,
-  com os mesmos dados e o mesmo procedimento, depois de congelar cada representação.
+- **Sistemas (revisto em 15/09 pelo Eduardo):** **M0** = R03 puro (`base`) e **MR** = R03 + **um único adapter
+  populacional misto ≈60% global / 40% ABraOM** (`regionalized`). O braço global puro (MG) é ablação adiada, obtida
+  com a mesma receita e mistura 100/0. As cabeças H0 e HR são treinadas **separadamente**, com os mesmos dados e o
+  mesmo procedimento, depois de congelar cada representação.
+- **Treino da cabeça:** folds de treino do `core_locus` do release (`run_id=0`), menos os membros dos dois estudos
+  brasileiros e seus `overlap_cluster_id`, menos a regra ampla brasileira, com `sequence_eligible`. Autorizado pelo
+  mantenedor do Mosaic em 15/09/2026 — registrar isso no manifesto.
+- **Adapter:** MLM com máscaras em span sobre as mutações, mutações em posições aleatórias da janela.
 - **Fora:** adapter ClinVar, fusion, AF observada nas entradas da cabeça (AF e presença viram baselines diagnósticas),
   M3/M4 nesta campanha.
 - **Cabeças nativas do R03 congeladas** no treino do adapter (usar `freeze_native_feature_heads` de
@@ -49,15 +55,22 @@ Pergunta da campanha (proposta): a adaptação populacional com ABraOM produz ga
 
 ---
 
-## 4. O que está parado esperando o Eduardo
+## 4. Decisões do Eduardo (15/09) e o que ainda falta
 
-| # | Decisão | Proposta nossa |
+| # | Decisão | Resposta |
 |---|---|---|
-| A | Aceitar **participação** brasileira do Mosaic nesta campanha e adiar o teste só-BR | sim (§5 explica por quê) |
-| B | **Fonte de treino da cabeça clínica** (a principal pendência prática): S1 ClinVar cru construído por nós, S2 derivado do release do Mosaic (protocolo derivado autorizado) ou S3 release mais antigo; com quais rótulos e cutoff | S1 ou S2, decisão dele |
-| C | Confirmar os contrastes (M2×M1 principal, M2×M0 no formato do Mosaic, M1×M0 diagnóstico) e como registrar sistemas/cabeças no manifesto | como acima |
-| D | Confirmar o objetivo do adapter populacional: **MLM** em janelas sintéticas | MLM no piloto |
-| E | Manter ou adiar chr8 representacional e o relato BRCA1/BRCA2/TP53 | decidir agora, antes de congelar |
+| A | Estudos do Mosaic (participação) em vez de só-BR | **fechada:** "pode seguir com esses dois splits mesmo" |
+| B | Fonte de treino da cabeça clínica | **fechada:** "treina core_locus e avalia neles" → snapshot derivado dos folds de treino do `core_locus` do release, autorizado pelo mantenedor |
+| C | Escada M0 → global → ABraOM | **mudou:** "vamos tentar ir direto pra global + abraom direto… algo 60% global 40% Brasil… vamos tentar pular etapas" → **um único adapter misto**; M0 = `base`, MR = `regionalized`; o braço global puro (MG) vira ablação adiada |
+| D | Objetivo do adapter populacional | **fechada:** MLM com "máscaras (span) em cima das mutações" e "mutações em posições aleatórias da janela" |
+| E | chr8 representacional e BRCA1/BRCA2/TP53 | **em aberto** |
+
+**Ainda falta dele:** o arquivo do ABraOM (`SABE1171.Abraom.clean.tsv`, sha256 `3cd33784…`, `academic_request`, sem
+URL — bloqueia G0 e G4), a decisão E, e a confirmação dos parâmetros da §5.1 do plano (janela, variantes por janela,
+fração de spans em posições de referência, amostragem por AF, registro da mistura).
+
+**Custo declarado de C:** com um adapter misto, um ganho positivo não é atribuível ao componente brasileiro. A
+ablação MG é a mesma receita com mistura 100/0 — uma execução, sem código novo.
 
 **Pontos do Mosaic para ele registrar (não bloqueiam):** a URL do `submission_summary_2026-06` em `config/sources.yaml`
 aponta para `archive/2026/`, que não existe (os arquivos estão em `archive/`); `origin_has_germline` só aceita a origem
@@ -192,21 +205,27 @@ aproximada, pela coluna `regional_submitters` do master.
 
 ## 9. Próximos passos
 
-1. **Enviar a pauta (§4) ao Eduardo** com o texto da §9 do plano.
-2. Sem depender dele, dá para fazer:
-   - **G0 — identidades:** registrar os hashes reais de R03, release do Mosaic, ABraOM e gnomAD.
-   - **G1 — membership:** importar `studies/brazil/membership.parquet`, validar IDs únicos por estudo e papel, ligações
-     bidirecionais, rótulos e estratos, e contar P/B por coorte e painel.
+1. **Pedir ao Eduardo o arquivo do ABraOM**, a decisão E e a confirmação dos parâmetros da §5.1 do plano.
+2. Desbloqueados agora:
+   - **G1 — membership:** importar `studies/brazil/membership.parquet`, juntar com `pb_examples.parquet` para obter
+     `chrom/pos_1based/ref/alt`, validar IDs únicos por estudo e papel, ligações bidirecionais, rótulos e estratos, e
+     contar P/B por coorte e painel.
+   - **G2 — snapshot da cabeça:** `core_locus` `run_id=0` (treino folds 2-4 gold+consensus, validação fold 1 gold,
+     teste fold 0 gold), menos os membros dos dois estudos e seus `overlap_cluster_id`, menos a regra ampla
+     brasileira, com `sequence_eligible`; medir o custo de cada exclusão e hashear o resultado.
+   - **G0 — identidades:** hashes de R03, release e gnomAD (o do ABraOM fica pendente do arquivo).
    - **Contagem de controles com SCV brasileira** pela regra ampla (usa o `submission_summary` já baixado), para
      pré-declarar a análise de sensibilidade.
-3. Depois das decisões: snapshot de treino (G2), extrator portado e smoke do M0 (G3), gerador + MLM e piloto (G4),
-   escolha da extração (G5), congelamento e manifesto (G6), avaliação única no estudo (G7).
+3. Depois: extrator portado e smoke do M0 (G3), gerador + MLM e piloto do adapter misto (G4), escolha da extração na
+   validação do core (G5), congelamento e manifesto (G6), avaliação única nos dois estudos (G7).
 
 ---
 
 ## 10. Armadilhas (já custaram tempo)
 
-- **Não treinar com o release do Mosaic** antes da decisão B: o protocolo do estudo brasileiro proíbe.
+- **Treinar no `core_locus` só com as exclusões da §4.2 do plano.** O mantenedor autorizou o protocolo derivado, mas
+  `study_membership_used_for_training = False` continua valendo: membros dos dois estudos e seus
+  `overlap_cluster_id` ficam fora do treino, senão o estudo perde a validade.
 - **Não refazer o pareamento** do Mosaic nem tentar "melhorar" os pares.
 - **Não reconstruir o só-BR** nesta rota; e não baixar o `variant_summary` para isso (só se a decisão B pedir).
 - **Não usar a marcação BR da v1** para nada além de referência histórica.
