@@ -155,6 +155,10 @@ Na branch `new_regionalization`:
 |---|---|
 | `scripts/audit_regionalization_data.py` + testes | pronto, rodado |
 | `scripts/diagnose_brazilian_submitter_divergence.py` + testes | pronto, rodado (10/10 testes com `REQUIRE_NO_SKIP=1`) |
+| `scripts/import_mosaic_brazil_studies.py` + testes (G1) | escrito, 15/15 local; **falta rodar no notebook** |
+| `scripts/build_core_locus_head_snapshot.py` + testes (G2) | escrito, 14/14 local; **falta rodar no notebook** |
+| `scripts/build_broad_brazilian_variant_list.py` + testes | escrito, 5/5 local; gera a lista da regra ampla e conta os controles com SCV brasileira |
+| `docs/runbooks/g1_g2_dados_mosaic.md` | runbook dos três passos acima, na ordem |
 | `scripts/build_clinvar_splits.py` | v1: monta splits a partir do master regional. Reaproveitável em parte; a marcação BR dele não serve |
 | `scripts/prepare_regional_clinvar_dataset.py` | v1: gerou o master regional. Referência histórica |
 | `eval/clinvar/train.py` | aplica LoRA e fusion: **falta** um caminho de backbone congelado sem LoRA clínico |
@@ -205,8 +209,10 @@ aproximada, pela coluna `regional_submitters` do master.
 
 ## 9. Próximos passos
 
-1. **Pedir ao Eduardo o arquivo do ABraOM**, a decisão E e a confirmação dos parâmetros da §5.1 do plano.
-2. Desbloqueados agora:
+1. **Rodar `docs/runbooks/g1_g2_dados_mosaic.md` no notebook** (testes com `REQUIRE_NO_SKIP=1`, depois G1, regra
+   ampla e G2) e trazer os relatórios: são os números que fecham o G1 e o G2.
+2. **Pedir ao Eduardo o arquivo do ABraOM**, a decisão E e a confirmação dos parâmetros da §5.1 do plano.
+3. Escopo dos gates já implementados:
    - **G1 — membership:** importar `studies/brazil/membership.parquet`, juntar com `pb_examples.parquet` para obter
      `chrom/pos_1based/ref/alt`, validar IDs únicos por estudo e papel, ligações bidirecionais, rótulos e estratos, e
      contar P/B por coorte e painel.
@@ -214,9 +220,9 @@ aproximada, pela coluna `regional_submitters` do master.
      teste fold 0 gold), menos os membros dos dois estudos e seus `overlap_cluster_id`, menos a regra ampla
      brasileira, com `sequence_eligible`; medir o custo de cada exclusão e hashear o resultado.
    - **G0 — identidades:** hashes de R03, release e gnomAD (o do ABraOM fica pendente do arquivo).
-   - **Contagem de controles com SCV brasileira** pela regra ampla (usa o `submission_summary` já baixado), para
+   - **Contagem de controles com SCV brasileira** pela regra ampla (sai junto com a lista de exclusão), para
      pré-declarar a análise de sensibilidade.
-3. Depois: extrator portado e smoke do M0 (G3), gerador + MLM e piloto do adapter misto (G4), escolha da extração na
+4. Depois: extrator portado e smoke do M0 (G3), gerador + MLM e piloto do adapter misto (G4), escolha da extração na
    validação do core (G5), congelamento e manifesto (G6), avaliação única nos dois estudos (G7).
 
 ---
