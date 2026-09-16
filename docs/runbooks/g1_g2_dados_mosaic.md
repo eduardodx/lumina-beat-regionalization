@@ -73,6 +73,16 @@ o relatório com o custo de cada exclusão e o hash lógico que vai no manifesto
 O `--brazil-variants` **não** substitui o membership: as exclusões saem sempre do membership do release, e a saída
 do G1 é conferida contra ele (diferença de variantes ou de clusters faz o G2 parar com código 2).
 
+**Política de cluster (`--cluster-exclusion`).** Os *membros* dos estudos saem sempre dos três recortes; a opção
+decide o que fazer com os **vizinhos de cluster** deles: `todos` (padrão), `treino` ou `nenhum`. Medido no release
+real em 16/09: os golds da validação vivem em 38 clusters e os do teste em 31, e o `br_population_observed` é gold
+(~25% do gold do release), então `todos` **zera a validação** — a primeira execução parou com 1 missense e nenhum
+splice ou noncoding. O relatório registra, em qualquer política, o custo que `todos` teria
+(`custo_potencial_se_todos`), para a escolha ser feita com número e declarada antes de treinar.
+
+Quando o gate reprova, o **relatório sai assim mesmo** (com `status: FALHOU`), porque é nele que estão os números;
+o que não é publicado é o snapshot.
+
 O que olhar no relatório:
 
 - `pronto_para_congelar: true` — só sai `true` com a lista da regra ampla **validada**: não vazia, superconjunto do

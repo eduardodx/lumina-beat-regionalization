@@ -269,12 +269,43 @@ def test_brazil_variants_incompleto_reprova_em_vez_de_encolher_a_exclusao():
         assert not (out / "core_head_snapshot.parquet").exists()
 
 
-def test_end_to_end_para_com_codigo_2_quando_a_validacao_nao_sustenta_a_selecao():
+def test_end_to_end_para_com_codigo_2_mas_publica_o_diagnostico():
+    """Reprovar sem relatorio esconde justamente os numeros que dizem o que corrigir."""
     frame = _frame()
     frame = frame[~((frame["core_fold"] == 1) & (frame["primary_panel"] == "noncoding")
                     & (frame["binary_label"] == 1))]
     rc, report, snapshot = _run(frame, [])
-    assert rc == 2 and report is None and snapshot is None
+    assert rc == 2 and snapshot is None, "o snapshot nao pode ser publicado"
+    assert report is not None and report["status"] == "FALHOU", report
+    assert any("validacao/noncoding" in p for p in report["checagens"]), report["checagens"]
+    assert report["pronto_para_congelar"] is False
+    assert "exclusoes" in report and "antes_das_exclusoes" in report
+
+
+def test_politica_de_cluster_treino_preserva_a_validacao_e_registra_o_custo_potencial():
+    """O que o release real cobrou: com clusters grandes, excluir vizinhos nos tres recortes zera a validacao."""
+    extra = [_row("var:membro", 2, 1, tier="consensus", cluster="cl_grande"),
+             _row("var:vizinho_val", 1, 0, panel="splice", tier="gold", cluster="cl_grande")]
+    frame = _frame(extra)
+    membros = {"var:membro"}
+    clusters = {"cl_grande"}
+
+    todos, steps_todos = g2.apply_exclusions(_splits(frame), study_variants=membros, study_clusters=clusters,
+                                             broad_br=None, reserve_chr8=False, cluster_policy=g2.CLUSTER_ALL)
+    treino, steps_treino = g2.apply_exclusions(_splits(frame), study_variants=membros, study_clusters=clusters,
+                                               broad_br=None, reserve_chr8=False,
+                                               cluster_policy=g2.CLUSTER_TRAIN_ONLY)
+    assert "var:vizinho_val" not in set(todos["validation"]["variant_id"])
+    assert "var:vizinho_val" in set(treino["validation"]["variant_id"])
+    assert g2.check_no_study_leakage(treino, membros, clusters,
+                                     cluster_policy=g2.CLUSTER_TRAIN_ONLY) == []
+    # O custo da politica estrita fica registrado mesmo quando ela nao e aplicada.
+    passo = [s for s in steps_treino if s["exclusao"] == g2.EXCLUSION_STUDY_CLUSTERS][0]
+    assert passo["politica"] == g2.CLUSTER_TRAIN_ONLY
+    assert passo["custo_potencial_se_todos"]["validation"]["n"] == 1, passo["custo_potencial_se_todos"]
+    assert passo["custo_potencial_se_todos"]["validation"]["clusters_atingidos"] == 1
+    assert [s for s in steps_todos if s["exclusao"] == g2.EXCLUSION_STUDY_CLUSTERS][0]["removidos"]["validation"][
+        "n"] == 1
 
 
 def test_release_real_bate_com_os_numeros_do_guia():

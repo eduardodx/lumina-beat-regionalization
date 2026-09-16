@@ -97,6 +97,20 @@ EXCLUSION_STUDY_CLUSTERS = "clusters_dos_membros"
 EXCLUSION_BROAD_BR = "regra_ampla_brasileira"
 EXCLUSION_CHR8 = "chr8_reservado"
 
+# Politica de exclusao dos VIZINHOS DE CLUSTER dos membros (os membros saem sempre, dos tres recortes).
+# Medido em 16/09 no release real: os golds da validacao vivem em 38 clusters e do teste em 31, e o
+# br_population_observed e gold (2.640 membros, ~25% do gold do release). Tirar os clusters inteiros dos tres
+# recortes zera a validacao -- por isso a politica e explicita, declarada antes de treinar e registrada.
+CLUSTER_ALL = "todos"
+CLUSTER_TRAIN_ONLY = "treino"
+CLUSTER_NONE = "nenhum"
+CLUSTER_POLICIES = (CLUSTER_ALL, CLUSTER_TRAIN_ONLY, CLUSTER_NONE)
+CLUSTER_POLICY_SCOPE = {
+    CLUSTER_ALL: ROLES,
+    CLUSTER_TRAIN_ONLY: (ROLE_TRAIN,),
+    CLUSTER_NONE: (),
+}
+
 
 # --------------------------------------------------------------------------------------------------- utilidades
 
@@ -143,6 +157,11 @@ def role_counts(rows: pd.DataFrame) -> dict[str, int]:
 # ----------------------------------------------------------------------------------------------------- exclusoes
 
 
+def dropped_counts(rows: pd.DataFrame) -> dict[str, int]:
+    labels = rows["binary_label"].astype("Int64")
+    return {"n": int(len(rows)), "P": int((labels == 1).sum()), "B": int((labels == 0).sum())}
+
+
 def apply_exclusions(
     splits: dict[str, pd.DataFrame],
     *,
@@ -150,30 +169,48 @@ def apply_exclusions(
     study_clusters: set[str],
     broad_br: set[str] | None,
     reserve_chr8: bool,
+    cluster_policy: str = CLUSTER_ALL,
 ) -> tuple[dict[str, pd.DataFrame], list[dict[str, Any]]]:
-    """Aplica as exclusoes em ordem, medindo o custo incremental de cada uma em cada recorte."""
+    """Aplica as exclusoes em ordem, medindo o custo incremental de cada uma em cada recorte.
+
+    Os membros dos estudos saem SEMPRE dos tres recortes. Os vizinhos de cluster seguem `cluster_policy`, e o
+    custo que a politica mais estrita teria e registrado em todo caso (`custo_potencial`), para a escolha ser
+    feita com numero e antes de treinar.
+    """
+    if cluster_policy not in CLUSTER_POLICIES:
+        raise ValueError(f"cluster_policy {cluster_policy!r} fora de {CLUSTER_POLICIES}")
     current = {role: rows.copy() for role, rows in splits.items()}
     steps: list[dict[str, Any]] = []
 
-    def step(name: str, keep_mask) -> None:
+    def step(name: str, keep_mask, *, roles: tuple[str, ...] | None = None, extra: dict | None = None) -> None:
+        scope = ROLES if roles is None else roles
         removed: dict[str, dict[str, int]] = {}
         for role, rows in current.items():
-            if rows.empty:
+            if rows.empty or role not in scope:
                 removed[role] = {"n": 0, "P": 0, "B": 0}
                 continue
             mask = keep_mask(rows)
-            dropped = rows[~mask]
-            removed[role] = {
-                "n": int(len(dropped)),
-                "P": int((dropped["binary_label"].astype("Int64") == 1).sum()),
-                "B": int((dropped["binary_label"].astype("Int64") == 0).sum()),
-            }
+            removed[role] = dropped_counts(rows[~mask])
             current[role] = rows[mask].copy()
-        steps.append({"exclusao": name, "removidos": removed,
-                      "restantes": {role: role_counts(rows) for role, rows in current.items()}})
+        payload = {"exclusao": name, "aplicada_em": list(scope), "removidos": removed,
+                   "restantes": {role: role_counts(rows) for role, rows in current.items()},
+                   "restantes_por_painel_rotulo": {
+                       role: counts_by(rows, ["primary_panel", "binary_label"]) for role, rows in current.items()
+                   }}
+        steps.append(payload | (extra or {}))
 
     step(EXCLUSION_STUDY_MEMBERS, lambda rows: ~rows["variant_id"].isin(study_variants))
-    step(EXCLUSION_STUDY_CLUSTERS, lambda rows: ~rows["overlap_cluster_id"].isin(study_clusters))
+
+    # Custo que a politica "todos" teria, medido depois da exclusao dos membros e independente da politica.
+    potential = {
+        role: dropped_counts(rows[rows["overlap_cluster_id"].isin(study_clusters)])
+        | {"clusters_atingidos": int(rows.loc[rows["overlap_cluster_id"].isin(study_clusters),
+                                              "overlap_cluster_id"].nunique())}
+        for role, rows in current.items()
+    }
+    step(EXCLUSION_STUDY_CLUSTERS, lambda rows: ~rows["overlap_cluster_id"].isin(study_clusters),
+         roles=CLUSTER_POLICY_SCOPE[cluster_policy],
+         extra={"politica": cluster_policy, "custo_potencial_se_todos": potential})
     if broad_br is not None:
         step(EXCLUSION_BROAD_BR, lambda rows: ~rows["variant_id"].isin(broad_br))
     else:
@@ -190,16 +227,23 @@ def apply_exclusions(
 
 
 def check_no_study_leakage(
-    splits: dict[str, pd.DataFrame], study_variants: set[str], study_clusters: set[str]
+    splits: dict[str, pd.DataFrame],
+    study_variants: set[str],
+    study_clusters: set[str],
+    *,
+    cluster_policy: str = CLUSTER_ALL,
 ) -> list[str]:
+    """Membro de estudo nunca sobra, em recorte nenhum. Vizinho de cluster so e cobrado onde a politica exclui."""
     problems: list[str] = []
+    scope = CLUSTER_POLICY_SCOPE[cluster_policy]
     for role, rows in splits.items():
         leaked = sorted(set(rows["variant_id"]) & study_variants)
         if leaked:
             problems.append(f"{role}: {len(leaked)} variantes dos estudos sobraram, ex.: {leaked[:3]}")
-        clusters = sorted(set(rows["overlap_cluster_id"].dropna()) & study_clusters)
-        if clusters:
-            problems.append(f"{role}: {len(clusters)} clusters dos estudos sobraram, ex.: {clusters[:3]}")
+        if role in scope:
+            clusters = sorted(set(rows["overlap_cluster_id"].dropna()) & study_clusters)
+            if clusters:
+                problems.append(f"{role}: {len(clusters)} clusters dos estudos sobraram, ex.: {clusters[:3]}")
     return problems
 
 
@@ -358,6 +402,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="variant_id com qualquer SCV de instituicao da lista brasileira (regra ampla)")
     parser.add_argument("--run-id", type=int, default=0)
     parser.add_argument("--k", type=int, default=5)
+    parser.add_argument("--cluster-exclusion", choices=CLUSTER_POLICIES, default=CLUSTER_ALL,
+                        help="vizinhos de cluster dos membros dos estudos: excluir em todos os recortes "
+                             "(padrao), so no treino, ou em nenhum. Os MEMBROS saem sempre dos tres.")
     parser.add_argument("--no-reserve-chr8", action="store_true", help="nao excluir o chr8 (decisao E do Eduardo)")
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -401,26 +448,21 @@ def main(argv: list[str] | None = None) -> int:
     splits, steps = apply_exclusions(
         splits, study_variants=study_variants, study_clusters=study_clusters,
         broad_br=broad_br, reserve_chr8=not args.no_reserve_chr8,
+        cluster_policy=args.cluster_exclusion,
     )
 
-    problems = check_no_study_leakage(splits, study_variants, study_clusters)
+    problems = check_no_study_leakage(splits, study_variants, study_clusters,
+                                      cluster_policy=args.cluster_exclusion)
     problems += check_clusters_disjoint(splits)
     problems += check_validation_supports_selection(splits)
-    if problems:
-        print(f"FALHOU: {len(problems)} checagem(ns) do gate G2 nao passaram; nada foi publicado.")
-        for problem in problems:
-            print(f"  - {problem}")
-        return 2
 
-    snapshot = snapshot_frame(splits)
     out_dir.mkdir(parents=True, exist_ok=True)
     snapshot_path = out_dir / "core_head_snapshot.parquet"
     report_path = out_dir / "g2_core_snapshot_report.json"
-    snapshot.to_parquet(snapshot_path, index=False)
 
     # A lista so chega aqui depois de validada (nao vazia, superconjunto do br_lab_any, manifesto do mesmo
     # release): presenca de arquivo nunca libera o congelamento por si.
-    pronto = broad_br is not None
+    pronto = broad_br is not None and not problems
     report: dict[str, Any] = {
         "entradas": {
             "release_root": str(release_root),
@@ -445,6 +487,12 @@ def main(argv: list[str] | None = None) -> int:
             ROLE_VALIDATION: "extracao, hiperparametros, early stopping, Platt e limiar",
             ROLE_TEST: "avalia so depois de congelado; nao seleciona nada",
         },
+        "politica_de_cluster": {
+            "escolhida": args.cluster_exclusion,
+            "recortes_atingidos": list(CLUSTER_POLICY_SCOPE[args.cluster_exclusion]),
+            "nota": "os membros dos estudos saem sempre dos tres recortes; esta politica vale so para os "
+                    "VIZINHOS de cluster dos membros. Declarar antes de treinar.",
+        },
         "antes_das_exclusoes": before,
         "exclusoes": steps,
         "depois_das_exclusoes": {role: role_counts(rows) for role, rows in splits.items()},
@@ -453,10 +501,7 @@ def main(argv: list[str] | None = None) -> int:
         },
         "por_tier": {role: counts_by(rows, ["label_tier"]) for role, rows in splits.items()},
         "identidade": {
-            "snapshot_id": f"core_locus_run{args.run_id}_menos_estudos_br",
-            "hash_composicao": snapshot_hash(snapshot),
-            "hash_conteudo": snapshot_content_hash(snapshot),
-            "arquivo_sha256": sha256_file(snapshot_path),
+            "snapshot_id": f"core_locus_run{args.run_id}_menos_estudos_br_cluster_{args.cluster_exclusion}",
             "receita_dos_hashes": {
                 "composicao": "sha256 das linhas 'variant_id\\trole' ordenadas -- identifica quem esta em cada "
                               "recorte, NAO o conteudo (trocar um rotulo nao muda este hash)",
@@ -466,15 +511,39 @@ def main(argv: list[str] | None = None) -> int:
             "origem": "derivado do core_locus do release v1, segundo a orientacao do mantenedor em 15/09/2026",
         },
         "pronto_para_congelar": pronto,
-        "pendencias": [] if pronto else ["regra ampla brasileira nao aplicada (--broad-br-variant-ids)"],
-        "checagens": "todas passaram",
-        "saidas": {"snapshot": str(snapshot_path), "relatorio": str(report_path)},
+        "pendencias": [] if broad_br is not None else ["regra ampla brasileira nao aplicada "
+                                                       "(--broad-br-variant-ids)"],
+        "saidas": {"relatorio": str(report_path)},
     }
+
+    if problems:
+        # O relatorio SAI mesmo reprovando: e nele que estao os numeros para decidir o que corrigir. O snapshot
+        # e que nao e publicado.
+        report["status"] = "FALHOU"
+        report["checagens"] = problems
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        print(f"FALHOU: {len(problems)} checagem(ns) do gate G2 nao passaram; o snapshot NAO foi publicado.")
+        for problem in problems:
+            print(f"  - {problem}")
+        print(f"\nDiagnostico completo (custo de cada exclusao, por painel e por papel): {report_path}")
+        return 2
+
+    snapshot = snapshot_frame(splits)
+    snapshot.to_parquet(snapshot_path, index=False)
+    report["status"] = "OK"
+    report["checagens"] = "todas passaram"
+    report["identidade"] |= {
+        "hash_composicao": snapshot_hash(snapshot),
+        "hash_conteudo": snapshot_content_hash(snapshot),
+        "arquivo_sha256": sha256_file(snapshot_path),
+    }
+    report["saidas"]["snapshot"] = str(snapshot_path)
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
     print(json.dumps({
         "antes": before,
         "depois": report["depois_das_exclusoes"],
+        "politica_de_cluster": args.cluster_exclusion,
         "hash_composicao": report["identidade"]["hash_composicao"],
         "hash_conteudo": report["identidade"]["hash_conteudo"],
         "pronto_para_congelar": pronto,
