@@ -12,11 +12,11 @@ cd "$WORK" && git pull
 ## 0. Testes primeiro (teste pulado conta como falha)
 
 ```bash
-set -o pipefail
-cd "$WORK" && for t in import_mosaic_brazil_studies build_core_locus_head_snapshot build_broad_brazilian_variant_list; do
-  echo "== $t"; REQUIRE_NO_SKIP=1 PYTHONPATH=. python3 tests/test_$t.py || echo "FALHOU: $t"
-done
+cd "$WORK" && set -euo pipefail && for t in import_mosaic_brazil_studies build_core_locus_head_snapshot build_broad_brazilian_variant_list; do echo "== $t"; REQUIRE_NO_SKIP=1 PYTHONPATH=. python3 tests/test_$t.py; done && echo "TODOS OS TESTES PASSARAM"
 ```
+
+`set -e` faz o loop parar no primeiro teste que falhar e o shell sair com erro — sem `|| echo`, que mascararia a
+falha. Só siga para o passo 1 se aparecer `TODOS OS TESTES PASSARAM`.
 
 Os dois testes de release real procuram `~/mosaic-v1` (ou `MOSAIC_RELEASE`). O de `core_locus` confere os
 números do guia para `run_id=0` (196.096 / 2.453 / 1.758, antes das exclusões) com tolerância de 1%: se ele falhar,
@@ -50,8 +50,10 @@ PYTHONPATH="$WORK" python3 "$WORK"/scripts/build_broad_brazilian_variant_list.py
     --out-dir ~/artifacts/redesenho/g2_regra_ampla | tee ~/regra_ampla.log; echo "exit=$?"
 ```
 
-Sai `broad_brazilian_variant_ids.txt` e, de brinde, a contagem pré-declarada de **controles do estudo clínico com
-SCV brasileira**. `so_no_br_lab_any` tem de ser 0 (o filtro P/B é subconjunto da regra ampla); se não for, parar.
+Saem `broad_brazilian_variant_ids.txt`, o manifesto `...txt.manifest.json` (com o sha256 do `pb_examples` do
+release usado) e a contagem pré-declarada de **controles do estudo clínico com SCV brasileira**. Se alguma variante
+com `br_lab_any` ficar fora da lista, o script **falha com código 2 e não publica** — o G2 recusa a lista de
+qualquer modo, porque refaz essa checagem contra o release.
 
 ## 3. G2 — snapshot de treino da cabeça
 
@@ -68,9 +70,15 @@ PYTHONPATH="$WORK" python3 "$WORK"/scripts/build_core_locus_head_snapshot.py \
 Sai `core_head_snapshot.parquet` (colunas `variant_id`, `role`, rótulo, tier, painel, cluster, fold, coordenadas) e
 o relatório com o custo de cada exclusão e o hash lógico que vai no manifesto.
 
+O `--brazil-variants` **não** substitui o membership: as exclusões saem sempre do membership do release, e a saída
+do G1 é conferida contra ele (diferença de variantes ou de clusters faz o G2 parar com código 2).
+
 O que olhar no relatório:
 
-- `pronto_para_congelar: true` (sem a lista da regra ampla vem `false` e uma pendência);
+- `pronto_para_congelar: true` — só sai `true` com a lista da regra ampla **validada**: não vazia, superconjunto do
+  `br_lab_any` do release e com manifesto apontando para o mesmo `pb_examples`;
+- `identidade`: `hash_composicao` (quem está em cada recorte), `hash_conteudo` (todas as colunas) e
+  `arquivo_sha256`. O primeiro não muda se um rótulo mudar — por isso os três;
 - `depois_das_exclusoes`: quanto sobrou em cada papel e quantos clusters;
 - `exclusoes`: quanto cada uma custou, separado por papel e por classe;
 - `por_painel_rotulo` da validação: as duas classes em missense, splice e noncoding — é o que sustenta a seleção.

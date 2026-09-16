@@ -64,7 +64,12 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.import_mosaic_brazil_studies import counts_by, missing_columns  # noqa: E402
+from scripts.import_mosaic_brazil_studies import (  # noqa: E402
+    counts_by,
+    logical_hash,
+    missing_columns,
+    sha256_file,
+)
 
 ROLE_TRAIN = "train"
 ROLE_VALIDATION = "validation"
@@ -80,6 +85,11 @@ CHR8 = "chr8"
 
 FRAME_COLUMNS = (
     "variant_id", "chrom", "pos_1based", "ref", "alt", "binary_label", "label_tier", "sequence_eligible",
+    "br_lab_any",
+)
+SNAPSHOT_CONTENT_COLUMNS = (
+    "variant_id", "role", "binary_label", "label_tier", "primary_panel", "overlap_cluster_id", "core_fold",
+    "chrom", "pos_1based", "ref", "alt",
 )
 
 EXCLUSION_STUDY_MEMBERS = "membros_dos_estudos"
@@ -240,10 +250,15 @@ def snapshot_frame(splits: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
 
 def snapshot_hash(snapshot: pd.DataFrame) -> str:
+    """Hash de COMPOSICAO (variant_id + papel). Nao muda se um rotulo mudar: para isso ha o hash de conteudo."""
     payload = "\n".join(sorted(
         f"{vid}\t{role}" for vid, role in zip(snapshot["variant_id"], snapshot["role"])
     ))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def snapshot_content_hash(snapshot: pd.DataFrame) -> str:
+    return logical_hash(snapshot, SNAPSHOT_CONTENT_COLUMNS)
 
 
 def load_broad_br(path: Path) -> set[str]:
@@ -251,6 +266,43 @@ def load_broad_br(path: Path) -> set[str]:
         frame = pd.read_parquet(path, columns=["variant_id"])
         return set(frame["variant_id"].astype(str))
     return {line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()}
+
+
+def broad_manifest_path(list_path: Path) -> Path:
+    return list_path.with_suffix(list_path.suffix + ".manifest.json")
+
+
+def validate_broad_list(
+    broad: set[str], frame: pd.DataFrame, *, manifest: dict[str, Any] | None, pb_examples_sha256: str
+) -> list[str]:
+    """A lista so libera o snapshot se for valida: nao vazia, superconjunto do br_lab_any e do MESMO release.
+
+    O `br_lab_any` publicado passa pelo filtro P/B do Mosaic, que e um subconjunto da regra ampla. Se alguma
+    variante marcada no release ficar de fora da lista, a lista esta errada, truncada ou e de outro release --
+    e presenca de arquivo nao pode valer como autorizacao para treinar.
+    """
+    problems: list[str] = []
+    if not broad:
+        problems.append("lista da regra ampla vazia")
+    published = set(frame.loc[frame["br_lab_any"].astype(bool), "variant_id"].astype(str))
+    missing = sorted(published - broad)
+    if missing:
+        problems.append(
+            f"lista da regra ampla nao cobre {len(missing)} variantes com br_lab_any no release "
+            f"(ex.: {missing[:3]}): lista incompleta ou de outro release"
+        )
+    if manifest is None:
+        problems.append("manifesto da lista ausente (gerado por build_broad_brazilian_variant_list.py)")
+    else:
+        declared = manifest.get("pb_examples_sha256")
+        if declared != pb_examples_sha256:
+            problems.append(
+                f"manifesto da lista aponta pb_examples sha256 {declared}, mas o release usado tem "
+                f"{pb_examples_sha256}"
+            )
+        if manifest.get("n_variantes") != len(broad):
+            problems.append(f"manifesto declara {manifest.get('n_variantes')} variantes, lista tem {len(broad)}")
+    return problems
 
 
 def load_frame(release_root: Path) -> pd.DataFrame:
@@ -263,17 +315,38 @@ def load_frame(release_root: Path) -> pd.DataFrame:
     return frame.merge(partitions, on="variant_id", how="left", validate="one_to_one")
 
 
-def load_study_sets(release_root: Path, brazil_variants: Path | None) -> tuple[set[str], set[str], str]:
+def load_study_sets(
+    release_root: Path, brazil_variants: Path | None
+) -> tuple[set[str], set[str], dict[str, Any], list[str]]:
+    """As exclusoes vem SEMPRE do membership do release; a saida do G1 e conferencia, nunca substituicao.
+
+    Se o arquivo do G1 estivesse incompleto e virasse a fonte, o G2 excluiria menos e depois checaria vazamento
+    contra o mesmo conjunto encolhido -- passaria deixando variantes do estudo no desenvolvimento.
+    """
+    membership_path = release_root / "studies/brazil/membership.parquet"
+    members = pd.read_parquet(membership_path, columns=["variant_id", "overlap_cluster_id"])
+    variants = set(members["variant_id"].astype(str))
+    clusters = set(members["overlap_cluster_id"].dropna().astype(str))
+    origin: dict[str, Any] = {"fonte": str(membership_path), "variantes": len(variants), "clusters": len(clusters)}
+    problems: list[str] = []
+
     if brazil_variants is not None:
-        members = pd.read_parquet(brazil_variants, columns=["variant_id", "overlap_cluster_id"])
-        source = str(brazil_variants)
-    else:
-        members = pd.read_parquet(
-            release_root / "studies/brazil/membership.parquet", columns=["variant_id", "overlap_cluster_id"]
-        )
-        source = str(release_root / "studies/brazil/membership.parquet")
-    return (set(members["variant_id"].astype(str)),
-            set(members["overlap_cluster_id"].dropna().astype(str)), source)
+        imported = pd.read_parquet(brazil_variants, columns=["variant_id", "overlap_cluster_id"])
+        imported_variants = set(imported["variant_id"].astype(str))
+        imported_clusters = set(imported["overlap_cluster_id"].dropna().astype(str))
+        origin["conferencia_g1"] = {"arquivo": str(brazil_variants), "variantes": len(imported_variants)}
+        if imported_variants != variants:
+            problems.append(
+                f"{brazil_variants}: conjunto de variantes difere do membership do release "
+                f"(faltam {len(variants - imported_variants)}, sobram {len(imported_variants - variants)})"
+            )
+        if imported_clusters != clusters:
+            problems.append(
+                f"{brazil_variants}: conjunto de overlap_cluster_id difere do membership do release "
+                f"(faltam {len(clusters - imported_clusters)}, sobram {len(imported_clusters - clusters)})"
+            )
+        origin["conferencia_g1"]["bate_com_o_release"] = not problems
+    return variants, clusters, origin, problems
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -298,10 +371,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FALHOU: colunas ausentes no release: {absent}")
         return 2
 
-    study_variants, study_clusters, study_source = load_study_sets(
+    study_variants, study_clusters, study_origin, study_problems = load_study_sets(
         release_root, args.brazil_variants.expanduser() if args.brazil_variants else None
     )
-    broad_br = load_broad_br(args.broad_br_variant_ids.expanduser()) if args.broad_br_variant_ids else None
+
+    pb_examples_sha256 = sha256_file(release_root / "pb_examples.parquet")
+    broad_br: set[str] | None = None
+    broad_manifest: dict[str, Any] | None = None
+    broad_problems: list[str] = []
+    if args.broad_br_variant_ids:
+        list_path = args.broad_br_variant_ids.expanduser()
+        broad_br = load_broad_br(list_path)
+        manifest_path = broad_manifest_path(list_path)
+        if manifest_path.exists():
+            broad_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        broad_problems = validate_broad_list(
+            broad_br, frame, manifest=broad_manifest, pb_examples_sha256=pb_examples_sha256
+        )
+
+    entry_problems = study_problems + broad_problems
+    if entry_problems:
+        print(f"FALHOU: {len(entry_problems)} problema(s) nas entradas; nada foi publicado.")
+        for problem in entry_problems:
+            print(f"  - {problem}")
+        return 2
 
     splits = split_core(frame, run_id=args.run_id, k=args.k)
     before = {role: role_counts(rows) for role, rows in splits.items()}
@@ -325,12 +418,23 @@ def main(argv: list[str] | None = None) -> int:
     report_path = out_dir / "g2_core_snapshot_report.json"
     snapshot.to_parquet(snapshot_path, index=False)
 
+    # A lista so chega aqui depois de validada (nao vazia, superconjunto do br_lab_any, manifesto do mesmo
+    # release): presenca de arquivo nunca libera o congelamento por si.
     pronto = broad_br is not None
     report: dict[str, Any] = {
         "entradas": {
             "release_root": str(release_root),
-            "membros_dos_estudos": study_source,
-            "lista_regra_ampla": str(args.broad_br_variant_ids) if args.broad_br_variant_ids else None,
+            "pb_examples_sha256": pb_examples_sha256,
+            "pb_panels_sha256": sha256_file(release_root / "pb_panels.parquet"),
+            "pb_partitions_sha256": sha256_file(release_root / "pb_partitions.parquet"),
+            "membros_dos_estudos": study_origin,
+            "lista_regra_ampla": {
+                "arquivo": str(args.broad_br_variant_ids) if args.broad_br_variant_ids else None,
+                "sha256": sha256_file(args.broad_br_variant_ids.expanduser()) if args.broad_br_variant_ids else None,
+                "variantes": len(broad_br) if broad_br is not None else None,
+                "manifesto": broad_manifest,
+                "validada": bool(broad_br is not None),
+            },
         },
         "agenda": {"run_id": args.run_id, "k": args.k, "folds": {
             role: (list(value) if isinstance(value, tuple) else value)
@@ -350,8 +454,14 @@ def main(argv: list[str] | None = None) -> int:
         "por_tier": {role: counts_by(rows, ["label_tier"]) for role, rows in splits.items()},
         "identidade": {
             "snapshot_id": f"core_locus_run{args.run_id}_menos_estudos_br",
-            "hash_logico": snapshot_hash(snapshot),
-            "receita_do_hash": "sha256 das linhas 'variant_id\\trole' ordenadas",
+            "hash_composicao": snapshot_hash(snapshot),
+            "hash_conteudo": snapshot_content_hash(snapshot),
+            "arquivo_sha256": sha256_file(snapshot_path),
+            "receita_dos_hashes": {
+                "composicao": "sha256 das linhas 'variant_id\\trole' ordenadas -- identifica quem esta em cada "
+                              "recorte, NAO o conteudo (trocar um rotulo nao muda este hash)",
+                "conteudo": f"sha256 das linhas com {list(SNAPSHOT_CONTENT_COLUMNS)} ordenadas",
+            },
             "cutoff": "o do release (ClinVar 2026-06)",
             "origem": "derivado do core_locus do release v1, segundo a orientacao do mantenedor em 15/09/2026",
         },
@@ -365,7 +475,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({
         "antes": before,
         "depois": report["depois_das_exclusoes"],
-        "hash_logico": report["identidade"]["hash_logico"],
+        "hash_composicao": report["identidade"]["hash_composicao"],
+        "hash_conteudo": report["identidade"]["hash_conteudo"],
         "pronto_para_congelar": pronto,
         "pendencias": report["pendencias"],
         "saidas": report["saidas"],

@@ -25,10 +25,10 @@ class Skip(Exception):
     """Teste nao executado por falta de dependencia. NAO e um PASS -- o runner conta separado."""
 
 
-def _row(vid, fold, label, panel="missense", tier="gold", cluster=None, chrom="chr1", eligible=True):
+def _row(vid, fold, label, panel="missense", tier="gold", cluster=None, chrom="chr1", eligible=True, br=False):
     return {
         "variant_id": vid, "chrom": chrom, "pos_1based": 1000 + abs(hash(vid)) % 1000, "ref": "A", "alt": "G",
-        "binary_label": label, "label_tier": tier, "sequence_eligible": eligible,
+        "binary_label": label, "label_tier": tier, "sequence_eligible": eligible, "br_lab_any": br,
         "primary_panel": panel, "overlap_cluster_id": cluster or f"cl_{vid}", "core_fold": fold,
     }
 
@@ -160,23 +160,48 @@ def test_hash_do_snapshot_depende_do_papel():
     assert len(g2.snapshot_hash(snapshot)) == 64
 
 
+def test_hash_de_composicao_nao_ve_troca_de_rotulo_mas_o_de_conteudo_ve():
+    """Ponto 4 da revisao: os dois hashes existem porque medem coisas diferentes."""
+    snapshot = g2.snapshot_frame(_splits())
+    trocado = snapshot.copy()
+    trocado.loc[trocado.index[0], "binary_label"] = 1 - int(snapshot.iloc[0]["binary_label"])
+    assert g2.snapshot_hash(snapshot) == g2.snapshot_hash(trocado), "composicao nao muda: e o esperado"
+    assert g2.snapshot_content_hash(snapshot) != g2.snapshot_content_hash(trocado), "conteudo tem de mudar"
+
+
 # --------------------------------------------------------------------------------------------- ponta a ponta
 
 
 def _write_release(root: Path, frame: pd.DataFrame, membros: list[str]) -> None:
     (root / "studies" / "brazil").mkdir(parents=True, exist_ok=True)
-    frame[list(g2.FRAME_COLUMNS)].to_parquet(root / "pb_examples.parquet", index=False)
-    frame[["variant_id", "primary_panel"]].to_parquet(root / "pb_panels.parquet", index=False)
-    frame[["variant_id", "overlap_cluster_id", "core_fold"]].to_parquet(root / "pb_partitions.parquet", index=False)
-    membership = frame[frame["variant_id"].isin(membros)][["variant_id", "overlap_cluster_id"]]
+    frame[list(g2.FRAME_COLUMNS)].copy().to_parquet(root / "pb_examples.parquet", index=False)
+    frame[["variant_id", "primary_panel"]].copy().to_parquet(root / "pb_panels.parquet", index=False)
+    frame[["variant_id", "overlap_cluster_id", "core_fold"]].copy().to_parquet(
+        root / "pb_partitions.parquet", index=False)
+    membership = frame[frame["variant_id"].isin(membros)][["variant_id", "overlap_cluster_id"]].copy()
     membership.to_parquet(root / "studies/brazil/membership.parquet", index=False)
 
 
-def _run(frame: pd.DataFrame, membros: list[str], extra_args: list[str] | None = None):
+def _write_broad(tmp: Path, root: Path, ids: list[str], *, manifesto: bool = True, sha: str | None = None) -> Path:
+    """Lista da regra ampla com o manifesto que o G2 exige (sha256 do pb_examples do MESMO release)."""
+    list_path = tmp / "broad.txt"
+    list_path.write_text("\n".join(sorted(ids)) + "\n", encoding="utf-8")
+    if manifesto:
+        g2.broad_manifest_path(list_path).write_text(json.dumps({
+            "n_variantes": len(ids),
+            "pb_examples_sha256": sha if sha is not None else g2.sha256_file(root / "pb_examples.parquet"),
+        }), encoding="utf-8")
+    return list_path
+
+
+def _run(frame: pd.DataFrame, membros: list[str], extra_args: list[str] | None = None, broad=None):
     with tempfile.TemporaryDirectory() as tmp:
         root, out = Path(tmp) / "release", Path(tmp) / "out"
         _write_release(root, frame, membros)
-        rc = g2.main(["--release-root", str(root), "--out-dir", str(out), *(extra_args or [])])
+        args = ["--release-root", str(root), "--out-dir", str(out), *(extra_args or [])]
+        if broad is not None:
+            args += ["--broad-br-variant-ids", str(broad(Path(tmp), root))]
+        rc = g2.main(args)
         report_path = out / "g2_core_snapshot_report.json"
         snapshot_path = out / "core_head_snapshot.parquet"
         report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else None
@@ -197,16 +222,51 @@ def test_end_to_end_publica_snapshot_sem_membros_dos_estudos():
     assert report["papel_de_cada_recorte"]["test"].startswith("avalia so depois"), report["papel_de_cada_recorte"]
 
 
-def test_end_to_end_com_lista_ampla_fica_pronto_para_congelar():
+def test_end_to_end_com_lista_ampla_validada_fica_pronto_para_congelar():
+    frame = _frame([_row("var:brasileira", 2, 1, tier="consensus", br=True)])
+    rc, report, snapshot = _run(
+        frame, [], broad=lambda tmp, root: _write_broad(tmp, root, ["var:t3p", "var:brasileira"])
+    )
+    assert rc == 0, report
+    assert report["pronto_para_congelar"] is True and report["pendencias"] == []
+    assert "var:t3p" not in set(snapshot["variant_id"])
+    ampla = [s for s in report["exclusoes"] if s["exclusao"] == g2.EXCLUSION_BROAD_BR][0]
+    assert ampla["removidos"]["train"]["n"] == 2, ampla
+    assert report["entradas"]["lista_regra_ampla"]["validada"] is True
+
+
+def test_lista_ampla_que_nao_cobre_o_br_lab_any_do_release_reprova():
+    """Ponto 1 da revisao: presenca de arquivo nao pode liberar o congelamento."""
+    frame = _frame([_row("var:brasileira", 2, 1, tier="consensus", br=True)])
+    rc, report, snapshot = _run(frame, [], broad=lambda tmp, root: _write_broad(tmp, root, ["var:t3p"]))
+    assert rc == 2 and report is None and snapshot is None
+
+
+def test_lista_ampla_vazia_reprova():
+    rc, report, _ = _run(_frame(), [], broad=lambda tmp, root: _write_broad(tmp, root, []))
+    assert rc == 2 and report is None
+
+
+def test_lista_ampla_sem_manifesto_ou_de_outro_release_reprova():
+    sem = _run(_frame(), [], broad=lambda tmp, root: _write_broad(tmp, root, ["var:t3p"], manifesto=False))
+    assert sem[0] == 2, sem[1]
+    outro = _run(_frame(), [], broad=lambda tmp, root: _write_broad(tmp, root, ["var:t3p"], sha="0" * 64))
+    assert outro[0] == 2, outro[1]
+
+
+def test_brazil_variants_incompleto_reprova_em_vez_de_encolher_a_exclusao():
+    """Ponto 2 da revisao: a saida do G1 e conferencia, nunca substituicao do membership."""
+    extra = [_row("var:estudo_a", 2, 1, tier="consensus"), _row("var:estudo_b", 1, 1, tier="gold")]
+    frame = _frame(extra)
     with tempfile.TemporaryDirectory() as tmp:
-        lista = Path(tmp) / "br.txt"
-        lista.write_text("var:t3p\n", encoding="utf-8")
-        rc, report, snapshot = _run(_frame(), [], ["--broad-br-variant-ids", str(lista)])
-        assert rc == 0, report
-        assert report["pronto_para_congelar"] is True and report["pendencias"] == []
-        assert "var:t3p" not in set(snapshot["variant_id"])
-        ampla = [s for s in report["exclusoes"] if s["exclusao"] == g2.EXCLUSION_BROAD_BR][0]
-        assert ampla["removidos"]["train"]["n"] == 1, ampla
+        root, out = Path(tmp) / "release", Path(tmp) / "out"
+        _write_release(root, frame, ["var:estudo_a", "var:estudo_b"])
+        incompleto = Path(tmp) / "g1_incompleto.parquet"
+        frame[frame["variant_id"] == "var:estudo_a"][["variant_id", "overlap_cluster_id"]].copy().to_parquet(
+            incompleto, index=False)
+        rc = g2.main(["--release-root", str(root), "--brazil-variants", str(incompleto), "--out-dir", str(out)])
+        assert rc == 2, "arquivo incompleto do G1 nao pode virar a fonte das exclusoes"
+        assert not (out / "core_head_snapshot.parquet").exists()
 
 
 def test_end_to_end_para_com_codigo_2_quando_a_validacao_nao_sustenta_a_selecao():

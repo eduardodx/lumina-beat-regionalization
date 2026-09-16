@@ -64,6 +64,21 @@ def test_comparacao_mostra_o_que_a_regra_ampla_acrescenta():
     assert got["so_na_regra_ampla"] == 1 and got["so_no_br_lab_any"] == 0, got
 
 
+def test_lista_que_perde_variante_ja_marcada_no_release_e_reprovada():
+    """Ponto 1 da revisao: o gerador tem de FALHAR, nao so relatar, quando a regra ampla nao e superconjunto."""
+    problems = ampla.validate_broad_result({"var:a": ["Dasa"]}, {"var:a": True, "var:b": True})
+    assert any("ficaram fora da regra ampla" in p for p in problems), problems
+
+
+def test_lista_vazia_e_reprovada():
+    problems = ampla.validate_broad_result({}, {"var:a": False})
+    assert any("nenhuma variante marcada" in p for p in problems), problems
+
+
+def test_lista_superconjunto_do_br_lab_any_passa():
+    assert ampla.validate_broad_result({"var:a": ["Dasa"], "var:b": ["Mendelics"]}, {"var:a": True}) == []
+
+
 def test_contagem_de_controles_usa_so_o_estudo_clinico():
     membership = pd.DataFrame([
         {"variant_id": "var:a", "study_id": "br_clinical_evidence", "member_role": "control"},

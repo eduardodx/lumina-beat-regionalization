@@ -58,6 +58,7 @@ from scripts.diagnose_brazilian_submitter_divergence import (  # noqa: E402
     load_mosaic,
     verify_source,
 )
+from scripts.import_mosaic_brazil_studies import sha256_file  # noqa: E402
 
 ROLE_CONTROL = "control"
 STUDY_CLINICAL = "br_clinical_evidence"
@@ -93,6 +94,23 @@ def compare_with_published(broad: dict[str, list[str]], published_any: dict[str,
         "so_no_br_lab_any": len(marked - broad_ids),
         "nota_so_no_br_lab_any": "esperado 0: o filtro P/B e um subconjunto da regra ampla",
     }
+
+
+def validate_broad_result(broad: dict[str, list[str]], published_any: dict[str, bool]) -> list[str]:
+    """A regra ampla TEM de conter tudo que o release ja marca: o filtro P/B e um subconjunto dela.
+
+    Se alguma variante com `br_lab_any` ficar de fora, algo esta errado (parsing, lista de instituicoes, release
+    trocado) e publicar a lista mesmo assim faria o G2 excluir de menos.
+    """
+    problems: list[str] = []
+    if not broad:
+        problems.append("nenhuma variante marcada: parsing ou lista de instituicoes provavelmente errados")
+    missing = sorted({vid for vid, flag in published_any.items() if flag} - set(broad))
+    if missing:
+        problems.append(
+            f"{len(missing)} variantes com br_lab_any no release ficaram fora da regra ampla, ex.: {missing[:3]}"
+        )
+    return problems
 
 
 def controls_with_brazilian_scv(membership, broad: dict[str, list[str]]) -> dict[str, Any]:
@@ -169,9 +187,39 @@ def main(argv: list[str] | None = None) -> int:
         report["controles_com_scv_brasileira"] = controls_with_brazilian_scv(membership, broad)
 
     list_path = out_dir / "broad_brazilian_variant_ids.txt"
+    manifest_path = out_dir / "broad_brazilian_variant_ids.txt.manifest.json"
     report_path = out_dir / "regra_ampla_brasileira.json"
+
+    problems = validate_broad_result(broad, published)
+    if problems:
+        report["status"] = "FALHOU"
+        report["problemas"] = problems
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        print(f"FALHOU: {len(problems)} problema(s); a lista NAO foi publicada.")
+        for problem in problems:
+            print(f"  - {problem}")
+        if list_path.exists() or manifest_path.exists():
+            print(f"  ATENCAO: ha arquivos antigos em {out_dir}; apague antes de usar no G2.")
+        return 2
+
+    pb_examples_sha256 = sha256_file(args.pb_examples.expanduser())
     list_path.write_text("\n".join(sorted(broad)) + "\n", encoding="utf-8")
-    report["saidas"] = {"lista": str(list_path), "relatorio": str(report_path)}
+    manifest = {
+        "regra": report["regra"],
+        "n_variantes": len(broad),
+        "lista_sha256": sha256_file(list_path),
+        "pb_examples": str(args.pb_examples),
+        "pb_examples_sha256": pb_examples_sha256,
+        "submission_summary_sha256": source.get("sha256"),
+        "clinvar_release": args.clinvar_release,
+        "mosaic_commit": mosaic.commit,
+        "instituicoes_incluidas": len(mosaic.include_ids),
+        "superset_do_br_lab_any": True,
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    report["status"] = "OK"
+    report["manifesto"] = manifest
+    report["saidas"] = {"lista": str(list_path), "manifesto": str(manifest_path), "relatorio": str(report_path)}
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
     print(json.dumps({k: report[k] for k in ("comparacao_com_o_publicado", "saidas")

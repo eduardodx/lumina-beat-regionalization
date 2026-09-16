@@ -52,23 +52,26 @@ def _valid_membership() -> list[dict]:
 def _release_tables(membership: list[dict]) -> dict[str, pd.DataFrame]:
     rows = pd.DataFrame(membership)
     unique = rows.drop_duplicates(subset=["variant_id"])
+    # Listas novas em cada tabela: com `to_numpy()` o pandas pode compartilhar o buffer e mudar `partitions`
+    # mudaria tambem o `membership`, o que faria o teste de divergencia deixar de testar o que promete.
     examples = pd.DataFrame({
-        "variant_id": unique["variant_id"],
+        "variant_id": list(unique["variant_id"]),
         "chrom": ["chr1"] * len(unique),
-        "pos_1based": range(1000, 1000 + len(unique)),
+        "pos_1based": list(range(1000, 1000 + len(unique))),
         "ref": ["A"] * len(unique),
         "alt": ["G"] * len(unique),
-        "binary_label": unique["binary_label"].to_numpy(),
-        "label_tier": unique["label_tier"].to_numpy(),
+        "binary_label": list(unique["binary_label"]),
+        "label_tier": list(unique["label_tier"]),
         "sequence_eligible": [True] * len(unique),
     })
-    panels = pd.DataFrame({"variant_id": unique["variant_id"], "primary_panel": unique["primary_panel"].to_numpy()})
+    panels = pd.DataFrame({"variant_id": list(unique["variant_id"]),
+                           "primary_panel": list(unique["primary_panel"])})
     partitions = pd.DataFrame({
-        "variant_id": unique["variant_id"],
-        "overlap_cluster_id": unique["overlap_cluster_id"].to_numpy(),
-        "core_fold": unique["core_fold"].to_numpy(),
+        "variant_id": list(unique["variant_id"]),
+        "overlap_cluster_id": list(unique["overlap_cluster_id"]),
+        "core_fold": list(unique["core_fold"]),
     })
-    return {"membership": rows, "examples": examples, "panels": panels, "partitions": partitions}
+    return {"membership": rows.copy(), "examples": examples, "panels": panels, "partitions": partitions}
 
 
 def _write_release(root: Path, tables: dict[str, pd.DataFrame]) -> None:
@@ -112,6 +115,35 @@ def test_controle_reusado_em_dois_casos_reprova():
     membership.append(_member("var:f", CLINICAL, "case", matched="var:b"))
     problems = g1.check_pairing(pd.DataFrame(membership))
     assert any("nao e 1:1" in p for p in problems), problems
+
+
+def test_controle_apontando_para_variante_inexistente_reprova():
+    """Ponto 3 da revisao: os dois sentidos do par tem de ser validados."""
+    membership = _valid_membership()
+    membership.append(_member("var:extra", CLINICAL, "control", matched="var:fantasma"))
+    problems = g1.check_pairing(pd.DataFrame(membership))
+    assert any("ausente do estudo" in p for p in problems), problems
+
+
+def test_membership_vazio_reprova():
+    vazio = pd.DataFrame(columns=list(g1.MEMBERSHIP_COLUMNS))
+    assert g1.check_not_empty(vazio) == ["membership vazio"]
+    tables = _release_tables(_valid_membership())
+    tables["membership"] = vazio
+    assert g1.validate(tables) == ["membership vazio"]
+
+
+def test_estudo_sem_controles_reprova():
+    membership = [m for m in _valid_membership() if not (m["study_id"] == POPULATION and m["member_role"] == "control")]
+    problems = g1.check_not_empty(pd.DataFrame(membership))
+    assert any("sem controles" in p for p in problems), problems
+
+
+def test_variante_com_dois_papeis_no_mesmo_estudo_reprova():
+    membership = _valid_membership()
+    membership.append(_member("var:a", CLINICAL, "control", matched="var:a"))
+    problems = g1.check_roles_disjoint(pd.DataFrame(membership))
+    assert any("mais de um papel" in p for p in problems), problems
 
 
 def test_caso_sem_controle_declarado_como_case_reprova():
@@ -202,8 +234,22 @@ def test_end_to_end_publica_coordenadas_e_relatorio():
     assert list(variants["chrom"].unique()) == ["chr1"] and variants["pos_1based"].notna().all()
     assert set(g1.MEMBERSHIP_COLUMNS) <= set(variants.columns)
     assert report["membership"]["linhas"] == 5
-    assert len(report["membership"]["hash_logico"]) == 64
+    assert len(report["membership"]["hash_composicao"]) == 64
+    assert len(report["membership"]["hash_conteudo"]) == 64
     assert report["coordenadas"]["sem_coordenada"] == 0
+    assert len(report["entradas"]["membership_sha256"]) == 64
+    assert len(report["saidas"]["variantes_sha256"]) == 64
+
+
+def test_hash_de_conteudo_muda_quando_o_rotulo_muda_e_o_de_composicao_nao():
+    """Ponto 4 da revisao: hash de composicao identifica o conjunto, nao o conteudo."""
+    tables = _release_tables(_valid_membership())
+    joined = g1.join_coordinates(tables["membership"], tables["examples"])
+    trocado = joined.copy()
+    trocado.loc[trocado.index[0], "binary_label"] = 1 - int(joined.iloc[0]["binary_label"])
+    composicao = ("variant_id", "study_id", "member_role")
+    assert g1.logical_hash(joined, composicao) == g1.logical_hash(trocado, composicao)
+    assert g1.logical_hash(joined, g1.CONTENT_COLUMNS) != g1.logical_hash(trocado, g1.CONTENT_COLUMNS)
 
 
 def test_end_to_end_para_com_codigo_2_e_nao_publica_nada():

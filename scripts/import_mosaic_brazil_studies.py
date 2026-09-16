@@ -78,8 +78,20 @@ PARTITION_COLUMNS = ("variant_id", "overlap_cluster_id", "core_fold")
 # Recomendado pelo Mosaic em brazil_study.py:membership_stratum.
 AF_BIN_MISSING = "missing"
 
+# Hash de conteudo: identidade do que sera consumido, nao so da composicao do conjunto.
+CONTENT_COLUMNS = MEMBERSHIP_COLUMNS + ("chrom", "pos_1based", "ref", "alt")
+
 
 # --------------------------------------------------------------------------------------------------- utilidades
+
+
+NA_TEXT = "<na>"
+
+
+def as_text(series: pd.Series) -> pd.Series:
+    """Texto com nulo explicito. Em pandas 3, `astype(str)` PRESERVA o nulo (vira float NaN na iteracao), e
+    `matched_variant_id` e nulo em todo `unmatched_case`: sem isto o hash e as comparacoes quebram no dado real."""
+    return series.astype("string").fillna(NA_TEXT)
 
 
 def stratum_key(binary_label: Any, primary_panel: Any, gnomad_af_bin: Any) -> str:
@@ -90,10 +102,23 @@ def stratum_key(binary_label: Any, primary_panel: Any, gnomad_af_bin: Any) -> st
 
 
 def logical_hash(frame: pd.DataFrame, columns: tuple[str, ...]) -> str:
-    """sha256 sobre as colunas, linha a linha, em ordem lexicografica. Receita declarada no relatorio."""
-    rows = frame[list(columns)].astype(str)
+    """sha256 sobre as colunas, linha a linha, em ordem lexicografica. Receita declarada no relatorio.
+
+    Com poucas colunas isso identifica a COMPOSICAO do conjunto, nao o conteudo: trocar um rotulo mantendo os
+    mesmos ids nao muda o hash. Por isso o relatorio publica hash de composicao, hash de conteudo (todas as
+    colunas) e o sha256 dos arquivos.
+    """
+    rows = frame[list(columns)].apply(as_text)
     payload = "\n".join(sorted("\t".join(row) for row in rows.itertuples(index=False, name=None)))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def missing_columns(frame: pd.DataFrame, required: tuple[str, ...]) -> list[str]:
@@ -101,6 +126,34 @@ def missing_columns(frame: pd.DataFrame, required: tuple[str, ...]) -> list[str]
 
 
 # ----------------------------------------------------------------------------------------------------- checagens
+
+
+def check_not_empty(membership: pd.DataFrame) -> list[str]:
+    """Membership vazio, ou estudo sem casos ou sem controles, nao e "passou": e ausencia de dado."""
+    problems: list[str] = []
+    if membership.empty:
+        return ["membership vazio"]
+    for study in STUDIES:
+        rows = membership[membership["study_id"] == study]
+        if rows.empty:
+            problems.append(f"{study}: sem linhas no membership")
+            continue
+        if not rows["member_role"].isin([ROLE_CASE, ROLE_UNMATCHED]).any():
+            problems.append(f"{study}: sem casos")
+        if not (rows["member_role"] == ROLE_CONTROL).any():
+            problems.append(f"{study}: sem controles")
+    return problems
+
+
+def check_roles_disjoint(membership: pd.DataFrame) -> list[str]:
+    """Dentro de um estudo, uma variante tem um unico papel: caso e controle ao mesmo tempo quebra as coortes."""
+    problems: list[str] = []
+    for study, rows in membership.groupby("study_id", sort=True):
+        per_variant = rows.groupby("variant_id")["member_role"].nunique()
+        multi = per_variant[per_variant > 1]
+        if len(multi):
+            problems.append(f"{study}: {len(multi)} variantes com mais de um papel, ex.: {list(multi.index[:3])}")
+    return problems
 
 
 def check_domains(membership: pd.DataFrame) -> list[str]:
@@ -158,14 +211,18 @@ def check_pairing(membership: pd.DataFrame) -> list[str]:
             if orphans:
                 problems.append(f"{study}: {label} sem matched_variant_id ({len(orphans)}), ex.: {orphans[:3]}")
 
-        for vid in cases:
-            partner = matched_of.get(vid)
-            if not partner:
-                continue
-            if role_of.get(partner) != ROLE_CONTROL:
-                problems.append(f"{study}: case {vid} aponta para {partner}, que nao e control")
-            elif matched_of.get(partner) != vid:
-                problems.append(f"{study}: par nao bidirecional entre case {vid} e control {partner}")
+        # Os DOIS sentidos: um controle apontando para variante inexistente tambem invalida o par.
+        for role, partner_role, ids in ((ROLE_CASE, ROLE_CONTROL, cases), (ROLE_CONTROL, ROLE_CASE, controls)):
+            for vid in ids:
+                partner = matched_of.get(vid)
+                if not partner:
+                    continue
+                if partner not in role_of:
+                    problems.append(f"{study}: {role} {vid} aponta para {partner}, ausente do estudo")
+                elif role_of[partner] != partner_role:
+                    problems.append(f"{study}: {role} {vid} aponta para {partner}, que e {role_of[partner]}")
+                elif matched_of.get(partner) != vid:
+                    problems.append(f"{study}: par nao bidirecional entre {role} {vid} e {partner}")
 
         for role, ids in ((ROLE_CASE, cases), (ROLE_CONTROL, controls)):
             partners = [matched_of[vid] for vid in ids if matched_of.get(vid)]
@@ -233,7 +290,7 @@ def check_against_release(
         if column not in known.columns:
             continue
         joined = known[[column]].join(source.rename("release"), how="left")
-        divergent = joined[joined[column].astype(str) != joined["release"].astype(str)]
+        divergent = joined[as_text(joined[column]) != as_text(joined["release"])]
         if len(divergent):
             sample = divergent.head(3).reset_index().to_dict(orient="records")
             problems.append(f"{column} diverge de {source_name} em {len(divergent)} variantes, ex.: {sample}")
@@ -291,8 +348,13 @@ def build_report(membership: pd.DataFrame, joined: pd.DataFrame, paths: dict[str
         "membership": {
             "linhas": int(len(membership)),
             "variantes_distintas": int(membership["variant_id"].nunique()),
-            "hash_logico": logical_hash(membership, ("variant_id", "study_id", "member_role")),
-            "receita_do_hash": "sha256 das linhas 'variant_id\\tstudy_id\\tmember_role' ordenadas",
+            "hash_composicao": logical_hash(membership, ("variant_id", "study_id", "member_role")),
+            "hash_conteudo": logical_hash(joined, CONTENT_COLUMNS),
+            "receita_dos_hashes": {
+                "composicao": "sha256 das linhas 'variant_id\\tstudy_id\\tmember_role' ordenadas -- identifica o "
+                              "conjunto, NAO o conteudo (trocar um rotulo nao muda este hash)",
+                "conteudo": f"sha256 das linhas com {list(CONTENT_COLUMNS)} ordenadas",
+            },
         },
         "por_estudo": per_study,
         "variantes_nos_dois_estudos": {"n": len(in_both), "exemplos": in_both[:5]},
@@ -337,7 +399,11 @@ def validate(tables: dict[str, pd.DataFrame]) -> list[str]:
         return problems
 
     membership = tables["membership"]
+    problems += check_not_empty(membership)
+    if problems:
+        return problems
     problems += check_domains(membership)
+    problems += check_roles_disjoint(membership)
     problems += check_uniqueness(membership)
     problems += check_pairing(membership)
     problems += check_strata(membership)
@@ -379,17 +445,26 @@ def main(argv: list[str] | None = None) -> int:
     report_path = out_dir / "g1_brazil_studies_report.json"
     joined.to_parquet(variants_path, index=False)
 
+    membership_path = release_root / "studies/brazil/membership.parquet"
+    examples_path = release_root / "pb_examples.parquet"
     report = build_report(tables["membership"], joined, {
         "release_root": str(release_root),
-        "membership": str(release_root / "studies/brazil/membership.parquet"),
-        "pb_examples": str(release_root / "pb_examples.parquet"),
+        "membership": str(membership_path),
+        "membership_sha256": sha256_file(membership_path),
+        "pb_examples": str(examples_path),
+        "pb_examples_sha256": sha256_file(examples_path),
     })
-    report["saidas"] = {"variantes": str(variants_path), "relatorio": str(report_path)}
+    report["saidas"] = {
+        "variantes": str(variants_path),
+        "variantes_sha256": sha256_file(variants_path),
+        "relatorio": str(report_path),
+    }
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
     print(json.dumps({
         "linhas": report["membership"]["linhas"],
-        "hash_logico": report["membership"]["hash_logico"],
+        "hash_composicao": report["membership"]["hash_composicao"],
+        "hash_conteudo": report["membership"]["hash_conteudo"],
         "por_estudo": {study: data["por_papel"] for study, data in report["por_estudo"].items()},
         "variantes_nos_dois_estudos": report["variantes_nos_dois_estudos"]["n"],
         "saidas": report["saidas"],
