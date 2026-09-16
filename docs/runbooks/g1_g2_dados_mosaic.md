@@ -1,0 +1,87 @@
+# Runbook — G1 e G2: dados do estudo brasileiro e snapshot de treino da cabeça
+
+Plano: `docs/proposta_mosaic_regionalizacao_desenvolvimento.md` §4.1, §4.2 e §8.
+Roda no notebook SageMaker, no `python3` do conda (pandas + pyarrow + pyyaml). **Sem GPU, sem `uv sync`.**
+Todos os passos são somente-leitura sobre o release; só escrevem em `--out-dir`.
+
+```bash
+export WORK=~/testeArq/lumina-beat-regionalization
+cd "$WORK" && git pull
+```
+
+## 0. Testes primeiro (teste pulado conta como falha)
+
+```bash
+set -o pipefail
+cd "$WORK" && for t in import_mosaic_brazil_studies build_core_locus_head_snapshot build_broad_brazilian_variant_list; do
+  echo "== $t"; REQUIRE_NO_SKIP=1 PYTHONPATH=. python3 tests/test_$t.py || echo "FALHOU: $t"
+done
+```
+
+Os dois testes de release real procuram `~/mosaic-v1` (ou `MOSAIC_RELEASE`). O de `core_locus` confere os
+números do guia para `run_id=0` (196.096 / 2.453 / 1.758, antes das exclusões) com tolerância de 1%: se ele falhar,
+**pare** — ou o release mudou, ou a leitura dos folds está errada.
+
+## 1. G1 — importar e validar o membership
+
+```bash
+set -o pipefail
+PYTHONPATH="$WORK" python3 "$WORK"/scripts/import_mosaic_brazil_studies.py \
+    --release-root ~/mosaic-v1 \
+    --out-dir ~/artifacts/redesenho/g1_brazil_studies | tee ~/g1.log; echo "exit=$?"
+```
+
+Sai `brazil_study_variants.parquet` (membership + `chrom/pos_1based/ref/alt`) e o relatório com as contagens por
+estudo, papel, painel e rótulo. Código 2 = alguma promessa do protocolo não se confirmou; nada é publicado.
+Conferir no relatório: 8.875 linhas, `br_clinical_evidence` com 3.119 casos (3.116 `case` + 3 `unmatched_case`) e
+3.116 controles; `br_population_observed` com 1.889 casos (751 + 1.138) e 751 controles.
+
+## 2. Regra ampla brasileira (insumo do G2 e da §6.4)
+
+Lê o `submission_summary` inteiro: leva alguns minutos.
+
+```bash
+set -o pipefail
+PYTHONPATH="$WORK" python3 "$WORK"/scripts/build_broad_brazilian_variant_list.py \
+    --mosaic-root ~/testeArq/lumina-mosaic \
+    --submission-summary ~/clinvar/2026-06/submission_summary_2026-06.txt.gz \
+    --pb-examples ~/mosaic-v1/pb_examples.parquet \
+    --membership ~/mosaic-v1/studies/brazil/membership.parquet \
+    --out-dir ~/artifacts/redesenho/g2_regra_ampla | tee ~/regra_ampla.log; echo "exit=$?"
+```
+
+Sai `broad_brazilian_variant_ids.txt` e, de brinde, a contagem pré-declarada de **controles do estudo clínico com
+SCV brasileira**. `so_no_br_lab_any` tem de ser 0 (o filtro P/B é subconjunto da regra ampla); se não for, parar.
+
+## 3. G2 — snapshot de treino da cabeça
+
+```bash
+set -o pipefail
+PYTHONPATH="$WORK" python3 "$WORK"/scripts/build_core_locus_head_snapshot.py \
+    --release-root ~/mosaic-v1 \
+    --brazil-variants ~/artifacts/redesenho/g1_brazil_studies/brazil_study_variants.parquet \
+    --broad-br-variant-ids ~/artifacts/redesenho/g2_regra_ampla/broad_brazilian_variant_ids.txt \
+    --run-id 0 \
+    --out-dir ~/artifacts/redesenho/g2_core_snapshot | tee ~/g2.log; echo "exit=$?"
+```
+
+Sai `core_head_snapshot.parquet` (colunas `variant_id`, `role`, rótulo, tier, painel, cluster, fold, coordenadas) e
+o relatório com o custo de cada exclusão e o hash lógico que vai no manifesto.
+
+O que olhar no relatório:
+
+- `pronto_para_congelar: true` (sem a lista da regra ampla vem `false` e uma pendência);
+- `depois_das_exclusoes`: quanto sobrou em cada papel e quantos clusters;
+- `exclusoes`: quanto cada uma custou, separado por papel e por classe;
+- `por_painel_rotulo` da validação: as duas classes em missense, splice e noncoding — é o que sustenta a seleção.
+
+O chr8 sai por padrão (decisão E ainda pendente). Para medir o custo de mantê-lo, rodar uma segunda vez com
+`--no-reserve-chr8` e `--out-dir` diferente — **só para medir**, não para treinar.
+
+## Regras que não mudam
+
+- O **fold 0 não seleciona nada**: nem extração, nem época, nem Platt, nem limiar. Só avalia depois de congelado.
+- Nunca trocar de `run_id` depois de ver resultado de modelo. Se a validação não sustentar a seleção, resolver
+  antes de treinar e registrar o motivo.
+- Não recompor o pareamento do Mosaic.
+- `git add` sempre com caminho explícito; `token/` nunca entra.
