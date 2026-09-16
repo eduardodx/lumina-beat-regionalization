@@ -96,6 +96,16 @@ O que olhar no relatório:
 O chr8 sai por padrão (decisão E ainda pendente). Para medir o custo de mantê-lo, rodar uma segunda vez com
 `--no-reserve-chr8` e `--out-dir` diferente — **só para medir**, não para treinar.
 
+## 4. Exposição de locus (substitui a exclusão cega de vizinhos)
+
+```bash
+export WORK=~/testeArq/lumina-beat-regionalization && set -o pipefail && PYTHONPATH="$WORK" python3 "$WORK"/scripts/measure_study_locus_exposure.py --snapshot ~/artifacts/redesenho/g2_core_snapshot_nenhum/core_head_snapshot.parquet --brazil-variants ~/artifacts/redesenho/g1_brazil_studies/brazil_study_variants.parquet --out-dir ~/artifacts/redesenho/g2_exposicao 2>&1 | tee ~/exposicao.log; echo "exit=${PIPESTATUS[0]}"
+```
+
+O número que decide é `fracao_caso_maior` no estudo clínico: perto de 0,5 significa exposição simétrica entre
+casos e controles, que é o que precisamos para a interação. Longe disso é risco a declarar — não é prova de
+contaminação, e não se corrige refazendo pares.
+
 ## Regras que não mudam
 
 - O **fold 0 não seleciona nada**: nem extração, nem época, nem Platt, nem limiar. Só avalia depois de congelado.

@@ -170,9 +170,31 @@ Regras obrigatórias sobre esse recorte:
    release são consensus).
 4. chr8 fora, se continuar reservado (decisão E).
 
-Medir e registrar o custo de cada exclusão. O G2 verifica, depois de aplicá-las: nenhuma variante e nenhum cluster
-dos estudos em qualquer um dos três recortes; tamanhos e P/B por painel em cada papel; e presença das duas classes
-em missense, splice e noncoding na validação. Se a validação não sustentar a seleção planejada, isso se resolve
+#### Vizinhos de cluster: medido em 16/09, política declarada antes de treinar
+
+Executado no release real (`run_id=0`), o custo da exclusão dos **vizinhos de cluster** dos membros é:
+
+| Recorte | Antes | Membros | Vizinhos de cluster | Sobra se excluir vizinhos |
+|---|---:|---:|---:|---:|
+| treino | 196.010 (33.897 P) | −5.164 | **−153.663 (28.656 P)** | 35.044, só **1.704 P** |
+| validação | 2.453 (1.182 P) | −741 | −1.710 (37 clusters de 38) | ~1 variante |
+| teste do core | 1.758 (1.199 P) | −400 | −1.358 (29 clusters de 31) | ~0 |
+
+Os clusters do Mosaic são componentes conectados em até 32 kb, e os membros cobrem os genes clinicamente
+sequenciados — que é exatamente onde vivem os patogênicos do ClinVar. Excluir vizinhos **nos três recortes** zera a
+validação; excluir **só no treino** custa 95% dos patogênicos e ainda deixa validação e teste cheios dos mesmos
+loci, treinando o modelo longe dos loci onde ele será selecionado e avaliado.
+
+**Decisão [PROPOSTO, a declarar antes de treinar]:** excluir apenas os **membros** (mais a regra ampla e o chr8) e
+**medir** a exposição de locus em vez de tentar zerá-la (`scripts/measure_study_locus_exposure.py`). O protocolo
+exige que membership e rótulos não entrem no treino, e isso continua cumprido. A exposição de locus é idêntica
+para o sistema base e o regionalizado, que compartilham o snapshot: o que poderia atravessar a interação é ela ser
+**assimétrica entre casos e controles**, já que o pareamento do Mosaic é por rótulo, painel e bin de AF, nunca por
+gene. Essa assimetria é medida, declarada e, se for grande, vira análise de sensibilidade pré-declarada.
+
+Medir e registrar o custo de cada exclusão. O G2 verifica, depois de aplicá-las: nenhuma variante dos estudos em
+qualquer um dos três recortes (e nenhum cluster, onde a política os excluir); tamanhos e P/B por painel em cada
+papel; e presença das duas classes em missense, splice e noncoding na validação. Se a validação não sustentar a seleção planejada, isso se resolve
 **antes** de treinar — e nunca trocando de fold depois de ver resultado de modelo.
 
 Identidade do snapshot para o manifesto: ID próprio, hash lógico das linhas, cutoff = o do release (ClinVar
