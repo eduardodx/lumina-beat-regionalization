@@ -12,7 +12,7 @@ cd "$WORK" && git pull
 ## 0. Testes primeiro (teste pulado conta como falha)
 
 ```bash
-cd "$WORK" && set -euo pipefail && for t in import_mosaic_brazil_studies build_core_locus_head_snapshot build_broad_brazilian_variant_list; do echo "== $t"; REQUIRE_NO_SKIP=1 PYTHONPATH=. python3 tests/test_$t.py; done && echo "TODOS OS TESTES PASSARAM"
+cd "$WORK" && set -euo pipefail && for t in import_mosaic_brazil_studies build_core_locus_head_snapshot build_broad_brazilian_variant_list measure_study_locus_exposure; do echo "== $t"; REQUIRE_NO_SKIP=1 PYTHONPATH=. python3 tests/test_$t.py; done && echo "TODOS OS TESTES PASSARAM"
 ```
 
 `set -e` faz o loop parar no primeiro teste que falhar e o shell sair com erro — sem `|| echo`, que mascararia a
