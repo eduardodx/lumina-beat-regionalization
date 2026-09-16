@@ -230,3 +230,48 @@ aproximada, pela coluna `regional_submitters` do master.
 
 Na branch `embedding-probe-mosaic`: `1615955` (critério do MLP unificado), `c4d4e97` (sinal por métrica no
 comparador), `23fb518` (handoff da extração com os números do rerun).
+
+---
+
+## 12. Achados da revisão de 16/09 (conferidos nos três repositórios)
+
+Detalhes de implementação que faltavam e que decidem como escrever o código dos gates.
+
+1. **O `comparator_eval` do Mosaic não roda nos nossos sistemas.** `point_metrics_for_cohorts`
+   (`comparator_eval/pipeline.py:383`) e o bootstrap (`bootstrap.py:109,141,459,492`) iteram
+   `OFFICIAL_COMPARATOR_IDS` e leem specs de `config/comparators.yaml`, que é validado contra essa tupla
+   (`scores.py:104`). O runner ainda monta os scores a partir das anotações do release (`build_score_table`).
+   **Reutilizável como função:** `brazil_views(membership, study_id)` → `full_cohort`/`matched_cases`/`controls`;
+   `_with_scores`, que é genérico sobre qualquer coluna `score_*` casada por `variant_id`; `resample_indices`
+   (bootstrap por grupo); `metrics_for_panel`, cujo `spec` só é usado em `domain_ok` (um dict sintético serve); e as
+   constantes `BOOTSTRAP_SEED=20260901`, `BOOTSTRAP_REPLICATES=1000`, `BOOTSTRAP_PERCENTILES=(2.5, 97.5)`,
+   `COHORT_FULL/MATCHED/CONTROLS`, `ALL_PANELS`. O consumidor é nosso; a reutilização é por import, não por CLI.
+2. **`variant_id` é um hash opaco**, não coordenada: `var:` + 32 hex de sha256 sobre
+   (assembly, sequence, pos, ref, alt) — `src/mosaic/variant_id.py`. O `membership.parquet` só traz `variant_id`,
+   então **para pontuar é obrigatório juntar com `pb_examples.parquet`** (`chrom`, `pos_1based`, `ref`, `alt`).
+   Isso entra nas interfaces de G1 e G3.
+3. **A suíte v1 é só SNV** (`PROTOCOLO.md`: 326.826 SNVs germinativos em GRCh38.p14; `catalog.py` = "Technical SNV
+   catalog"). O extrator de 172 dims, que é só-SNV, é compatível com o estudo por construção — a decisão "campanha
+   só-SNV" só afeta o snapshot de treino da cabeça, não a avaliação.
+4. **Não existe caminho sem LoRA hoje.** `train.py:678` chama `apply_lora` sempre, e `LoRALinear.__init__`
+   (`eval/clinvar/lora.py:58`) faz `alpha / rank` → `rank=0` levanta `ZeroDivisionError`; além disso o wrap dos
+   `nn.Linear` acontece independentemente do rank. G3 (smoke do M0 com backbone congelado, sem LoRA clínico) exige
+   mudança de código: um `use_lora: bool` na config ou um guard `if config.lora_rank > 0`.
+5. **O ABraOM tem de vir do Eduardo.** `config/sources.yaml`: `abraom_sabe1171` →
+   `abraom/SABE1171.Abraom.clean.tsv`, `obtained: academic_request`, sem URL, sha256
+   `3cd3378432909b80053d3a92a1b7d544053a51697623845f6a44f67ba7dbd9d6`, colunas `[chrom, pos, ref, alt, af_abraom]`.
+   O índice ABraOM do pipeline v1 não é, por construção, o mesmo objeto: G0 precisa do arquivo com esse hash.
+6. **O manifesto do consumidor tem lista fechada.** `BRAZIL_TRAINING_CONTRACT["required_consumer_manifest"]`
+   (`brazil_study.py`): `base_checkpoint_id`, `regionalized_checkpoint_id`, `base_training_dataset_id`,
+   `base_training_dataset_hash`, `base_training_cutoff`, `abraom_snapshot_hash`, `regionalization_method` — mais
+   `study_membership_used_for_training=False` e `study_labels_used_for_training=False`. É o checklist do G6.
+
+**Colunas do `membership.parquet`** (validador do G1, `BRAZIL_MEMBERSHIP_SCHEMA`): `variant_id`, `study_id`,
+`member_role`, `matched_variant_id`, `stratum`, `label_tier`, `binary_label`, `primary_panel`, `gnomad_af_bin`,
+`overlap_cluster_id`, `core_fold`, `br_lab_any`, `present_abraom`.
+
+**Saídas do R03 relevantes ao MLM** (`lumina-inference/lumina/models/model.py`): `mlm_logits` (com `MASK_ID = 6` em
+`lumina/constants.py`), `gnomad_af_pred` e `gnomad_observed_logits` (cabeças populacionais nativas, a congelar),
+`hidden_states`/`mid_hidden_states` e `head_outputs`. O `r03_adapter.py` só expõe `last_hidden_state` (448) — o
+extrator de 172 dims vive em `eval/embedding_probe/rich.py` na branch `embedding-probe-mosaic`
+(`head_readouts`, `MidStackTaps`, `substitution_onehot`, `assert_r03_head_layout`).
