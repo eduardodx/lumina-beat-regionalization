@@ -216,8 +216,32 @@ Por isso o G2 ganhou `--window-exclusion-bp`, com a regra declarada explicitamen
 | 4.096 (L) | **nenhuma sobreposição de sequência** entre a janela de um membro e a de uma variante de treino | nada sobre validação, calibração ou o treino populacional do adapter |
 
 Medir exposição zero com o mesmo raio da exclusão é **verificação de implementação**, não validação independente.
-A escolha entre "distância mínima entre posições" e "ausência de sobreposição entre janelas" é uma decisão a
-declarar, e o custo de cada uma — por painel e por classe, não só o total — é o que decide. **[ABERTO]**
+Essa verificação foi feita em 17/09: no snapshot de 4.096 medido a 4.096, todos os 3.116 casos e controles ficam em
+zero (`fracao_empate = 1`, `pares_diferentes = 0`).
+
+#### Custo medido das três políticas candidatas (17/09, `run_id=0`)
+
+| Candidato | Treino | P | % do P | Assimetria nas benignas | Sobreposição de janela |
+|---|---:|---:|---:|---:|---|
+| `nenhum` | 183.779 | 29.192 | 100% | 0,603 (média +44) | existe |
+| janela 2.048 | 103.884 | 9.374 | 32% | **0,500** (média +1,7) | resídua em 25% dos membros |
+| janela 4.096 | 89.359 | 7.022 | 24% | sem pares diferentes | **zero por construção** |
+| cluster (só treino) | 35.044 | 1.704 | 6% | — | não medida; inviável por outros motivos |
+
+Validação (1.575) e teste (1.250) são **idênticos** nos três, porque a exclusão por janela só atinge o treino.
+Os três são **aninhados**: treino(4.096) ⊂ treino(2.048) ⊂ treino(`nenhum`) — uma passagem de extração cobre todos.
+
+#### Como a política será escolhida [PROPOSTO — declarar antes de treinar]
+
+Não por argumento: por medição que **não toca o estudo brasileiro**. Treinar a mesma cabeça, com o mesmo
+procedimento e o mesmo conjunto de seleção, nos três snapshots, e comparar na **validação do `core_locus`**, que é
+idêntica nos três e não é o estudo. Regra proposta: **escolher a política mais isolada cuja macro-AUROC de
+validação fique dentro de 0,01 da melhor**; empate resolve a favor do mais isolado. A margem e a métrica ficam
+declaradas antes de qualquer treino, e o resultado dessa comparação entra no manifesto.
+
+O conjunto de seleção é recortado do candidato **mais restritivo** (4.096) e usado igual nos três, para as cabeças
+serem comparáveis; os seus clusters saem do treino de todos os candidatos. O alvo por célula ainda está aberto: com
+150, o recorte deixa `noncoding/P` em 21 no candidato de 4.096, o que inviabiliza aquele painel no treino.
 
 **O que essa medida não resolve:** snapshot compartilhado **não** faz o risco desaparecer no contraste M0 × MR —
 as representações são diferentes e podem aproveitar os mesmos loci de formas diferentes, então exposição igual não
