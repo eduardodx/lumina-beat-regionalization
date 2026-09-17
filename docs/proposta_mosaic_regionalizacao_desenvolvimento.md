@@ -197,6 +197,18 @@ sempre membros, regra ampla e chr8 — e **medir** a exposição de locus
 janela de 4.096 bp que o modelo lê. A medida principal é a comparação par a par entre caso e controle,
 estratificada por rótulo e painel, publicando maior, menor e empate.
 
+**Medido em 17/09, com a política `nenhum` (treino 183.779, 29.192 P):** no agregado a exposição é simétrica entre
+casos e controles (mediana 6 nos dois, 49,2% de "caso maior" entre os 2.510 pares diferentes). **Estratificado, não
+é:** nas 2.805 patogênicas fica em 48,0%, mas nas **311 benignas** o caso tem mais exposição em 141 pares contra 93
+— 60,3% dos diferentes, teste de sinal z ≈ 3,1 — com média +44 variantes na janela. Por painel tudo fica perto de
+0,5. O estudo populacional é mais assimétrico ainda (58,4%, z ≈ 4,2; mediana 27 contra 7), o que é esperado de
+"gold presente no ABraOM" e reforça que ele é descritivo. A classe benigna é justamente a escassa do estudo
+clínico, então a assimetria mora onde mais pesa.
+
+Por isso o G2 ganhou `--window-exclusion-bp`: tirar do treino o que cai dentro da janela de leitura de um membro
+zera a exposição de janela por construção — e com ela a assimetria — a um custo que deve ser fração do cluster
+inteiro. **[ABERTO até o custo ser medido.]**
+
 **O que essa medida não resolve:** snapshot compartilhado **não** faz o risco desaparecer no contraste M0 × MR —
 as representações são diferentes e podem aproveitar os mesmos loci de formas diferentes, então exposição igual não
 implica efeito igual. A assimetria caso × controle é um mecanismo, não o único. Aceitar exposição numa campanha de
@@ -306,6 +318,10 @@ registrar a escolha.
 - **Métricas com limiar** (MCC, sensibilidade, especificidade) e **Brier:** só com os limiares e calibradores
   congelados no desenvolvimento, com proveniência.
 - **Baselines diagnósticas:** presença no ABraOM e AF (gnomAD, ABraOM), pontuadas nos mesmos pares, fora dos sistemas.
+- **Exposição de locus:** se o snapshot final ainda tiver exposição não nula, repetir a interação restrita aos pares
+  com exposição equilibrada (empate ou diferença pequena) e relatar a interação por estrato de rótulo — a
+  assimetria medida em 17/09 está nas benignas. Se a exclusão por janela zerar a exposição, isto vira só um
+  registro de que a análise não foi necessária.
 - **Sanidade no `core_locus`:** AUROC/AUPRC de M0 e MR no teste do core (fold 0, gold), pontuado **só depois** de
   congeladas todas as escolhas, para mostrar que a cabeça funciona e que o adapter não degradou o desempenho geral.
 
