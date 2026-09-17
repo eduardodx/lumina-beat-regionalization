@@ -17,8 +17,13 @@ import sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[1]
-PORTADO = RAIZ / "eval" / "embedding_probe" / "rich.py"
 ORIGEM_COMMIT = "23fb518997ee7c68d843ae55bc2e1409ddf24cde"
+PORTADOS = {
+    "eval/embedding_probe/rich.py": RAIZ / "eval" / "embedding_probe" / "rich.py",
+    "eval/embedding_probe/windows.py": RAIZ / "eval" / "embedding_probe" / "windows.py",
+}
+PORTADO = PORTADOS["eval/embedding_probe/rich.py"]
+PORTADO_JANELAS = PORTADOS["eval/embedding_probe/windows.py"]
 ORIGEM_CAMINHO = "eval/embedding_probe/rich.py"
 MARCA_FIM_DO_CABECALHO = "Docstring original abaixo.\n\n"
 
@@ -27,10 +32,10 @@ class Skip(Exception):
     """Teste nao executado por falta de dependencia. NAO e um PASS -- o runner conta separado."""
 
 
-def _origem() -> str:
+def _origem(caminho: str = ORIGEM_CAMINHO) -> str:
     try:
         return subprocess.run(
-            ["git", "-C", str(RAIZ), "show", f"{ORIGEM_COMMIT}:{ORIGEM_CAMINHO}"],
+            ["git", "-C", str(RAIZ), "show", f"{ORIGEM_COMMIT}:{caminho}"],
             check=True, capture_output=True, text=True,
         ).stdout
     except (OSError, subprocess.CalledProcessError) as exc:
@@ -61,7 +66,7 @@ def test_codigo_executavel_identico_ao_da_origem():
         detalhe = (f"{len(diferentes)} linha(s) diferentes, primeira na {diferentes[0] + 1}: "
                    f"{linhas_p[diferentes[0]]!r} != {linhas_o[diferentes[0]]!r}") if diferentes else \
                   f"tamanhos diferentes: {len(linhas_p)} x {len(linhas_o)} linhas"
-        raise AssertionError(f"o portado divergiu da origem: {detalhe}")
+        raise AssertionError(f"{caminho}: o portado divergiu da origem: {detalhe}")
 
 
 def test_o_arquivo_traz_as_pecas_que_o_smoke_vai_usar():
@@ -69,6 +74,14 @@ def test_o_arquivo_traz_as_pecas_que_o_smoke_vai_usar():
     for peca in ("def head_readouts", "class MidStackTaps", "def assert_r03_head_layout",
                  "def substitution_onehot", "def pooled"):
         assert peca in texto, peca
+    janelas = PORTADOS["eval/embedding_probe/windows.py"].read_text(encoding="utf-8")
+    for peca in ("def focal_offset", "def build_window", "def _fetch_validated", "class WindowError"):
+        assert peca in janelas, peca
+
+
+def test_politica_para_n_esta_declarada_no_cabecalho_das_janelas():
+    texto = PORTADO_JANELAS.read_text(encoding="utf-8")
+    assert "non_acgt" in texto and "DESCARTA" in texto, "a politica para N tem de estar declarada"
 
 
 if __name__ == "__main__":

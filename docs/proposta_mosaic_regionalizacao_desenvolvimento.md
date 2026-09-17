@@ -381,10 +381,20 @@ O cache é identificado por R03, **adapter**, versão do extrator e chaves das v
 também por **FASTA, comprimento da janela, orientação/RC, configuração e ordem das features**: duas extrações com
 a mesma variante e FASTA diferente não são o mesmo objeto.
 
-**[ABERTO] Política para `N` e soft-mask.** O `COMPLEMENT` do extrator só aceita `A/C/G/T` maiúsculos, então a
-média reverse-complement estoura em janela com `N` ou com base minúscula (região soft-masked), e janelas do FASTA
-têm as duas coisas. Decidir e declarar antes do port de `windows.py`: pular a variante, normalizar para maiúsculo,
-ou estender o alfabeto — e registrar quantas variantes do snapshot são afetadas.
+**Política para `N` e soft-mask [FIXADO em 17/09; contagem pendente].** O `windows.py` portado (mesmo commit)
+resolve as duas coisas de formas diferentes: **soft-mask é normalizado** (a janela vai a maiúsculo antes de
+qualquer checagem, então minúscula não custa variante) e **janela com base fora de ACGT é descartada**, com o
+motivo estável `non_acgt` — nada de substituir ou mascarar o `N`. Janela que não cabe no cromossomo também é
+descartada (`out_of_bounds`), nunca deslocada: deslocar tiraria a variante do índice focal declarado.
+
+O módulo segue a convenção do Mosaic: **offset focal `L // 2 - 1`**, que é a mesma com que o release calculou
+`sequence_eligible` — usar `L // 2`, como o helper antigo do ClinVar, invalidaria essa garantia. E a validação é
+estrita, sem o fallback de ±1 base que o helper antigo usa para indels: o release só tem SNV com REF já conferido
+contra o GRCh38.p14, então divergência ali é FASTA ou build errado.
+
+`scripts/audit_variant_windows.py` mede quantas variantes cada motivo tira, por papel, painel e classe, e **sai com
+código 2 em qualquer `ref_mismatch`** — isso é erro, não estatística. **Pendente:** rodar sobre os três snapshots
+finais, a seleção comum e os membros dos estudos, e registrar aqui as contagens.
 
 ### 5.3 Cabeças e calibração [PROPOSTO]
 
