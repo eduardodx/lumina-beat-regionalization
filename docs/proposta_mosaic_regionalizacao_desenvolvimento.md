@@ -223,25 +223,45 @@ zero (`fracao_empate = 1`, `pares_diferentes = 0`).
 
 | Candidato | Treino | P | % do P | Assimetria nas benignas | Sobreposição de janela |
 |---|---:|---:|---:|---:|---|
-| `nenhum` | 183.779 | 29.192 | 100% | 0,603 (média +44) | existe |
-| janela 2.048 | 103.884 | 9.374 | 32% | **0,500** (média +1,7) | resídua em 25% dos membros |
+| `nenhum` | 183.779 | 29.192 | 100% | 0,603 (média +44, medido a 2.048) | existe |
+| janela 2.048 | 103.884 | 9.374 | 32% | **0,500** (média +1,7, medido a 4.096) | resídua em 25% dos membros |
 | janela 4.096 | 89.359 | 7.022 | 24% | sem pares diferentes | **zero por construção** |
 | cluster (só treino) | 35.044 | 1.704 | 6% | — | não medida; inviável por outros motivos |
 
+Relativo a `nenhum`, a janela de 2.048 remove **43,5% das linhas e 67,9% dos patogênicos** (os denominadores têm
+de ser o `nenhum`, não os totais anteriores às demais exclusões). As duas colunas de assimetria foram medidas com
+réguas diferentes (raio 2.048 e 4.096): elas mostram **redução grande e equilíbrio na direção das diferenças**, não
+igualdade de distribuições nem ausência de efeito sobre os modelos — para a comparação direta falta medir `nenhum`
+também a 4.096.
+
 Validação (1.575) e teste (1.250) são **idênticos** nos três, porque a exclusão por janela só atinge o treino.
-Os três são **aninhados**: treino(4.096) ⊂ treino(2.048) ⊂ treino(`nenhum`) — uma passagem de extração cobre todos.
+Os três são **aninhados**: treino(4.096) ⊂ treino(2.048) ⊂ treino(`nenhum`) — uma passagem de extração cobre os três
+**por sistema**: M0 usa um cache, MR precisa do seu, porque o adapter muda os embeddings.
 
 #### Como a política será escolhida [PROPOSTO — declarar antes de treinar]
 
-Não por argumento: por medição que **não toca o estudo brasileiro**. Treinar a mesma cabeça, com o mesmo
-procedimento e o mesmo conjunto de seleção, nos três snapshots, e comparar na **validação do `core_locus`**, que é
-idêntica nos três e não é o estudo. Regra proposta: **escolher a política mais isolada cuja macro-AUROC de
-validação fique dentro de 0,01 da melhor**; empate resolve a favor do mais isolado. A margem e a métrica ficam
-declaradas antes de qualquer treino, e o resultado dessa comparação entra no manifesto.
+Não por argumento: por medição que **não toca o estudo brasileiro**. Papéis, declarados antes de treinar:
 
-O conjunto de seleção é recortado do candidato **mais restritivo** (4.096) e usado igual nos três, para as cabeças
-serem comparáveis; os seus clusters saem do treino de todos os candidatos. O alvo por célula ainda está aberto: com
-150, o recorte deixa `noncoding/P` em 21 no candidato de 4.096, o que inviabiliza aquele painel no treino.
+| Conjunto | Papel |
+|---|---|
+| treino de cada candidato | ajusta os pesos da cabeça |
+| **seleção comum reservada** | compara extrações **e políticas**, com critério declarado antes |
+| fold 1 gold | calibração (Platt e limiar) e diagnóstico complementar; **early stopping acontece aqui**, declarado |
+| fold 0 gold | avaliação só depois do congelamento |
+| estudos brasileiros | comparação final, congelada |
+
+A comparação entre as três políticas usa o **conjunto de seleção comum**, não o fold 1 — foi justamente a fragilidade
+do fold 1 (10 benignas de splice em 2 clusters) que motivou o conjunto reservado. Regra proposta: **escolher a
+política mais isolada cuja macro-AUROC no conjunto de seleção fique dentro de 0,01 da melhor**; empate resolve a
+favor do mais isolado. Os 0,01 são **regra operacional declarada, não prova de equivalência estatística**. A escolha
+é feita **só com M0** — não depende do ABraOM — e a mesma política é aplicada a MR.
+
+O conjunto de seleção é recortado do candidato **mais restritivo** (4.096), materializado como **uma única lista de
+clusters** e aplicado igual aos três, com o custo **recontado em cada candidato**: os mesmos clusters carregam mais
+variantes nos snapshots menos restritivos, então o custo medido em 4.096 não se transfere. Ele é majoritariamente
+consensus, e essa diferença de tier em relação ao fold 1 (todo gold) fica registrada. O alvo por célula está aberto:
+com 150, o recorte deixa `noncoding/P` em 21 no candidato de 4.096 — suporte muito limitado para aquele painel no
+treino.
 
 **O que essa medida não resolve:** snapshot compartilhado **não** faz o risco desaparecer no contraste M0 × MR —
 as representações são diferentes e podem aproveitar os mesmos loci de formas diferentes, então exposição igual não
@@ -352,10 +372,11 @@ registrar a escolha.
 - **Métricas com limiar** (MCC, sensibilidade, especificidade) e **Brier:** só com os limiares e calibradores
   congelados no desenvolvimento, com proveniência.
 - **Baselines diagnósticas:** presença no ABraOM e AF (gnomAD, ABraOM), pontuadas nos mesmos pares, fora dos sistemas.
-- **Exposição de locus:** se o snapshot final ainda tiver exposição não nula, repetir a interação restrita aos pares
-  com exposição equilibrada (empate ou diferença pequena) e relatar a interação por estrato de rótulo — a
-  assimetria medida em 17/09 está nas benignas. Se a exclusão por janela zerar a exposição, isto vira só um
-  registro de que a análise não foi necessária.
+- **Exposição de locus:** se o snapshot final ainda tiver exposição não nula, repetir a interação restrita aos
+  pares com exposição equilibrada (empate ou diferença pequena). **Não existe "interação por rótulo":** AUROC e
+  AUPRC exigem as duas classes, então a interação fica sempre em conjuntos com P e B. Por rótulo relatamos
+  exposição, distribuição dos scores, especificidade nas benignas e sensibilidade nas patogênicas, com os limiares
+  congelados.
 - **Sanidade no `core_locus`:** AUROC/AUPRC de M0 e MR no teste do core (fold 0, gold), pontuado **só depois** de
   congeladas todas as escolhas, para mostrar que a cabeça funciona e que o adapter não degradou o desempenho geral.
 

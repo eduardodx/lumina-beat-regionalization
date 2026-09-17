@@ -133,6 +133,32 @@ def test_relatorio_traz_tier_e_concentracao_do_recorte_e_do_fold1():
     assert "celula a celula" in report["como_comparar"]
 
 
+def test_conjunto_comum_e_medido_em_cada_candidato_sem_recortar_de_novo():
+    """O mesmo cluster pesa diferente em cada snapshot: o custo tem de ser recontado, nao transferido."""
+    spec = [("cl_a", "missense", 1, 10), ("cl_a", "missense", 0, 10), ("cl_a", "plof", 1, 40),
+            ("cl_b", "splice", 1, 10), ("cl_b", "splice", 0, 10),
+            ("cl_c", "noncoding", 1, 10), ("cl_c", "noncoding", 0, 10)]
+    restrito = _rows(spec)
+    # No candidato menos restritivo os mesmos clusters carregam muito mais linhas.
+    farto = pd.concat([restrito, _rows([("cl_a", "missense", 0, 500), ("cl_b", "plof", 1, 300)])],
+                      ignore_index=True)
+
+    comum = ["cl_a", "cl_b", "cl_c"]
+    no_restrito = sel.build_report(restrito, target=5, top=3, min_clusters=1, clusters=comum)
+    no_farto = sel.build_report(farto, target=5, top=3, min_clusters=1, clusters=comum)
+
+    assert no_restrito["origem_dos_clusters"].startswith("lista fornecida")
+    assert no_restrito["recorte_proposto"]["n"] == 100, no_restrito["recorte_proposto"]
+    assert no_farto["recorte_proposto"]["n"] == 900, "o custo do conjunto comum muda entre candidatos"
+    assert no_farto["custo_no_treino"]["n_depois"] == 0, no_farto["custo_no_treino"]
+
+
+def test_cluster_ausente_no_snapshot_e_declarado():
+    rows = _rows([("cl_1", "missense", 1, 5), ("cl_1", "missense", 0, 5)])
+    report = sel.build_report(rows, target=1, top=3, min_clusters=1, clusters=["cl_1", "cl_fantasma"])
+    assert report["clusters_ausentes_neste_snapshot"] == ["cl_fantasma"], report
+
+
 def test_recorte_e_deterministico():
     spec = [(f"cl_{i}", panel, label, 7)
             for i in range(6) for panel in sel.DISCRIMINATION_PANELS for label in (1, 0)]

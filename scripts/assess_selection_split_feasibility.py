@@ -165,14 +165,23 @@ def greedy_carve(
     return chosen, got, have_clusters
 
 
-def build_report(snapshot: pd.DataFrame, *, target: int, top: int, min_clusters: int = 1) -> dict[str, Any]:
+def build_report(snapshot: pd.DataFrame, *, target: int, top: int, min_clusters: int = 1,
+                 clusters: list[str] | None = None) -> dict[str, Any]:
     train = snapshot[snapshot["role"] == ROLE_TRAIN]
     validation = snapshot[snapshot["role"] == ROLE_VALIDATION]
 
     matrix = cluster_cell_matrix(train)
     cluster_sizes = train.groupby("overlap_cluster_id").size()
-    chosen, got, cells_clusters = greedy_carve(matrix, target=target, min_clusters=min_clusters,
-                                               cluster_sizes=cluster_sizes)
+    if clusters is None:
+        chosen, got, cells_clusters = greedy_carve(matrix, target=target, min_clusters=min_clusters,
+                                                   cluster_sizes=cluster_sizes)
+    else:
+        # Conjunto COMUM ja escolhido noutro snapshot: aqui so se mede o que ele custa NESTE candidato. Os
+        # mesmos clusters podem carregar muito mais variantes num snapshot menos restritivo.
+        chosen = [c for c in clusters]
+        present = matrix.reindex([c for c in chosen if c in matrix.index])
+        got = {cell: int(present[cell].sum()) if len(present) else 0 for cell in matrix.columns}
+        cells_clusters = {cell: int((present[cell] > 0).sum()) if len(present) else 0 for cell in matrix.columns}
     carved = train[train["overlap_cluster_id"].isin(chosen)]
     rest = train[~train["overlap_cluster_id"].isin(chosen)]
 
@@ -181,6 +190,9 @@ def build_report(snapshot: pd.DataFrame, *, target: int, top: int, min_clusters:
     return {
         "alvo_por_celula": target,
         "min_clusters_por_celula": min_clusters,
+        "origem_dos_clusters": "lista fornecida (--clusters)" if clusters is not None else "recorte guloso",
+        "clusters_ausentes_neste_snapshot": ([c for c in (clusters or []) if c not in matrix.index]
+                                             if clusters is not None else []),
         "validacao_oficial_fold1": {
             "n": int(len(validation)),
             "clusters": int(validation["overlap_cluster_id"].nunique()),
@@ -237,6 +249,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="minimo de clusters distintos por celula no recorte: a unidade independente e o "
                              "cluster, entao suporte concentrado em poucos clusters nao sustenta selecao")
     parser.add_argument("--top-clusters", type=int, default=5)
+    parser.add_argument("--clusters", type=Path,
+                        help="arquivo com um overlap_cluster_id por linha: em vez de recortar, MEDE o custo desse "
+                             "conjunto comum neste snapshot (o mesmo cluster pesa diferente em cada candidato)")
+    parser.add_argument("--write-clusters", type=Path,
+                        help="grava os clusters escolhidos, um por linha, para virarem o conjunto comum")
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
 
@@ -247,11 +264,20 @@ def main(argv: list[str] | None = None) -> int:
         print("FALHOU: o snapshot nao tem linhas de treino.")
         return 2
 
+    clusters = None
+    if args.clusters is not None:
+        clusters = [line.strip() for line in args.clusters.expanduser().read_text(encoding="utf-8").splitlines()
+                    if line.strip()]
     report = build_report(snapshot, target=args.min_por_celula, top=args.top_clusters,
-                          min_clusters=args.min_clusters_por_celula)
+                          min_clusters=args.min_clusters_por_celula, clusters=clusters)
     out_dir = args.out_dir.expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "viabilidade_conjunto_de_selecao.json"
+    if args.write_clusters is not None:
+        destino = args.write_clusters.expanduser()
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_text("\n".join(report["clusters_reservados"]) + "\n", encoding="utf-8")
+        report["saidas_clusters"] = str(destino)
     report["entradas"] = {"snapshot": str(args.snapshot)}
     report["saidas"] = {"relatorio": str(report_path)}
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
