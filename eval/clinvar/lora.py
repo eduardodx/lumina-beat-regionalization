@@ -120,6 +120,13 @@ def apply_lora(
     All model families receive the same rank, alpha, and dropout for fair
     comparison.  Only output/prediction heads are excluded.
     """
+    if rank <= 0:
+        # Caminho M0 da campanha de regionalizacao: backbone congelado, SEM LoRA clinico -- so a cabeca treina.
+        # Sem este guard, `LoRALinear` faz alpha/rank e estoura em ZeroDivisionError, e os Linear seriam
+        # embrulhados mesmo assim.
+        log.info("LoRA desativado (rank=%d): nenhum Linear embrulhado; so a cabeca recebe gradiente.", rank)
+        return LoRASummary(rank=rank, alpha=alpha, dropout=dropout, module_names=(), total_params=0)
+
     targets: list[str] = []
     for name, module in backbone.named_modules():
         if isinstance(module, nn.Linear) and not _should_exclude(name):
