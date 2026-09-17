@@ -254,13 +254,16 @@ Os três são **aninhados**: treino(4.096) ⊂ treino(2.048) ⊂ treino(`nenhum`
 
 | Artefato | Conteúdo | Identidade |
 |---|---|---|
-| `g5_comum/selecao_comum.parquet` | 2.799 variantes em 156 clusters, do candidato 4.096 | `sha256 c22021f6…` |
+| `g5_comum/selecao_comum.parquet` | 2.799 variantes em 156 clusters, do candidato 4.096, **com coordenadas** | `sha256 693eb234…` |
 | `g2_final_nenhum/` | treino 167.346 (24.097 P), 1.614 clusters | `hash_conteudo 89517c95…` |
 | `g2_final_janela2048/` | treino 99.992 (8.421 P), 1.576 clusters | `f3f7416f…` |
 | `g2_final_janela4096/` | treino 86.560 (6.355 P), 1.542 clusters | `4805b4fe…` |
 
 Verificado nos três: **zero** variantes e **zero** clusters em comum com o conjunto de seleção, `final_para_treino`
-verdadeiro, e validação (1.575) e teste (1.250) idênticos. Os tamanhos batem com o custo previsto antes da
+verdadeiro, e validação (1.575) e teste (1.250) idênticos. A seleção foi regerada em 17/09 para incluir as
+coordenadas (sem elas o conjunto pontuado não produz janela); a lista de clusters saiu **idêntica**, então os três
+snapshots finais e os seus hashes não mudaram — só o da seleção. Os hashes declarados ficam em
+`g2_verificacao/sha256_declarado.json` e o portão `verify_campaign_artifacts.py` os confere com `--esperado`. Os tamanhos batem com o custo previsto antes da
 materialização.
 
 Exposição recalculada **depois** da reserva (raio 4.096, benignas do estudo clínico): `nenhum` 0,6205 com média
