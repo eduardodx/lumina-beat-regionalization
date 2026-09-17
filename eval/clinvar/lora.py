@@ -292,7 +292,12 @@ def freeze_backbone_in_eval(backbone: nn.Module) -> int:
 
 
 def assert_only_head_trains(model: nn.Module) -> list[str]:
-    """Falha alto se qualquer parametro fora da cabeca ficar treinavel. Criterio do gate G3."""
+    """Falha alto se qualquer parametro fora da cabeca ficar treinavel. Criterio do gate G3.
+
+    Isto e uma checagem de CONFIGURACAO: olha `requires_grad`, nao gradientes produzidos. A prova de que a cabeca
+    recebe gradiente e muda, e de que o backbone continua bit a bit igual, tem de vir depois de `backward()` e de
+    um passo do otimizador -- e responsabilidade do smoke do M0, nao desta funcao.
+    """
     treinaveis = [name for name, param in model.named_parameters()
                   if param.requires_grad and not name.startswith("head.")]
     if treinaveis:

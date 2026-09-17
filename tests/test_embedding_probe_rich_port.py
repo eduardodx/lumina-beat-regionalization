@@ -4,6 +4,10 @@ O extrator de `eval/embedding_probe/rich.py` foi copiado da branch `embedding-pr
 comportamento. Este teste carrega o arquivo DAQUELE commit via `git show`, importa os dois lado a lado e compara
 as saidas nas mesmas entradas. Se alguem mexer no portado sem querer, aqui quebra.
 
+Cobertura: estas comparacoes sao das funcoes utilitarias. O arquivo INTEIRO (`head_readouts`, `MidStackTaps`,
+`assert_r03_head_layout`, os hooks) e coberto por `test_rich_port_fidelity.py`, que compara o texto e nao precisa
+de torch. A integracao com o R03 de verdade so fica provada no smoke do M0.
+
 Precisa de torch e de um clone com a branch de pesquisa: roda no notebook
 (`PYTHONPATH=. pytest tests/test_embedding_probe_rich_port.py -q`), nao no Windows.
 """
@@ -34,7 +38,9 @@ def _carrega_origem():
             check=True, capture_output=True, text=True,
         ).stdout
     except (OSError, subprocess.CalledProcessError) as exc:
-        pytest.skip(f"commit de origem {ORIGEM_COMMIT[:12]} indisponivel neste clone: {exc}")
+        # FALHA, nao skip: o commit faz parte da historia deste repositorio. Pular deixaria `pytest -q` verde
+        # sem que a equivalencia tivesse sido verificada.
+        pytest.fail(f"commit de origem {ORIGEM_COMMIT[:12]} indisponivel neste clone: {exc}")
 
     with tempfile.TemporaryDirectory() as tmp:
         caminho = Path(tmp) / "rich_origem.py"
