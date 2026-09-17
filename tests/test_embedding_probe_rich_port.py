@@ -71,8 +71,21 @@ def test_substitution_onehot_identico(origem):
 
 
 def test_reverse_complement_identico(origem):
-    for seq in ("ACGT", "AACCGGTT", "N", "", "acgt"):
+    for seq in ("ACGT", "AACCGGTT", "A", ""):
         assert portado.reverse_complement(seq) == origem.reverse_complement(seq), seq
+
+
+def test_reverse_complement_falha_igual_fora_do_alfabeto(origem):
+    """`COMPLEMENT` so tem ACGT maiusculo: as duas implementacoes tem de falhar do MESMO jeito.
+
+    Isto documenta um contrato de entrada que importa para o port de `windows.py`: janela lida do FASTA pode
+    conter `N` (e minusculas, em regiao soft-masked), e ai a media reverse-complement estoura. A politica para
+    `N` -- pular a variante, ou estender o alfabeto -- tem de ser declarada no gerador de janelas, nao aqui.
+    """
+    for seq in ("N", "acgt", "ACGTN"):
+        for implementacao in (portado, origem):
+            with pytest.raises(KeyError):
+                implementacao.reverse_complement(seq)
 
 
 def test_mid_index_identico(origem):
