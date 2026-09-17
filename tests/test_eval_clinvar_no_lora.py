@@ -9,7 +9,14 @@ from __future__ import annotations
 
 import torch
 
-from eval.clinvar.lora import LoRALinear, apply_lora
+import pytest
+
+from eval.clinvar.lora import (
+    LoRALinear,
+    apply_lora,
+    assert_only_head_trains,
+    freeze_backbone_in_eval,
+)
 
 
 class _TinyBackbone(torch.nn.Module):
@@ -40,10 +47,58 @@ def test_rank_zero_preserva_a_saida_do_backbone():
     assert torch.allclose(antes, depois), "sem LoRA a representacao tem de ser identica"
 
 
+def test_rank_negativo_e_erro_de_configuracao():
+    with pytest.raises(ValueError):
+        apply_lora(_TinyBackbone(), rank=-1, alpha=8.0, dropout=0.1)
+
+
+def test_freeze_backbone_in_eval_resiste_a_model_train():
+    """Congelar parametro nao desliga dropout: `model.train()` religaria o backbone."""
+    backbone = _TinyBackbone()
+    backbone.dropout = torch.nn.Dropout(0.5)
+    freeze_backbone_in_eval(backbone)
+    assert not backbone.training
+    backbone.train()
+    assert not backbone.training, "o backbone tem de ficar em eval mesmo depois de train()"
+
+    modelo = torch.nn.Sequential(backbone, torch.nn.Linear(3, 1))
+    modelo.train()
+    assert not backbone.training, "train() no modelo inteiro tambem nao pode reativar o backbone"
+
+
+def test_representacao_do_backbone_congelado_e_deterministica():
+    backbone = _TinyBackbone()
+    backbone.mlp = torch.nn.Sequential(torch.nn.Linear(3, 3), torch.nn.Dropout(0.9))
+    freeze_backbone_in_eval(backbone)
+    x = torch.randn(4, 4)
+    primeira, segunda = backbone(x), backbone(x)
+    assert torch.allclose(primeira, segunda), "mesma entrada tem de dar a mesma representacao"
+
+
+def test_assert_only_head_trains_reprova_backbone_treinavel():
+    class _Modelo(torch.nn.Module):
+        def __init__(self, backbone):
+            super().__init__()
+            self.backbone = backbone
+            self.head = torch.nn.Linear(3, 1)
+
+        def forward(self, x):
+            return self.head(self.backbone(x))
+
+    backbone = _TinyBackbone()
+    modelo = _Modelo(backbone)
+    with pytest.raises(AssertionError):
+        assert_only_head_trains(modelo)
+
+    freeze_backbone_in_eval(backbone)
+    apply_lora(backbone, rank=0, alpha=8.0, dropout=0.1)
+    treinaveis = assert_only_head_trains(modelo)
+    assert all(nome.startswith("head.") for nome in treinaveis) and treinaveis
+
+
 def test_com_backbone_congelado_e_rank_zero_so_a_cabeca_recebe_gradiente():
     backbone = _TinyBackbone()
-    for p in backbone.parameters():
-        p.requires_grad_(False)
+    freeze_backbone_in_eval(backbone)
     apply_lora(backbone, rank=0, alpha=8.0, dropout=0.1)
     head = torch.nn.Linear(3, 1)
 
@@ -53,6 +108,11 @@ def test_com_backbone_congelado_e_rank_zero_so_a_cabeca_recebe_gradiente():
     assert all(p.grad is None for p in backbone.parameters()), "nenhum gradiente no backbone"
     assert all(p.grad is not None for p in head.parameters()), "a cabeca tem de treinar"
     assert [p for p in backbone.parameters() if p.requires_grad] == []
+
+    # E os pesos do backbone nao podem mudar depois de um passo do otimizador.
+    antes = [p.clone() for p in backbone.parameters()]
+    torch.optim.SGD(head.parameters(), lr=0.1).step()
+    assert all(torch.equal(a, b) for a, b in zip(antes, backbone.parameters()))
 
 
 def test_rank_positivo_continua_embrulhando():

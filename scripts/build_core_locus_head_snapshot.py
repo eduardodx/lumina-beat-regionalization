@@ -97,6 +97,7 @@ EXCLUSION_STUDY_CLUSTERS = "clusters_dos_membros"
 EXCLUSION_BROAD_BR = "regra_ampla_brasileira"
 EXCLUSION_CHR8 = "chr8_reservado"
 EXCLUSION_WINDOW = "janela_dos_membros"
+EXCLUSION_SELECTION = "clusters_do_conjunto_de_selecao"
 
 # Politica de exclusao dos VIZINHOS DE CLUSTER dos membros (os membros saem sempre, dos tres recortes).
 # Medido em 16/09 no release real: os golds da validacao vivem em 38 clusters e do teste em 31, e o
@@ -196,6 +197,7 @@ def apply_exclusions(
     cluster_policy: str = CLUSTER_ALL,
     member_positions: dict[str, Any] | None = None,
     window_bp: int = 0,
+    selection_clusters: set[str] | None = None,
 ) -> tuple[dict[str, pd.DataFrame], list[dict[str, Any]]]:
     """Aplica as exclusoes em ordem, medindo o custo incremental de cada uma em cada recorte.
 
@@ -268,6 +270,15 @@ def apply_exclusions(
     else:
         steps.append({"exclusao": EXCLUSION_BROAD_BR, "status": "nao_aplicada",
                       "motivo": "lista nao fornecida (--broad-br-variant-ids); snapshot nao pode ser congelado"})
+    # O conjunto de selecao comum sai do TREINO de todos os candidatos, por cluster inteiro: nenhum treino pode
+    # conter um locus que aparece na selecao. As variantes pontuadas vem do candidato mais restritivo.
+    if selection_clusters:
+        step(EXCLUSION_SELECTION, lambda rows: ~rows["overlap_cluster_id"].isin(selection_clusters),
+             roles=(ROLE_TRAIN,), extra={"clusters": len(selection_clusters)})
+    else:
+        steps.append({"exclusao": EXCLUSION_SELECTION, "status": "nao_aplicada",
+                      "motivo": "--selection-clusters nao fornecido; snapshot ainda NAO e o final de treino"})
+
     if reserve_chr8:
         step(EXCLUSION_CHR8, lambda rows: rows["chrom"].map(normalize_chrom) != CHR8)
     else:
@@ -469,6 +480,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cluster-exclusion", choices=CLUSTER_POLICIES, default=CLUSTER_ALL,
                         help="vizinhos de cluster dos membros dos estudos: excluir em todos os recortes "
                              "(padrao), so no treino, ou em nenhum. Os MEMBROS saem sempre dos tres.")
+    parser.add_argument("--selection-clusters", type=Path,
+                        help="clusters do conjunto de selecao comum: saem do TREINO deste candidato, para que "
+                             "nenhum treino contenha um locus que aparece na selecao")
     parser.add_argument("--window-exclusion-bp", type=int, default=0,
                         help="tira do TREINO as variantes a ate N bp de algum membro dos estudos (0 = desligado). "
                              "2048 = metade da janela de 4.096 bp, o que zera a exposicao de janela")
@@ -513,16 +527,31 @@ def main(argv: list[str] | None = None) -> int:
 
     splits = split_core(frame, run_id=args.run_id, k=args.k)
     before = {role: role_counts(rows) for role, rows in splits.items()}
+    selection_clusters = None
+    if args.selection_clusters is not None:
+        selection_clusters = {line.strip() for line
+                              in args.selection_clusters.expanduser().read_text(encoding="utf-8").splitlines()
+                              if line.strip()}
     member_positions = sorted_positions(frame[frame["variant_id"].isin(study_variants)])
     splits, steps = apply_exclusions(
         splits, study_variants=study_variants, study_clusters=study_clusters,
         broad_br=broad_br, reserve_chr8=not args.no_reserve_chr8,
         cluster_policy=args.cluster_exclusion,
         member_positions=member_positions, window_bp=args.window_exclusion_bp,
+        selection_clusters=selection_clusters,
     )
 
-    problems = check_no_study_leakage(splits, study_variants, study_clusters,
-                                      cluster_policy=args.cluster_exclusion)
+    if selection_clusters:
+        sobrou = sorted(set(splits[ROLE_TRAIN]["overlap_cluster_id"].dropna()) & selection_clusters)
+        if sobrou:
+            problems_extra = [f"treino: {len(sobrou)} clusters de selecao sobraram, ex.: {sobrou[:3]}"]
+        else:
+            problems_extra = []
+    else:
+        problems_extra = []
+
+    problems = problems_extra + check_no_study_leakage(splits, study_variants, study_clusters,
+                                                       cluster_policy=args.cluster_exclusion)
     problems += check_clusters_disjoint(splits)
     problems += check_validation_supports_selection(splits)
 
@@ -557,6 +586,12 @@ def main(argv: list[str] | None = None) -> int:
             ROLE_VALIDATION: "extracao, hiperparametros, early stopping, Platt e limiar",
             ROLE_TEST: "avalia so depois de congelado; nao seleciona nada",
         },
+        "conjunto_de_selecao": {
+            "arquivo": str(args.selection_clusters) if args.selection_clusters else None,
+            "clusters": len(selection_clusters) if selection_clusters else 0,
+            "aplicado_em": [ROLE_TRAIN] if selection_clusters else [],
+            "nota": "sem isto o snapshot NAO e o final de treino: o conjunto de selecao ainda estaria dentro dele",
+        },
         "exclusao_por_janela": {
             "radius_bp": args.window_exclusion_bp,
             "aplicada_em": [ROLE_TRAIN] if args.window_exclusion_bp > 0 else [],
@@ -581,7 +616,9 @@ def main(argv: list[str] | None = None) -> int:
         "por_tier": {role: counts_by(rows, ["label_tier"]) for role, rows in splits.items()},
         "identidade": {
             "snapshot_id": (f"core_locus_run{args.run_id}_menos_estudos_br_cluster_{args.cluster_exclusion}"
-                            f"_janela{args.window_exclusion_bp}"),
+                            f"_janela{args.window_exclusion_bp}"
+                            f"{'_menos_selecao' if selection_clusters else ''}"),
+            "final_para_treino": bool(selection_clusters),
             "receita_dos_hashes": {
                 "composicao": "sha256 das linhas 'variant_id\\trole' ordenadas -- identifica quem esta em cada "
                               "recorte, NAO o conteudo (trocar um rotulo nao muda este hash)",

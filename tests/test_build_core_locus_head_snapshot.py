@@ -155,6 +155,27 @@ def test_exclusao_por_janela_tira_do_treino_o_que_cai_na_janela_do_membro():
     assert "4.096" in passo["o_que_garante"], "o raio de nao-sobreposicao tem de estar declarado"
 
 
+def test_clusters_do_conjunto_de_selecao_saem_do_treino_e_so_dele():
+    """Sem esta exclusao o snapshot nao e o final: o conjunto de selecao continuaria dentro do treino."""
+    extra = [_row("var:sel_treino", 2, 1, tier="consensus", cluster="cl_sel"),
+             _row("var:sel_val", 1, 1, tier="gold", cluster="cl_sel")]
+    splits, steps = g2.apply_exclusions(
+        _splits(_frame(extra)), study_variants=set(), study_clusters=set(), broad_br=None,
+        reserve_chr8=False, selection_clusters={"cl_sel"},
+    )
+    assert "var:sel_treino" not in set(splits["train"]["variant_id"])
+    assert "var:sel_val" in set(splits["validation"]["variant_id"]), "a exclusao e so do treino"
+    passo = [s for s in steps if s["exclusao"] == g2.EXCLUSION_SELECTION][0]
+    assert passo["removidos"]["train"]["n"] == 1 and passo["clusters"] == 1, passo
+
+
+def test_sem_conjunto_de_selecao_o_snapshot_nao_e_final():
+    _, steps = g2.apply_exclusions(_splits(), study_variants=set(), study_clusters=set(),
+                                   broad_br=None, reserve_chr8=False)
+    passo = [s for s in steps if s["exclusao"] == g2.EXCLUSION_SELECTION][0]
+    assert passo["status"] == "nao_aplicada" and "NAO e o final" in passo["motivo"], passo
+
+
 def test_custo_por_painel_e_registrado_em_cada_exclusao():
     extra = [_row("var:membro", 2, 1, panel="splice", tier="consensus")]
     _, steps = g2.apply_exclusions(_splits(_frame(extra)), study_variants={"var:membro"},

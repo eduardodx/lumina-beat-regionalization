@@ -120,11 +120,15 @@ def apply_lora(
     All model families receive the same rank, alpha, and dropout for fair
     comparison.  Only output/prediction heads are excluded.
     """
-    if rank <= 0:
-        # Caminho M0 da campanha de regionalizacao: backbone congelado, SEM LoRA clinico -- so a cabeca treina.
-        # Sem este guard, `LoRALinear` faz alpha/rank e estoura em ZeroDivisionError, e os Linear seriam
-        # embrulhados mesmo assim.
-        log.info("LoRA desativado (rank=%d): nenhum Linear embrulhado; so a cabeca recebe gradiente.", rank)
+    if rank < 0:
+        # Rank negativo e configuracao invalida, nao "desligar LoRA": falhar alto evita esconder erro de config.
+        raise ValueError(f"lora_rank negativo ({rank}); use 0 para desativar o LoRA")
+    if rank == 0:
+        # Caminho M0 da campanha de regionalizacao: sem LoRA clinico. Sem este guard, `LoRALinear` faz alpha/rank
+        # e estoura em ZeroDivisionError, e os Linear seriam embrulhados mesmo assim.
+        # ATENCAO: isto NAO congela o backbone. Quem congela e `freeze_backbone=True` (o default e False), e
+        # dropout so some com `freeze_backbone_in_eval`. Ver `assert_only_head_trains`.
+        log.info("LoRA desativado (rank=0): nenhum Linear embrulhado. O congelamento do backbone e separado.")
         return LoRASummary(rank=rank, alpha=alpha, dropout=dropout, module_names=(), total_params=0)
 
     targets: list[str] = []
@@ -268,3 +272,35 @@ def count_trainable_parameters(model: nn.Module) -> dict[str, int]:
         "other": other_params,
         "total": lora_params + fusion_params + norm_params + head_params + other_params,
     }
+
+
+def freeze_backbone_in_eval(backbone: nn.Module) -> int:
+    """Congela os pesos E fixa o backbone em `eval()`, inclusive contra `model.train()` posterior.
+
+    Congelar parametro nao desliga dropout: `model.train()` religa o dropout do backbone e a representacao deixa
+    de ser deterministica entre epocas. Para o M0 -- representacao fixa, so a cabeca treinando -- o backbone tem
+    de ficar em eval de forma pegajosa.
+    """
+    frozen = 0
+    for param in backbone.parameters():
+        if param.requires_grad:
+            param.requires_grad_(False)
+        frozen += param.numel()
+    _pin_eval_mode(backbone)  # mesmo mecanismo ja usado nas cabecas nativas congeladas
+    log.info("Backbone congelado (%d params) e fixado em eval(); train() posterior nao o reativa.", frozen)
+    return frozen
+
+
+def assert_only_head_trains(model: nn.Module) -> list[str]:
+    """Falha alto se qualquer parametro fora da cabeca ficar treinavel. Criterio do gate G3."""
+    treinaveis = [name for name, param in model.named_parameters()
+                  if param.requires_grad and not name.startswith("head.")]
+    if treinaveis:
+        raise AssertionError(
+            f"{len(treinaveis)} parametros fora da cabeca recebem gradiente, ex.: {treinaveis[:5]}"
+        )
+    cabeca = [name for name, param in model.named_parameters()
+              if param.requires_grad and name.startswith("head.")]
+    if not cabeca:
+        raise AssertionError("nenhum parametro da cabeca recebe gradiente")
+    return cabeca

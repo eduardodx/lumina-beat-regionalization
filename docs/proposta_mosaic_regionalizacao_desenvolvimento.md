@@ -149,7 +149,7 @@ exclusões.
 | Recorte | Uso permitido |
 |---|---|
 | folds 2, 3 e 4 | treinar a cabeça |
-| fold 1, gold | escolher extração e hiperparâmetros, early stopping, ajustar Platt e limiar |
+| fold 1, gold | early stopping e calibração (Platt e limiar); diagnóstico complementar |
 | fold 0, gold | avaliar **depois** de congeladas todas as escolhas |
 | estudos brasileiros | avaliar os sistemas já congelados |
 
@@ -266,7 +266,9 @@ A comparação entre as três políticas usa o **conjunto de seleção comum**, 
 do fold 1 (10 benignas de splice em 2 clusters) que motivou o conjunto reservado. Regra proposta: **escolher a
 política mais isolada cuja macro-AUROC no conjunto de seleção fique dentro de 0,01 da melhor**; empate resolve a
 favor do mais isolado. Os 0,01 são **regra operacional declarada, não prova de equivalência estatística**. A escolha
-é feita **só com M0** — não depende do ABraOM — e a mesma política é aplicada a MR.
+é feita **só com M0** — não depende do ABraOM — e a mesma política é aplicada a MR. A comparação usa a **média de
+3 seeds** por candidato, com as mesmas sementes em todos, e as extrações candidatas são as duas da §5.2; a margem de
+0,01 e a regra de desempate ficam fixadas aqui, antes de qualquer score.
 
 #### Conjunto de seleção comum [DECLARADO em 17/09, antes de qualquer treino]
 
@@ -350,8 +352,9 @@ Ordem: smoke sintético, depois piloto pequeno com uma seed, depois a execução
 
 Candidatas: as 172 dimensões de cabeça da pesquisa e a leitura antiga completa (`site_ref`, `variant_repr` e o
 contexto local de ±64 bp; a aproximação de 896 dimensões avaliada na pesquisa não tinha esse contexto). A suíte do
-Mosaic é só SNV, então a extração só-SNV é compatível por construção. Escolher **uma** na validação do `core_locus`
-(fold 1), com critério declarado antes, e usar a mesma em M0 e MR. Nunca escolher no estudo brasileiro.
+Mosaic é só SNV, então a extração só-SNV é compatível por construção. Escolher **uma** no **conjunto de seleção
+comum** (§4.2) — não no fold 1, cuja fragilidade motivou o conjunto —, com critério declarado antes, e usar a mesma
+em M0 e MR. Nunca escolher no estudo brasileiro.
 
 O extrator está na branch `embedding-probe-mosaic` (`eval/embedding_probe/rich.py`) e precisa ser portado com
 proveniência. O cache é identificado por R03, adapter, versão do extrator e chaves das variantes.
@@ -359,8 +362,8 @@ proveniência. O cache é identificado por R03, adapter, versão do extrator e c
 ### 5.3 Cabeças e calibração [PROPOSTO]
 
 Mesma arquitetura e procedimento em H0 e HR; padronização ajustada só no treino; early stopping na validação do
-`core_locus`; Platt e limiar de MCC ajustados na mesma validação, congelados por sistema e iguais para casos e
-controles. A campanha usa repetições de adapter e cabeça (PDF §10: pelo menos três), com predição final pela média
+`core_locus` (fold 1); Platt e limiar de MCC ajustados na mesma validação, congelados por sistema e iguais para
+casos e controles. A escolha de extração e de política acontece no conjunto de seleção comum, não aqui. A campanha usa repetições de adapter e cabeça (PDF §10: pelo menos três), com predição final pela média
 das probabilidades calibradas e métricas também por seed.
 
 ---
@@ -449,7 +452,7 @@ candidatos no estudo.
 | G2 | Snapshot de treino: `core_locus` `run_id=0` menos as exclusões da 4.2 | sobreposição zero com os estudos, seus clusters, a regra ampla brasileira e o chr8; custo de cada exclusão medido; hash do snapshot |
 | G3 | Extrator portado e smoke de M0 sem LoRA clínico | só a cabeça recebe gradiente (hoje `apply_lora` é incondicional e `rank=0` divide por zero: precisa de guard); cache com identidade |
 | G4 | Gerador de janelas + MLM: smoke sintético e piloto do adapter misto | só o LoRA recebe gradiente; aprendizado nas posições variantes; manifesto de janelas; nenhum alelo dos estudos |
-| G5 | Escolha da extração na validação do `core_locus` | critério declarado antes; mesma extração nos dois sistemas |
+| G5 | Escolha da extração e da política de isolamento no **conjunto de seleção comum** | critério declarado antes; média de 3 seeds; mesma extração nos dois sistemas |
 | G6 | Sistemas congelados, manifesto do consumidor, margens e regra de bootstrap declaradas | os sete campos de `required_consumer_manifest` preenchidos; nada ajustado depois de ver o estudo |
 | G7 | Avaliação única nos dois estudos | saídas da seção 6 |
 
