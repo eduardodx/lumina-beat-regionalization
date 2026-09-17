@@ -229,10 +229,22 @@ zero (`fracao_empate = 1`, `pares_diferentes = 0`).
 | cluster (só treino) | 35.044 | 1.704 | 6% | — | não medida; inviável por outros motivos |
 
 Relativo a `nenhum`, a janela de 2.048 remove **43,5% das linhas e 67,9% dos patogênicos** (os denominadores têm
-de ser o `nenhum`, não os totais anteriores às demais exclusões). As duas colunas de assimetria foram medidas com
-réguas diferentes (raio 2.048 e 4.096): elas mostram **redução grande e equilíbrio na direção das diferenças**, não
-igualdade de distribuições nem ausência de efeito sobre os modelos — para a comparação direta falta medir `nenhum`
-também a 4.096.
+de ser o `nenhum`, não os totais anteriores às demais exclusões).
+
+Com **régua única** (exposição medida a 4.096 nos dois), nas 311 benignas do estudo clínico:
+
+| Benignas, medido a 4.096 | `nenhum` | janela 2.048 |
+|---|---:|---:|
+| caso maior entre os pares diferentes | 0,627 | **0,500** |
+| média da diferença | +62,4 | +1,7 |
+| mediana absoluta | 24 | 1 |
+| empate | 24,1% | 49,8% |
+
+Nas patogênicas, 0,481 → 0,491. Isso é **redução grande de magnitude e equilíbrio na direção das diferenças nessa
+medida**; não é igualdade de distribuições nem ausência de efeito sobre os modelos.
+
+A verificação de zero foi conferida em **todos os membros**, não só nos pares clínicos: os seis grupos
+(caso, controle e caso sem par, nos dois estudos, incluindo os 1.138 não pareados) ficam em `fracao_zero = 1,0`.
 
 Validação (1.575) e teste (1.250) são **idênticos** nos três, porque a exclusão por janela só atinge o treino.
 Os três são **aninhados**: treino(4.096) ⊂ treino(2.048) ⊂ treino(`nenhum`) — uma passagem de extração cobre os três
@@ -256,12 +268,28 @@ política mais isolada cuja macro-AUROC no conjunto de seleção fique dentro de
 favor do mais isolado. Os 0,01 são **regra operacional declarada, não prova de equivalência estatística**. A escolha
 é feita **só com M0** — não depende do ABraOM — e a mesma política é aplicada a MR.
 
-O conjunto de seleção é recortado do candidato **mais restritivo** (4.096), materializado como **uma única lista de
-clusters** e aplicado igual aos três, com o custo **recontado em cada candidato**: os mesmos clusters carregam mais
-variantes nos snapshots menos restritivos, então o custo medido em 4.096 não se transfere. Ele é majoritariamente
-consensus, e essa diferença de tier em relação ao fold 1 (todo gold) fica registrada. O alvo por célula está aberto:
-com 150, o recorte deixa `noncoding/P` em 21 no candidato de 4.096 — suporte muito limitado para aquele painel no
-treino.
+#### Conjunto de seleção comum [DECLARADO em 17/09, antes de qualquer treino]
+
+Duas partes, porque definir só por cluster faria cada política ser avaliada num conjunto de variantes diferente:
+
+- **o que se pontua:** as variantes daqueles clusters **no candidato mais restritivo** (4.096) — idênticas nos três;
+- **o que se exclui do treino:** os **clusters inteiros**, em cada candidato, para que nenhum treino contenha um
+  locus que aparece na seleção.
+
+Parâmetros: alvo **100 por célula** com **mínimo de 20 clusters por célula** → **156 clusters**, 2.799 variantes
+pontuadas. Custo do mesmo conjunto, recontado em cada candidato (os mesmos clusters carregam mais variantes onde há
+menos exclusão):
+
+| Candidato | Reservado | Treino depois | P | `noncoding/P` |
+|---|---:|---:|---:|---:|
+| `nenhum` | 16.433 | 167.346 | 24.097 | 419 |
+| janela 2.048 | 3.892 | 99.992 | 8.421 | 124 |
+| janela 4.096 | 2.799 | 86.560 | 6.355 | 71 |
+
+O conjunto é majoritariamente consensus, e essa diferença de tier em relação ao fold 1 (todo gold) fica registrada.
+`noncoding/P` no candidato de 4.096 fica em 71 — suporte muito limitado. Consequência declarada: a comparação mede
+o efeito **combinado** da política de isolamento e da reserva comum, que é o que de fato seria usado; se o candidato
+mais isolado perder por falta de dados de treino, esse é o resultado da regra, não um defeito dela.
 
 **O que essa medida não resolve:** snapshot compartilhado **não** faz o risco desaparecer no contraste M0 × MR —
 as representações são diferentes e podem aproveitar os mesmos loci de formas diferentes, então exposição igual não
