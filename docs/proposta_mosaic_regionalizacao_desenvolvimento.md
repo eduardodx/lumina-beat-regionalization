@@ -99,7 +99,7 @@ e `src/mosaic/comparator_eval/`.
 | `release_training_allowed`, `release_model_selection_allowed` e `release_threshold_calibration_allowed` = `False` | treinar a cabeça no `core_locus` é protocolo derivado, **autorizado pelo mantenedor em 15/09** e registrado no manifesto |
 | Dataset de treino = snapshot global do consumidor, declarado por ID, hash e cutoff, **não materializado no release** | o nosso é derivado do release: declarar origem, exclusões e hash próprio (4.2) |
 | O regionalizado parte do mesmo dataset e do mesmo checkpoint-base; fonte obrigatória `abraom_sabe1171` | R03 comum; HR treinada no mesmo snapshot de H0; a mistura inclui o ABraOM exigido e **declara o gnomAD** como outra fonte de regionalização |
-| Dois estudos, nunca unidos: `br_clinical_evidence` (consensus com participação brasileira) e `br_population_observed` (gold presente no ABraOM) | o clínico é a avaliação principal; o populacional é descritivo, sobreposto ao ABraOM por construção — e agora também sobreposto ao **treino do adapter**, o que reforça a regra de alelos da 4.3 |
+| Dois estudos, nunca unidos: `br_clinical_evidence` (consensus com participação brasileira) e `br_population_observed` (gold presente no ABraOM) | o clínico é a avaliação principal; o populacional dá evidência sobre o comportamento do sistema naquele recorte, mas não sobre generalização para a população brasileira — e está sobreposto ao ABraOM por construção, o que reforça a regra de alelos da 4.3 |
 | Pares 1:1 sem reposição em rótulo × painel × bin de AF do gnomAD, sem gene; papéis `case`, `unmatched_case` e `control` | importar os pares, nunca refazer |
 | Deltas no coorte completo, nos casos pareados e nos controles; interação `delta_br_matched − delta_control`, sem os casos não pareados; deltas na interseção de cobertura | seção 6 |
 | AUROC e AUPRC; métricas com limiar só com limiar externo congelado; macro brasileira não exigida | seção 6 |
@@ -200,14 +200,24 @@ estratificada por rótulo e painel, publicando maior, menor e empate.
 **Medido em 17/09, com a política `nenhum` (treino 183.779, 29.192 P):** no agregado a exposição é simétrica entre
 casos e controles (mediana 6 nos dois, 49,2% de "caso maior" entre os 2.510 pares diferentes). **Estratificado, não
 é:** nas 2.805 patogênicas fica em 48,0%, mas nas **311 benignas** o caso tem mais exposição em 141 pares contra 93
-— 60,3% dos diferentes, teste de sinal z ≈ 3,1 — com média +44 variantes na janela. Por painel tudo fica perto de
-0,5. O estudo populacional é mais assimétrico ainda (58,4%, z ≈ 4,2; mediana 27 contra 7), o que é esperado de
-"gold presente no ABraOM" e reforça que ele é descritivo. A classe benigna é justamente a escassa do estudo
-clínico, então a assimetria mora onde mais pesa.
+(60,3% dos diferentes), com média +44 variantes na janela. Por painel tudo fica perto de 0,5. No estudo
+populacional a diferença é maior (58,4%; mediana 27 contra 7), o que é esperado de "gold presente no ABraOM".
 
-Por isso o G2 ganhou `--window-exclusion-bp`: tirar do treino o que cai dentro da janela de leitura de um membro
-zera a exposição de janela por construção — e com ela a assimetria — a um custo que deve ser fração do cluster
-inteiro. **[ABERTO até o custo ser medido.]**
+Estes números são **descritivos**. Um teste de sinal trataria os pares como independentes, e eles não são: pares
+diferentes compartilham clusters, regiões e as mesmas variantes de treino vizinhas. O que fica registrado é que a
+assimetria existe, que ela está na classe escassa do estudo clínico, e que **o efeito dela sobre o desempenho é
+desconhecido**.
+
+Por isso o G2 ganhou `--window-exclusion-bp`, com a regra declarada explicitamente:
+
+| Raio | O que garante | O que não garante |
+|---|---|---|
+| 2.048 (L/2) | nenhuma variante de treino **dentro** da janela de leitura de um membro | janelas de treino ainda podem sobrepor a do membro (dois centros a 3.000 bp compartilham ~1.096 bp) |
+| 4.096 (L) | **nenhuma sobreposição de sequência** entre a janela de um membro e a de uma variante de treino | nada sobre validação, calibração ou o treino populacional do adapter |
+
+Medir exposição zero com o mesmo raio da exclusão é **verificação de implementação**, não validação independente.
+A escolha entre "distância mínima entre posições" e "ausência de sobreposição entre janelas" é uma decisão a
+declarar, e o custo de cada uma — por painel e por classe, não só o total — é o que decide. **[ABERTO]**
 
 **O que essa medida não resolve:** snapshot compartilhado **não** faz o risco desaparecer no contraste M0 × MR —
 as representações são diferentes e podem aproveitar os mesmos loci de formas diferentes, então exposição igual não

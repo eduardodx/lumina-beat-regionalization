@@ -211,14 +211,19 @@ def apply_exclusions(
     def step(name: str, keep_mask, *, roles: tuple[str, ...] | None = None, extra: dict | None = None) -> None:
         scope = ROLES if roles is None else roles
         removed: dict[str, dict[str, int]] = {}
+        removed_panels: dict[str, dict[str, int]] = {}
         for role, rows in current.items():
             if rows.empty or role not in scope:
                 removed[role] = {"n": 0, "P": 0, "B": 0}
+                removed_panels[role] = {}
                 continue
             mask = keep_mask(rows)
-            removed[role] = dropped_counts(rows[~mask])
+            dropped = rows[~mask]
+            removed[role] = dropped_counts(dropped)
+            removed_panels[role] = counts_by(dropped, ["primary_panel", "binary_label"])
             current[role] = rows[mask].copy()
         payload = {"exclusao": name, "aplicada_em": list(scope), "removidos": removed,
+                   "removidos_por_painel_rotulo": removed_panels,
                    "restantes": {role: role_counts(rows) for role, rows in current.items()},
                    "restantes_por_painel_rotulo": {
                        role: counts_by(rows, ["primary_panel", "binary_label"]) for role, rows in current.items()
@@ -241,8 +246,20 @@ def apply_exclusions(
     # Alternativa mais barata que o cluster inteiro: tirar do TREINO o que cairia dentro da janela de leitura de
     # algum membro. Zera a exposicao de janela por construcao -- e com ela a assimetria caso x controle.
     if window_bp > 0 and member_positions is not None:
+        potential_window = {
+            role: dropped_counts(rows[within_bp_mask(rows, member_positions, window_bp)])
+            for role, rows in current.items()
+        }
         step(EXCLUSION_WINDOW, lambda rows: ~within_bp_mask(rows, member_positions, window_bp),
-             roles=(ROLE_TRAIN,), extra={"radius_bp": window_bp})
+             roles=(ROLE_TRAIN,),
+             extra={"radius_bp": window_bp,
+                    "custo_potencial_por_papel": potential_window,
+                    "o_que_garante": (
+                        f"nenhuma variante de treino a menos de {window_bp} bp de um membro. Isso zera a contagem "
+                        f"do medidor com o MESMO raio -- e verificacao de implementacao, nao validacao "
+                        f"independente. Para 'nenhuma sobreposicao de sequencia' entre janelas de L bp o raio "
+                        f"precisa ser L (4.096), nao L/2: dois centros a 3.000 bp ainda compartilham ~1.096 bp."
+                    )})
     else:
         steps.append({"exclusao": EXCLUSION_WINDOW, "status": "nao_aplicada",
                       "motivo": "--window-exclusion-bp 0 (desligado)"})
@@ -543,8 +560,11 @@ def main(argv: list[str] | None = None) -> int:
         "exclusao_por_janela": {
             "radius_bp": args.window_exclusion_bp,
             "aplicada_em": [ROLE_TRAIN] if args.window_exclusion_bp > 0 else [],
-            "nota": "zera a exposicao de janela dos membros por construcao; alternativa mais barata que excluir "
-                    "o cluster inteiro",
+            "regra": ("distancia minima entre posicoes" if args.window_exclusion_bp > 0 else "nenhuma"),
+            "nota": "raio L/2 (2.048) = nenhuma variante de treino DENTRO da janela do membro; raio L (4.096) = "
+                    "nenhuma sobreposicao de sequencia entre as janelas. Sao politicas diferentes, com custos "
+                    "diferentes; a escolhida tem de ser declarada. Nao atinge validacao, calibracao nem o treino "
+                    "populacional do adapter.",
         },
         "politica_de_cluster": {
             "escolhida": args.cluster_exclusion,

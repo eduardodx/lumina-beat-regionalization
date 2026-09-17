@@ -149,6 +149,18 @@ def test_exclusao_por_janela_tira_do_treino_o_que_cai_na_janela_do_membro():
     assert "var:val_perto" in set(splits["validation"]["variant_id"]), "a exclusao e so no treino"
     passo = [s for s in steps if s["exclusao"] == g2.EXCLUSION_WINDOW][0]
     assert passo["removidos"]["train"]["n"] == 1 and passo["radius_bp"] == 2048, passo
+    # O custo nos outros papeis fica registrado mesmo sem ser aplicado la.
+    assert passo["custo_potencial_por_papel"]["validation"]["n"] == 1, passo["custo_potencial_por_papel"]
+    assert "nao validacao independente" in passo["o_que_garante"], passo["o_que_garante"]
+    assert "4.096" in passo["o_que_garante"], "o raio de nao-sobreposicao tem de estar declarado"
+
+
+def test_custo_por_painel_e_registrado_em_cada_exclusao():
+    extra = [_row("var:membro", 2, 1, panel="splice", tier="consensus")]
+    _, steps = g2.apply_exclusions(_splits(_frame(extra)), study_variants={"var:membro"},
+                                   study_clusters=set(), broad_br=None, reserve_chr8=False)
+    passo = [s for s in steps if s["exclusao"] == g2.EXCLUSION_STUDY_MEMBERS][0]
+    assert passo["removidos_por_painel_rotulo"]["train"] == {"splice/1": 1}, passo["removidos_por_painel_rotulo"]
 
 
 def test_exclusao_por_janela_desligada_por_padrao():

@@ -101,6 +101,38 @@ def test_min_clusters_reprova_celula_concentrada_mesmo_com_exemplos_de_sobra():
     ), report["recorte_proposto"]
 
 
+def test_custo_do_cluster_conta_paineis_fora_da_discriminacao():
+    """Um cluster barato em missense/splice/noncoding pode arrastar milhares de plof e synonymous."""
+    caro = [("cl_caro", "missense", 1, 5), ("cl_caro", "missense", 0, 5), ("cl_caro", "plof", 1, 5000),
+            ("cl_caro", "splice", 1, 5), ("cl_caro", "splice", 0, 5),
+            ("cl_caro", "noncoding", 1, 5), ("cl_caro", "noncoding", 0, 5)]
+    baratos = [(f"cl_b{i}", panel, label, 5)
+               for i in range(4) for panel in sel.DISCRIMINATION_PANELS for label in (1, 0)]
+    report = sel.build_report(_rows(caro + baratos), target=10, top=3, min_clusters=2)
+    assert "cl_caro" not in report["clusters_reservados"], "o cluster com 5.000 plof nao pode parecer barato"
+    assert report["recorte_proposto"]["n"] < 200, report["recorte_proposto"]["n"]
+
+
+def test_clusters_para_80pc_conta_certo_quando_o_primeiro_cobre_exatamente_80():
+    rows = _rows([("cl_1", "missense", 1, 8), ("cl_2", "missense", 1, 1), ("cl_3", "missense", 1, 1)])
+    assert sel.concentration(rows, top=1)["missense/P"]["clusters_para_80pc"] == 1
+    metade = _rows([("cl_1", "splice", 0, 4), ("cl_2", "splice", 0, 4), ("cl_3", "splice", 0, 2)])
+    assert sel.concentration(metade, top=1)["splice/B"]["clusters_para_80pc"] == 2
+
+
+def test_relatorio_traz_tier_e_concentracao_do_recorte_e_do_fold1():
+    spec = [(f"cl_{i}", panel, label, 5)
+            for i in range(10) for panel in sel.DISCRIMINATION_PANELS for label in (1, 0)]
+    rows = _rows(spec)
+    validacao = rows.head(20).copy()
+    validacao["role"] = "validation"
+    validacao["label_tier"] = "gold"
+    report = sel.build_report(pd.concat([rows, validacao], ignore_index=True), target=10, top=3, min_clusters=2)
+    assert report["recorte_proposto"]["por_tier"], report["recorte_proposto"]
+    assert "concentracao" in report["recorte_proposto"] and "concentracao" in report["validacao_oficial_fold1"]
+    assert "celula a celula" in report["como_comparar"]
+
+
 def test_recorte_e_deterministico():
     spec = [(f"cl_{i}", panel, label, 7)
             for i in range(6) for panel in sel.DISCRIMINATION_PANELS for label in (1, 0)]

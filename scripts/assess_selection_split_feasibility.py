@@ -58,6 +58,7 @@ from scripts.build_core_locus_head_snapshot import (  # noqa: E402
     ROLE_TRAIN,
     ROLE_VALIDATION,
 )
+from scripts.import_mosaic_brazil_studies import counts_by  # noqa: E402
 
 CELL_LABELS = (1, 0)  # P, B
 
@@ -96,7 +97,7 @@ def concentration(rows: pd.DataFrame, *, top: int = 5) -> dict[str, Any]:
                 "clusters": int(len(sizes)),
                 "maior_cluster": int(sizes.iloc[0]),
                 f"fracao_nos_{top}_maiores": round(float(sizes.head(top).sum() / len(cell)), 4),
-                "clusters_para_80pc": int((sizes.cumsum() / len(cell) <= 0.8).sum() + 1),
+                "clusters_para_80pc": int((sizes.cumsum() / len(cell) < 0.8).sum() + 1),
             }
     return out
 
@@ -120,7 +121,7 @@ def cluster_cell_matrix(rows: pd.DataFrame) -> pd.DataFrame:
 
 
 def greedy_carve(
-    matrix: pd.DataFrame, *, target: int, min_clusters: int = 1
+    matrix: pd.DataFrame, *, target: int, min_clusters: int = 1, cluster_sizes: pd.Series | None = None
 ) -> tuple[list[str], dict[str, int], dict[str, int]]:
     """Escolhe clusters ate cada celula ter `target` exemplos E `min_clusters` clusters distintos.
 
@@ -134,7 +135,10 @@ def greedy_carve(
     got = {cell: 0 for cell in matrix.columns}
     chosen: list[str] = []
     remaining = matrix.copy()
-    sizes = matrix.sum(axis=1).clip(lower=1)
+    # O custo e o TOTAL de linhas de treino que o cluster leva -- plof, synonymous e other inclusive --, nao so
+    # as celulas de discriminacao: um cluster barato nos tres paineis pode arrastar milhares de outros exemplos.
+    sizes = (matrix.sum(axis=1) if cluster_sizes is None else cluster_sizes.reindex(matrix.index)).fillna(0)
+    sizes = sizes.clip(lower=1)
 
     def unsatisfied() -> list[str]:
         return [cell for cell in matrix.columns
@@ -166,7 +170,9 @@ def build_report(snapshot: pd.DataFrame, *, target: int, top: int, min_clusters:
     validation = snapshot[snapshot["role"] == ROLE_VALIDATION]
 
     matrix = cluster_cell_matrix(train)
-    chosen, got, cells_clusters = greedy_carve(matrix, target=target, min_clusters=min_clusters)
+    cluster_sizes = train.groupby("overlap_cluster_id").size()
+    chosen, got, cells_clusters = greedy_carve(matrix, target=target, min_clusters=min_clusters,
+                                               cluster_sizes=cluster_sizes)
     carved = train[train["overlap_cluster_id"].isin(chosen)]
     rest = train[~train["overlap_cluster_id"].isin(chosen)]
 
@@ -179,7 +185,13 @@ def build_report(snapshot: pd.DataFrame, *, target: int, top: int, min_clusters:
             "n": int(len(validation)),
             "clusters": int(validation["overlap_cluster_id"].nunique()),
             "suporte": support_by_cell(validation),
+            "concentracao": concentration(validation, top=top),
+            "por_tier": counts_by(validation, ["label_tier"]),
         },
+        "como_comparar": (
+            "celula a celula: suporte, numero de clusters, concentracao e tier. O total de clusters do conjunto "
+            "nao ordena as opcoes -- o fold 1 tem 38 clusters no total mas so 2 com benignas de splice."
+        ),
         "teto_no_treino": {
             "n": int(len(train)),
             "clusters": int(train["overlap_cluster_id"].nunique()),
@@ -190,6 +202,8 @@ def build_report(snapshot: pd.DataFrame, *, target: int, top: int, min_clusters:
             "clusters": len(chosen),
             "n": int(len(carved)),
             "suporte": support_by_cell(carved),
+            "concentracao": concentration(carved, top=top),
+            "por_tier": counts_by(carved, ["label_tier"]),
             "atingiu_o_alvo": atingiu,
             "celulas_nao_atingidas": [cell for cell, ok in atingiu.items() if not ok],
         },
@@ -199,11 +213,15 @@ def build_report(snapshot: pd.DataFrame, *, target: int, top: int, min_clusters:
             "P_depois": int((rest["binary_label"].astype("Int64") == 1).sum()),
             "B_depois": int((rest["binary_label"].astype("Int64") == 0).sum()),
             "suporte_depois": support_by_cell(rest),
+            "por_painel_rotulo_reservado": counts_by(carved, ["primary_panel", "binary_label"]),
+            "por_tier_depois": counts_by(rest, ["label_tier"]),
         },
         "clusters_reservados": chosen,
         "o_que_nao_prova": [
             "suporte suficiente nao garante selecao confiavel: a unidade independente continua sendo o cluster, "
-            "e por isso o criterio exige tambem um minimo de clusters por celula",
+            "e por isso o criterio exige tambem um minimo de clusters por celula -- que tampouco impede que quase "
+            "tudo esteja num cluster so, por isso a concentracao do recorte tambem e publicada",
+            "alvos de exemplos e clusters sao parametros exploratorios, nao garantia de selecao confiavel",
             "o recorte sai do treino de TODOS os candidatos: e troca, nao ganho",
             "nao decide a politica; produz numeros para declara-la antes de treinar",
         ],
