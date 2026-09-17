@@ -254,6 +254,10 @@ def main(argv: list[str] | None = None) -> int:
                              "conjunto comum neste snapshot (o mesmo cluster pesa diferente em cada candidato)")
     parser.add_argument("--write-clusters", type=Path,
                         help="grava os clusters escolhidos, um por linha, para virarem o conjunto comum")
+    parser.add_argument("--write-selection-variants", type=Path,
+                        help="grava as VARIANTES reservadas deste snapshot. O que se pontua sao as variantes do "
+                             "candidato mais restritivo, iguais nos tres; o que se exclui do treino sao os "
+                             "clusters inteiros, em cada candidato")
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
 
@@ -278,6 +282,14 @@ def main(argv: list[str] | None = None) -> int:
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_text("\n".join(report["clusters_reservados"]) + "\n", encoding="utf-8")
         report["saidas_clusters"] = str(destino)
+    if args.write_selection_variants is not None:
+        alvo = args.write_selection_variants.expanduser()
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        reservadas = snapshot[(snapshot["role"] == ROLE_TRAIN)
+                              & (snapshot["overlap_cluster_id"].isin(report["clusters_reservados"]))].copy()
+        reservadas["role"] = "selection"
+        reservadas.to_parquet(alvo, index=False)
+        report["saidas_variantes_de_selecao"] = {"arquivo": str(alvo), "n": int(len(reservadas))}
     report["entradas"] = {"snapshot": str(args.snapshot)}
     report["saidas"] = {"relatorio": str(report_path)}
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
