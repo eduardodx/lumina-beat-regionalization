@@ -28,8 +28,32 @@ def _rows(spec):
     for i, (cluster, panel, label, n) in enumerate(spec):
         for j in range(n):
             rows.append({"variant_id": f"var:{i}_{j}", "role": "train", "binary_label": label,
-                         "primary_panel": panel, "overlap_cluster_id": cluster, "label_tier": "consensus"})
+                         "primary_panel": panel, "overlap_cluster_id": cluster, "label_tier": "consensus",
+                         "chrom": "chr1", "pos_1based": 1000 + i * 100 + j, "ref": "A", "alt": "G"})
     return pd.DataFrame(rows)
+
+
+def test_conjunto_de_selecao_gravado_tem_as_colunas_de_pontuacao():
+    """Sem chrom/pos/ref/alt o extrator nao monta a janela: o artefato nasceria inutil."""
+    import tempfile
+    from pathlib import Path as _Path
+
+    spec = [(f"cl_{i}", panel, label, 5)
+            for i in range(10) for panel in sel.DISCRIMINATION_PANELS for label in (1, 0)]
+    rows = _rows(spec)
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = _Path(tmp)
+        snap = raiz / "snap.parquet"
+        rows.to_parquet(snap, index=False)
+        alvo = raiz / "selecao.parquet"
+        rc = sel.main(["--snapshot", str(snap), "--min-por-celula", "10", "--min-clusters-por-celula", "2",
+                       "--write-selection-variants", str(alvo), "--out-dir", str(raiz / "out")])
+        assert rc == 0
+        gravado = pd.read_parquet(alvo)
+        for coluna in sel.COLUNAS_PARA_PONTUAR:
+            assert coluna in gravado.columns, coluna
+        assert set(gravado["role"]) == {"selection"}
+        assert gravado["pos_1based"].notna().all()
 
 
 def test_suporte_conta_exemplos_e_clusters_por_celula():

@@ -62,6 +62,9 @@ from scripts.import_mosaic_brazil_studies import counts_by  # noqa: E402
 
 CELL_LABELS = (1, 0)  # P, B
 
+#: O conjunto de selecao e pontuado, entao precisa das coordenadas alem dos rotulos.
+COLUNAS_PARA_PONTUAR = ("variant_id", "chrom", "pos_1based", "ref", "alt", "binary_label", "primary_panel")
+
 
 def cell_name(panel: str, label: int) -> str:
     return f"{panel}/{'P' if int(label) == 1 else 'B'}"
@@ -261,9 +264,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
 
+    # As coordenadas entram aqui porque o conjunto de selecao e PONTUADO: sem chrom/pos/ref/alt o extrator nao
+    # consegue montar a janela, e o artefato nasceria inutil.
     snapshot = pd.read_parquet(args.snapshot.expanduser(),
                                columns=["variant_id", "role", "binary_label", "primary_panel",
-                                        "overlap_cluster_id", "label_tier"])
+                                        "overlap_cluster_id", "label_tier",
+                                        "chrom", "pos_1based", "ref", "alt"])
     if not (snapshot["role"] == ROLE_TRAIN).any():
         print("FALHOU: o snapshot nao tem linhas de treino.")
         return 2
@@ -288,6 +294,9 @@ def main(argv: list[str] | None = None) -> int:
         reservadas = snapshot[(snapshot["role"] == ROLE_TRAIN)
                               & (snapshot["overlap_cluster_id"].isin(report["clusters_reservados"]))].copy()
         reservadas["role"] = "selection"
+        faltando = [c for c in COLUNAS_PARA_PONTUAR if c not in reservadas.columns]
+        if faltando:
+            raise SystemExit(f"conjunto de selecao sem as colunas de pontuacao {faltando}: nao seria utilizavel")
         reservadas.to_parquet(alvo, index=False)
         report["saidas_variantes_de_selecao"] = {"arquivo": str(alvo), "n": int(len(reservadas))}
     report["entradas"] = {"snapshot": str(args.snapshot)}

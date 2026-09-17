@@ -393,8 +393,13 @@ estrita, sem o fallback de ±1 base que o helper antigo usa para indels: o relea
 contra o GRCh38.p14, então divergência ali é FASTA ou build errado.
 
 `scripts/audit_variant_windows.py` mede quantas variantes cada motivo tira, por papel, painel e classe, e **sai com
-código 2 em qualquer `ref_mismatch`** — isso é erro, não estatística. **Pendente:** rodar sobre os três snapshots
-finais, a seleção comum e os membros dos estudos, e registrar aqui as contagens.
+código 2 em qualquer `ref_mismatch`** — isso é erro, não estatística.
+
+**Medido em 17/09, janela de 4.096 bp:** treino de `nenhum` 170.171, treino de `janela4096` 89.385 e os 8.875
+membros dos dois estudos — **todos ok**. Zero `ref_mismatch` (o FASTA é o build certo e a coluna REF é consistente
+em toda a campanha), zero `non_acgt` e zero `out_of_bounds`. A política custa zero variantes aqui, e o motivo é
+estrutural: o `sequence_eligible` do release já validou a janela centrada de 32.768 bp como ACGT, e a de 4.096 é
+substring dela — a garantia é herdada. A checagem continua no caminho porque é ela que pegaria FASTA trocado.
 
 ### 5.3 Cabeças e calibração [PROPOSTO]
 
