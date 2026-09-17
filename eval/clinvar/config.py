@@ -68,6 +68,12 @@ class FineTuneConfig:
     fusion_gate_hidden_dim: int = 64
     fusion_gate_dropout: float = 0.0
 
+    # -- Campanha de regionalizacao com o estudo brasileiro do Mosaic --
+    # Quando preenchido, o __post_init__ EXIGE o desenho declarado no plano (secoes 2 e 5.3): sem LoRA clinico,
+    # sem fusion, backbone congelado e sem init de checkpoint clinico antigo. Falha alto em vez de corrigir em
+    # silencio -- rodar M0 com os defaults produziria outro sistema com o mesmo nome.
+    campaign_system: Literal["", "M0", "MR"] = ""
+
     # -- LoRA (identical across model families for fair comparison) --
     lora_rank: int = 4
     lora_alpha: float = 8.0
@@ -115,7 +121,41 @@ class FineTuneConfig:
     wandb_run_name: str | None = None
     wandb_tags: list[str] = field(default_factory=list)
 
+    #: Invariantes do sistema da campanha: (atributo, esperado, explicacao).
+    _CAMPAIGN_INVARIANTS = (
+        ("lora_rank", 0, "sem LoRA clinico: a representacao e congelada, so a cabeca treina"),
+        ("freeze_backbone", True, "backbone congelado (e fixado em eval por freeze_backbone_in_eval)"),
+        ("fusion_mode", "none", "a campanha nao usa fusion"),
+        ("freeze_backbone_for_fusion", False, "sem fusion, este atalho nao se aplica"),
+        ("init_finetuned_checkpoint_path", None, "M0 e MR partem do R03 puro, nao de checkpoint clinico antigo"),
+    )
+
+    @classmethod
+    def for_campaign(cls, system: str, **kwargs: object) -> "FineTuneConfig":
+        """Config da campanha com os invariantes ja impostos. kwargs conflitante falha no __post_init__."""
+        base: dict[str, object] = {name: esperado for name, esperado, _ in cls._CAMPAIGN_INVARIANTS}
+        base.update({"campaign_system": system, "fusion_adapter_paths": [], "fusion_adapter_names": []})
+        base.update(kwargs)
+        return cls(**base)  # type: ignore[arg-type]
+
+    def _check_campaign_invariants(self) -> None:
+        if not self.campaign_system:
+            return
+        problemas = [
+            f"{nome}={getattr(self, nome)!r}, esperado {esperado!r} ({porque})"
+            for nome, esperado, porque in self._CAMPAIGN_INVARIANTS
+            if getattr(self, nome) != esperado
+        ]
+        if self.fusion_adapter_paths or self.fusion_adapter_names:
+            problemas.append("fusion_adapter_paths/names preenchidos, esperado vazio (a campanha nao usa fusion)")
+        if problemas:
+            raise ValueError(
+                f"campaign_system={self.campaign_system!r} exige o desenho declarado no plano; corrija: "
+                + "; ".join(problemas)
+            )
+
     def __post_init__(self) -> None:
+        self._check_campaign_invariants()
         if self.model_family == "lumina" and self.model_version == "beat-v8" and self.regime == "A":
             default_native = ["mutation_effect", "aa", "codon_phylo", "phylo470"]
             if self.head_type == "regime_a":

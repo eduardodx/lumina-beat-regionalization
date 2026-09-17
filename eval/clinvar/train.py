@@ -49,8 +49,11 @@ from eval.clinvar.fusion_lora import (
 )
 from eval.clinvar.lora import (
     apply_lora,
+    CLASSIFIER_PREFIXES,
+    assert_only_head_trains,
     count_trainable_parameters,
     enable_layernorm_training,
+    freeze_backbone_in_eval,
     freeze_native_feature_heads,
 )
 from eval.clinvar.losses import build_loss, pairwise_ranking_loss, swap_consistency_loss
@@ -442,6 +445,7 @@ def _compute_and_save_final_metrics(
         "swap_diagnostics": swap_diagnostics,
         "consequence_stratified_metrics": consequence_metrics,
         "hyperparameters": {
+            "campaign_system": config.campaign_system,
             "lora_rank": config.lora_rank,
             "lora_alpha": config.lora_alpha,
             "lora_dropout": config.lora_dropout,
@@ -668,12 +672,18 @@ def run_finetune(config: FineTuneConfig) -> dict[str, Any]:
     # adiciona os LoRA treinaveis por cima. Sem isso, os params nao-Linear do backbone (embeddings,
     # convs, SSM do Mamba) e os LayerNorms ficariam treinaveis (comportamento v10/v11 = 7.5M "other").
     if config.freeze_backbone:
-        frozen = 0
-        for p in model.backbone.parameters():
-            if p.requires_grad:
-                p.requires_grad_(False)
-                frozen += p.numel()
-        log.info("§4.1 freeze_backbone: congelados %d params do backbone (so LoRA + head treinam).", frozen)
+        if config.campaign_system:
+            # Campanha M0/MR: a representacao e fixa. Congelar parametro nao basta -- `model.train()` religaria o
+            # dropout do backbone e a representacao deixaria de ser deterministica entre epocas.
+            frozen = freeze_backbone_in_eval(model.backbone)
+            log.info("campanha %s: backbone congelado (%d params) e preso em eval.", config.campaign_system, frozen)
+        else:
+            frozen = 0
+            for p in model.backbone.parameters():
+                if p.requires_grad:
+                    p.requires_grad_(False)
+                    frozen += p.numel()
+            log.info("§4.1 freeze_backbone: congelados %d params do backbone (so LoRA + head treinam).", frozen)
 
     # -- Apply LoRA --
     lora_summary = apply_lora(
@@ -686,6 +696,13 @@ def run_finetune(config: FineTuneConfig) -> dict[str, Any]:
     native_selection = getattr(adapter, "native_variant_head_selection", None)
     if native_selection:
         freeze_native_feature_heads(model.backbone, native_selection)
+
+    if config.campaign_system:
+        # Portao do gate G3: depois de tudo aplicado, so o classificador pode receber gradiente. O
+        # `variant_encoder` entra ai por ter pesos proprios aleatorios (ver CLASSIFIER_PREFIXES).
+        treinaveis = assert_only_head_trains(model, allowed_prefixes=CLASSIFIER_PREFIXES)
+        log.info("campanha %s: %d parametros treinaveis, todos em %s.",
+                 config.campaign_system, len(treinaveis), list(CLASSIFIER_PREFIXES))
 
     init_summary, fusion_summary = _prepare_fusion(model, config, device=device)
     if init_summary is not None:

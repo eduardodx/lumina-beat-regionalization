@@ -291,21 +291,37 @@ def freeze_backbone_in_eval(backbone: nn.Module) -> int:
     return frozen
 
 
-def assert_only_head_trains(model: nn.Module) -> list[str]:
-    """Falha alto se qualquer parametro fora da cabeca ficar treinavel. Criterio do gate G3.
+CLASSIFIER_PREFIXES: tuple[str, ...] = ("head.", "variant_encoder.")
+"""Modulos que PODEM treinar na campanha: o classificador, nao a representacao.
+
+`variant_encoder` (`ClinVarVariantEncoder`) tem Linear e Embedding proprios, nasce com pesos aleatorios e nao vem
+do checkpoint do R03 -- congela-lo seria usar uma projecao aleatoria. Ele conta como classificador, e isso fica
+declarado no manifesto junto com a cabeca. Se ele nao existir no modelo (`nn.Identity`), nao tem parametro e a
+checagem segue valendo.
+"""
+
+
+def assert_only_head_trains(
+    model: nn.Module, *, allowed_prefixes: tuple[str, ...] = CLASSIFIER_PREFIXES
+) -> list[str]:
+    """Falha alto se qualquer parametro fora dos modulos declarados ficar treinavel. Criterio do gate G3.
 
     Isto e uma checagem de CONFIGURACAO: olha `requires_grad`, nao gradientes produzidos. A prova de que a cabeca
     recebe gradiente e muda, e de que o backbone continua bit a bit igual, tem de vir depois de `backward()` e de
     um passo do otimizador -- e responsabilidade do smoke do M0, nao desta funcao.
+
+    `allowed_prefixes` e explicito de proposito: o que pode treinar e uma decisao declarada, nao uma descoberta
+    do codigo. Passar uma tupla menor torna a checagem mais estrita.
     """
     treinaveis = [name for name, param in model.named_parameters()
-                  if param.requires_grad and not name.startswith("head.")]
+                  if param.requires_grad and not name.startswith(allowed_prefixes)]
     if treinaveis:
         raise AssertionError(
-            f"{len(treinaveis)} parametros fora da cabeca recebem gradiente, ex.: {treinaveis[:5]}"
+            f"{len(treinaveis)} parametros fora de {list(allowed_prefixes)} recebem gradiente, "
+            f"ex.: {treinaveis[:5]}"
         )
-    cabeca = [name for name, param in model.named_parameters()
-              if param.requires_grad and name.startswith("head.")]
-    if not cabeca:
-        raise AssertionError("nenhum parametro da cabeca recebe gradiente")
-    return cabeca
+    permitidos = [name for name, param in model.named_parameters()
+                  if param.requires_grad and name.startswith(allowed_prefixes)]
+    if not permitidos:
+        raise AssertionError(f"nenhum parametro treinavel em {list(allowed_prefixes)}")
+    return permitidos

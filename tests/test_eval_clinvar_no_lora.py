@@ -12,6 +12,7 @@ import torch
 import pytest
 
 from eval.clinvar.lora import (
+    CLASSIFIER_PREFIXES,
     LoRALinear,
     apply_lora,
     assert_only_head_trains,
@@ -75,16 +76,36 @@ def test_representacao_do_backbone_congelado_e_deterministica():
     assert torch.allclose(primeira, segunda), "mesma entrada tem de dar a mesma representacao"
 
 
+class _Modelo(torch.nn.Module):
+    """Mesma anatomia do EndToEndClinVarModel: backbone congelado, variant_encoder e head treinaveis."""
+
+    def __init__(self, backbone):
+        super().__init__()
+        self.backbone = backbone
+        self.variant_encoder = torch.nn.Linear(3, 3)  # pesos proprios, aleatorios: e classificador
+        self.head = torch.nn.Linear(3, 1)
+
+    def forward(self, x):
+        return self.head(self.variant_encoder(self.backbone(x)))
+
+
+def test_variant_encoder_conta_como_classificador():
+    """Ele nasce aleatorio e nao vem do R03: congela-lo seria usar uma projecao aleatoria."""
+    modelo = _Modelo(_TinyBackbone())
+    freeze_backbone_in_eval(modelo.backbone)
+    apply_lora(modelo.backbone, rank=0, alpha=8.0, dropout=0.1)
+
+    treinaveis = assert_only_head_trains(modelo)
+    assert any(nome.startswith("variant_encoder.") for nome in treinaveis), treinaveis
+    assert any(nome.startswith("head.") for nome in treinaveis), treinaveis
+    assert "variant_encoder." in CLASSIFIER_PREFIXES
+
+    # Com a checagem estrita (so a cabeca), o mesmo modelo reprova -- e o que deve acontecer.
+    with pytest.raises(AssertionError):
+        assert_only_head_trains(modelo, allowed_prefixes=("head.",))
+
+
 def test_assert_only_head_trains_reprova_backbone_treinavel():
-    class _Modelo(torch.nn.Module):
-        def __init__(self, backbone):
-            super().__init__()
-            self.backbone = backbone
-            self.head = torch.nn.Linear(3, 1)
-
-        def forward(self, x):
-            return self.head(self.backbone(x))
-
     backbone = _TinyBackbone()
     modelo = _Modelo(backbone)
     with pytest.raises(AssertionError):
@@ -93,7 +114,7 @@ def test_assert_only_head_trains_reprova_backbone_treinavel():
     freeze_backbone_in_eval(backbone)
     apply_lora(backbone, rank=0, alpha=8.0, dropout=0.1)
     treinaveis = assert_only_head_trains(modelo)
-    assert all(nome.startswith("head.") for nome in treinaveis) and treinaveis
+    assert all(nome.startswith(CLASSIFIER_PREFIXES) for nome in treinaveis) and treinaveis
 
 
 def test_com_backbone_congelado_e_rank_zero_so_a_cabeca_recebe_gradiente():
