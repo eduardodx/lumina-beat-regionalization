@@ -374,8 +374,17 @@ Mosaic é só SNV, então a extração só-SNV é compatível por construção. 
 comum** (§4.2) — não no fold 1, cuja fragilidade motivou o conjunto —, com critério declarado antes, e usar a mesma
 em M0 e MR. Nunca escolher no estudo brasileiro.
 
-O extrator está na branch `embedding-probe-mosaic` (`eval/embedding_probe/rich.py`) e precisa ser portado com
-proveniência. O cache é identificado por R03, adapter, versão do extrator e chaves das variantes.
+O extrator foi portado em 17/09 de `embedding-probe-mosaic` (`23fb518`) para `eval/embedding_probe/rich.py`, sem
+alteração de comportamento, com o código executável verificado igual ao da origem por comparação de texto.
+
+O cache é identificado por R03, **adapter**, versão do extrator e chaves das variantes — e, pela revisão de 17/09,
+também por **FASTA, comprimento da janela, orientação/RC, configuração e ordem das features**: duas extrações com
+a mesma variante e FASTA diferente não são o mesmo objeto.
+
+**[ABERTO] Política para `N` e soft-mask.** O `COMPLEMENT` do extrator só aceita `A/C/G/T` maiúsculos, então a
+média reverse-complement estoura em janela com `N` ou com base minúscula (região soft-masked), e janelas do FASTA
+têm as duas coisas. Decidir e declarar antes do port de `windows.py`: pular a variante, normalizar para maiúsculo,
+ou estender o alfabeto — e registrar quantas variantes do snapshot são afetadas.
 
 ### 5.3 Cabeças e calibração [PROPOSTO]
 
