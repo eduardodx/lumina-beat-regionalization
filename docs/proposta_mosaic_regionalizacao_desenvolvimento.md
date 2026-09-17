@@ -388,6 +388,12 @@ ou estender o alfabeto — e registrar quantas variantes do snapshot são afetad
 
 ### 5.3 Cabeças e calibração [PROPOSTO]
 
+**O que conta como "cabeça" [FIXADO em 17/09, a declarar no manifesto]:** além da `head`, o
+`ClinVarVariantEncoder` (`variant_encoder`) tem pesos próprios — `Linear` e `Embedding` — que **nascem aleatórios e
+não vêm do checkpoint do R03**. Congelá-lo seria usar uma projeção aleatória, então ele é parte do classificador,
+treinado igual em M0 e MR. Está declarado em `CLASSIFIER_PREFIXES` e é o que `assert_only_head_trains` permite;
+tudo fora disso não pode receber gradiente.
+
 Mesma arquitetura e procedimento em H0 e HR; padronização ajustada só no treino; early stopping na validação do
 `core_locus` (fold 1); Platt e limiar de MCC ajustados na mesma validação, congelados por sistema e iguais para
 casos e controles. A escolha de extração e de política acontece no conjunto de seleção comum, não aqui. A campanha usa repetições de adapter e cabeça (PDF §10: pelo menos três), com predição final pela média
