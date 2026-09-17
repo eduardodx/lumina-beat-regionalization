@@ -250,6 +250,24 @@ Validação (1.575) e teste (1.250) são **idênticos** nos três, porque a excl
 Os três são **aninhados**: treino(4.096) ⊂ treino(2.048) ⊂ treino(`nenhum`) — uma passagem de extração cobre os três
 **por sistema**: M0 usa um cache, MR precisa do seu, porque o adapter muda os embeddings.
 
+#### Artefatos materializados [FIXADO em 17/09]
+
+| Artefato | Conteúdo | Identidade |
+|---|---|---|
+| `g5_comum/selecao_comum.parquet` | 2.799 variantes em 156 clusters, do candidato 4.096 | `sha256 c22021f6…` |
+| `g2_final_nenhum/` | treino 167.346 (24.097 P), 1.614 clusters | `hash_conteudo 89517c95…` |
+| `g2_final_janela2048/` | treino 99.992 (8.421 P), 1.576 clusters | `f3f7416f…` |
+| `g2_final_janela4096/` | treino 86.560 (6.355 P), 1.542 clusters | `4805b4fe…` |
+
+Verificado nos três: **zero** variantes e **zero** clusters em comum com o conjunto de seleção, `final_para_treino`
+verdadeiro, e validação (1.575) e teste (1.250) idênticos. Os tamanhos batem com o custo previsto antes da
+materialização.
+
+Exposição recalculada **depois** da reserva (raio 4.096, benignas do estudo clínico): `nenhum` 0,6205 com média
++58,2; `janela2048` 0,4832 com média +1,55 e mediana absoluta 0; `janela4096` exatamente zero, com empate em 1,0
+nos dois estratos. Tirar dados não aumenta exposição individual, mas mexe no equilíbrio caso × controle — por isso
+o número que vale é este, medido no artefato que será usado.
+
 #### Como a política será escolhida [PROPOSTO — declarar antes de treinar]
 
 Não por argumento: por medição que **não toca o estudo brasileiro**. Papéis, declarados antes de treinar:
