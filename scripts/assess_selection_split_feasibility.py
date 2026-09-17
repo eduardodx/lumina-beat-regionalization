@@ -119,19 +119,33 @@ def cluster_cell_matrix(rows: pd.DataFrame) -> pd.DataFrame:
     return matrix[cells]
 
 
-def greedy_carve(matrix: pd.DataFrame, *, target: int) -> tuple[list[str], dict[str, int]]:
-    """Escolhe clusters ate cada celula atingir `target`, priorizando quem preenche o que falta.
+def greedy_carve(
+    matrix: pd.DataFrame, *, target: int, min_clusters: int = 1
+) -> tuple[list[str], dict[str, int], dict[str, int]]:
+    """Escolhe clusters ate cada celula ter `target` exemplos E `min_clusters` clusters distintos.
 
-    Deterministico: a cada passo pega o cluster com maior contribuicao ao deficit; empate pelo id do cluster.
+    A unidade independente e o cluster: um recorte com 12 mil exemplos em 5 clusters vale menos, para selecao,
+    que um com mil exemplos em 200. Por isso o criterio tem as duas partes e o score e CUSTO-CIENTE --
+    contribuicao ao deficit dividida pelo tamanho do cluster --, o que prefere muitos clusters pequenos a poucos
+    gigantes. Deterministico: empate pelo id do cluster.
     """
     need = {cell: target for cell in matrix.columns}
-    chosen: list[str] = []
+    have_clusters = {cell: 0 for cell in matrix.columns}
     got = {cell: 0 for cell in matrix.columns}
+    chosen: list[str] = []
     remaining = matrix.copy()
+    sizes = matrix.sum(axis=1).clip(lower=1)
 
-    while any(need[cell] > 0 for cell in need) and len(remaining):
-        deficit_cells = [cell for cell in need if need[cell] > 0]
-        scores = remaining[deficit_cells].clip(upper=pd.Series(need)[deficit_cells], axis=1).sum(axis=1)
+    def unsatisfied() -> list[str]:
+        return [cell for cell in matrix.columns
+                if need[cell] > 0 or have_clusters[cell] < min_clusters]
+
+    while unsatisfied() and len(remaining):
+        cells = unsatisfied()
+        contribution = remaining[cells].clip(upper=1_000_000).gt(0).astype(int).sum(axis=1)
+        deficit = remaining[cells].clip(upper=pd.Series({c: max(need[c], 1) for c in cells})[cells],
+                                        axis=1).sum(axis=1)
+        scores = (deficit + contribution) / sizes.reindex(remaining.index)
         best = scores.max()
         if best <= 0:
             break  # nenhum cluster restante ajuda no que falta
@@ -141,22 +155,26 @@ def greedy_carve(matrix: pd.DataFrame, *, target: int) -> tuple[list[str], dict[
             value = int(remaining.loc[cluster, cell])
             got[cell] += value
             need[cell] = max(0, need[cell] - value)
+            if value > 0:
+                have_clusters[cell] += 1
         remaining = remaining.drop(index=cluster)
-    return chosen, got
+    return chosen, got, have_clusters
 
 
-def build_report(snapshot: pd.DataFrame, *, target: int, top: int) -> dict[str, Any]:
+def build_report(snapshot: pd.DataFrame, *, target: int, top: int, min_clusters: int = 1) -> dict[str, Any]:
     train = snapshot[snapshot["role"] == ROLE_TRAIN]
     validation = snapshot[snapshot["role"] == ROLE_VALIDATION]
 
     matrix = cluster_cell_matrix(train)
-    chosen, got = greedy_carve(matrix, target=target)
+    chosen, got, cells_clusters = greedy_carve(matrix, target=target, min_clusters=min_clusters)
     carved = train[train["overlap_cluster_id"].isin(chosen)]
     rest = train[~train["overlap_cluster_id"].isin(chosen)]
 
-    atingiu = {cell: bool(got[cell] >= target) for cell in matrix.columns}
+    atingiu = {cell: bool(got[cell] >= target and cells_clusters[cell] >= min_clusters)
+               for cell in matrix.columns}
     return {
         "alvo_por_celula": target,
+        "min_clusters_por_celula": min_clusters,
         "validacao_oficial_fold1": {
             "n": int(len(validation)),
             "clusters": int(validation["overlap_cluster_id"].nunique()),
@@ -184,7 +202,8 @@ def build_report(snapshot: pd.DataFrame, *, target: int, top: int) -> dict[str, 
         },
         "clusters_reservados": chosen,
         "o_que_nao_prova": [
-            "suporte suficiente nao garante selecao confiavel: a unidade independente continua sendo o cluster",
+            "suporte suficiente nao garante selecao confiavel: a unidade independente continua sendo o cluster, "
+            "e por isso o criterio exige tambem um minimo de clusters por celula",
             "o recorte sai do treino de TODOS os candidatos: e troca, nao ganho",
             "nao decide a politica; produz numeros para declara-la antes de treinar",
         ],
@@ -196,6 +215,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--snapshot", required=True, type=Path, help="core_head_snapshot.parquet do G2")
     parser.add_argument("--min-por-celula", type=int, default=150,
                         help="alvo de exemplos por painel de discriminacao e classe no recorte de selecao")
+    parser.add_argument("--min-clusters-por-celula", type=int, default=20,
+                        help="minimo de clusters distintos por celula no recorte: a unidade independente e o "
+                             "cluster, entao suporte concentrado em poucos clusters nao sustenta selecao")
     parser.add_argument("--top-clusters", type=int, default=5)
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -207,7 +229,8 @@ def main(argv: list[str] | None = None) -> int:
         print("FALHOU: o snapshot nao tem linhas de treino.")
         return 2
 
-    report = build_report(snapshot, target=args.min_por_celula, top=args.top_clusters)
+    report = build_report(snapshot, target=args.min_por_celula, top=args.top_clusters,
+                          min_clusters=args.min_clusters_por_celula)
     out_dir = args.out_dir.expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "viabilidade_conjunto_de_selecao.json"
@@ -216,7 +239,8 @@ def main(argv: list[str] | None = None) -> int:
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
     resumo = {key: report[key] for key in
-              ("alvo_por_celula", "validacao_oficial_fold1", "recorte_proposto", "custo_no_treino")}
+              ("alvo_por_celula", "min_clusters_por_celula", "validacao_oficial_fold1", "recorte_proposto",
+               "custo_no_treino")}
     resumo["concentracao_no_treino"] = report["concentracao_no_treino"]
     resumo["saidas"] = report["saidas"]
     print(json.dumps(resumo, ensure_ascii=False, indent=2))

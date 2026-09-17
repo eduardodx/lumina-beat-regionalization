@@ -77,6 +77,30 @@ def test_custo_no_treino_e_reportado_com_o_recorte():
     assert report["custo_no_treino"]["clusters_depois"] == total_clusters - report["recorte_proposto"]["clusters"]
 
 
+def test_recorte_prefere_muitos_clusters_pequenos_a_um_gigante():
+    """A unidade independente e o cluster: 12 mil exemplos em 5 clusters nao sustentam selecao."""
+    gigante = [("cl_gigante", panel, label, 500) for panel in sel.DISCRIMINATION_PANELS for label in (1, 0)]
+    pequenos = [(f"cl_{i}", panel, label, 4)
+                for i in range(30) for panel in sel.DISCRIMINATION_PANELS for label in (1, 0)]
+    report = sel.build_report(_rows(gigante + pequenos), target=20, top=3, min_clusters=5)
+    recorte = report["recorte_proposto"]
+    assert recorte["celulas_nao_atingidas"] == [], recorte
+    assert "cl_gigante" not in report["clusters_reservados"], "o gigante nao deve ser escolhido"
+    for cell, support in recorte["suporte"].items():
+        assert support["clusters"] >= 5, (cell, support)
+    assert recorte["n"] < 1000, recorte["n"]
+
+
+def test_min_clusters_reprova_celula_concentrada_mesmo_com_exemplos_de_sobra():
+    spec = [("cl_1", "missense", 1, 500), ("cl_1", "missense", 0, 500),
+            ("cl_1", "splice", 1, 500), ("cl_1", "splice", 0, 500),
+            ("cl_1", "noncoding", 1, 500), ("cl_1", "noncoding", 0, 500)]
+    report = sel.build_report(_rows(spec), target=10, top=3, min_clusters=3)
+    assert sorted(report["recorte_proposto"]["celulas_nao_atingidas"]) == sorted(
+        [sel.cell_name(p, l) for p in sel.DISCRIMINATION_PANELS for l in (1, 0)]
+    ), report["recorte_proposto"]
+
+
 def test_recorte_e_deterministico():
     spec = [(f"cl_{i}", panel, label, 7)
             for i in range(6) for panel in sel.DISCRIMINATION_PANELS for label in (1, 0)]

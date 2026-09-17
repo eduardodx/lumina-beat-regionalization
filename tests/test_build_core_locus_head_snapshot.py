@@ -125,6 +125,39 @@ def test_regra_ampla_sem_lista_fica_registrada_como_pendencia():
     assert ampla["status"] == "nao_aplicada", ampla
 
 
+def test_exclusao_por_janela_tira_do_treino_o_que_cai_na_janela_do_membro():
+    """Alternativa barata ao cluster inteiro: zera a exposicao de janela sem varrer o locus todo."""
+    extra = [_row("var:membro", 2, 1, tier="consensus", cluster="cl_m"),
+             _row("var:perto", 3, 1, tier="consensus", cluster="cl_outro"),
+             _row("var:longe", 3, 0, tier="consensus", cluster="cl_outro"),
+             _row("var:val_perto", 1, 1, tier="gold", cluster="cl_val")]
+    frame = _frame(extra)
+    frame.loc[frame["variant_id"] == "var:membro", "pos_1based"] = 100_000
+    frame.loc[frame["variant_id"] == "var:perto", "pos_1based"] = 101_000
+    frame.loc[frame["variant_id"] == "var:longe", "pos_1based"] = 500_000
+    frame.loc[frame["variant_id"] == "var:val_perto", "pos_1based"] = 100_500
+
+    membros = {"var:membro"}
+    posicoes = g2.sorted_positions(frame[frame["variant_id"].isin(membros)])
+    splits, steps = g2.apply_exclusions(
+        _splits(frame), study_variants=membros, study_clusters=set(), broad_br=None, reserve_chr8=False,
+        cluster_policy=g2.CLUSTER_NONE, member_positions=posicoes, window_bp=2048,
+    )
+    treino = set(splits["train"]["variant_id"])
+    assert "var:perto" not in treino, "o que cai na janela do membro sai do treino"
+    assert "var:longe" in treino, "fora da janela nao sai"
+    assert "var:val_perto" in set(splits["validation"]["variant_id"]), "a exclusao e so no treino"
+    passo = [s for s in steps if s["exclusao"] == g2.EXCLUSION_WINDOW][0]
+    assert passo["removidos"]["train"]["n"] == 1 and passo["radius_bp"] == 2048, passo
+
+
+def test_exclusao_por_janela_desligada_por_padrao():
+    _, steps = g2.apply_exclusions(_splits(), study_variants=set(), study_clusters=set(),
+                                   broad_br=None, reserve_chr8=False)
+    passo = [s for s in steps if s["exclusao"] == g2.EXCLUSION_WINDOW][0]
+    assert passo["status"] == "nao_aplicada", passo
+
+
 def test_chr8_reservado_por_padrao_e_desligavel():
     extra = [_row("var:chr8", 2, 1, tier="consensus", chrom="chr8")]
     reservado, _ = g2.apply_exclusions(_splits(_frame(extra)), study_variants=set(), study_clusters=set(),

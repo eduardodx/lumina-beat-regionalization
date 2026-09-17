@@ -96,6 +96,7 @@ EXCLUSION_STUDY_MEMBERS = "membros_dos_estudos"
 EXCLUSION_STUDY_CLUSTERS = "clusters_dos_membros"
 EXCLUSION_BROAD_BR = "regra_ampla_brasileira"
 EXCLUSION_CHR8 = "chr8_reservado"
+EXCLUSION_WINDOW = "janela_dos_membros"
 
 # Politica de exclusao dos VIZINHOS DE CLUSTER dos membros (os membros saem sempre, dos tres recortes).
 # Medido em 16/09 no release real: os golds da validacao vivem em 38 clusters e do teste em 31, e o
@@ -157,6 +158,29 @@ def role_counts(rows: pd.DataFrame) -> dict[str, int]:
 # ----------------------------------------------------------------------------------------------------- exclusoes
 
 
+def within_bp_mask(rows: pd.DataFrame, positions_by_chrom: dict[str, Any], radius_bp: int):
+    """True para as linhas que estao a ate `radius_bp` de alguma posicao de referencia, no mesmo cromossomo."""
+    import numpy as np
+
+    flags = []
+    for chrom, pos in zip(rows["chrom"], rows["pos_1based"]):
+        arr = positions_by_chrom.get(str(chrom))
+        if arr is None or not len(arr):
+            flags.append(False)
+            continue
+        lo = int(np.searchsorted(arr, pos - radius_bp, side="left"))
+        hi = int(np.searchsorted(arr, pos + radius_bp, side="right"))
+        flags.append(hi > lo)
+    return pd.Series(flags, index=rows.index)
+
+
+def sorted_positions(frame: pd.DataFrame) -> dict[str, Any]:
+    import numpy as np
+
+    return {str(chrom): np.sort(group["pos_1based"].to_numpy(dtype="int64"))
+            for chrom, group in frame.groupby("chrom")}
+
+
 def dropped_counts(rows: pd.DataFrame) -> dict[str, int]:
     labels = rows["binary_label"].astype("Int64")
     return {"n": int(len(rows)), "P": int((labels == 1).sum()), "B": int((labels == 0).sum())}
@@ -170,6 +194,8 @@ def apply_exclusions(
     broad_br: set[str] | None,
     reserve_chr8: bool,
     cluster_policy: str = CLUSTER_ALL,
+    member_positions: dict[str, Any] | None = None,
+    window_bp: int = 0,
 ) -> tuple[dict[str, pd.DataFrame], list[dict[str, Any]]]:
     """Aplica as exclusoes em ordem, medindo o custo incremental de cada uma em cada recorte.
 
@@ -211,6 +237,15 @@ def apply_exclusions(
     step(EXCLUSION_STUDY_CLUSTERS, lambda rows: ~rows["overlap_cluster_id"].isin(study_clusters),
          roles=CLUSTER_POLICY_SCOPE[cluster_policy],
          extra={"politica": cluster_policy, "custo_potencial_se_todos": potential})
+
+    # Alternativa mais barata que o cluster inteiro: tirar do TREINO o que cairia dentro da janela de leitura de
+    # algum membro. Zera a exposicao de janela por construcao -- e com ela a assimetria caso x controle.
+    if window_bp > 0 and member_positions is not None:
+        step(EXCLUSION_WINDOW, lambda rows: ~within_bp_mask(rows, member_positions, window_bp),
+             roles=(ROLE_TRAIN,), extra={"radius_bp": window_bp})
+    else:
+        steps.append({"exclusao": EXCLUSION_WINDOW, "status": "nao_aplicada",
+                      "motivo": "--window-exclusion-bp 0 (desligado)"})
     if broad_br is not None:
         step(EXCLUSION_BROAD_BR, lambda rows: ~rows["variant_id"].isin(broad_br))
     else:
@@ -417,6 +452,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cluster-exclusion", choices=CLUSTER_POLICIES, default=CLUSTER_ALL,
                         help="vizinhos de cluster dos membros dos estudos: excluir em todos os recortes "
                              "(padrao), so no treino, ou em nenhum. Os MEMBROS saem sempre dos tres.")
+    parser.add_argument("--window-exclusion-bp", type=int, default=0,
+                        help="tira do TREINO as variantes a ate N bp de algum membro dos estudos (0 = desligado). "
+                             "2048 = metade da janela de 4.096 bp, o que zera a exposicao de janela")
     parser.add_argument("--no-reserve-chr8", action="store_true", help="nao excluir o chr8 (decisao E do Eduardo)")
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -458,10 +496,12 @@ def main(argv: list[str] | None = None) -> int:
 
     splits = split_core(frame, run_id=args.run_id, k=args.k)
     before = {role: role_counts(rows) for role, rows in splits.items()}
+    member_positions = sorted_positions(frame[frame["variant_id"].isin(study_variants)])
     splits, steps = apply_exclusions(
         splits, study_variants=study_variants, study_clusters=study_clusters,
         broad_br=broad_br, reserve_chr8=not args.no_reserve_chr8,
         cluster_policy=args.cluster_exclusion,
+        member_positions=member_positions, window_bp=args.window_exclusion_bp,
     )
 
     problems = check_no_study_leakage(splits, study_variants, study_clusters,
@@ -500,6 +540,12 @@ def main(argv: list[str] | None = None) -> int:
             ROLE_VALIDATION: "extracao, hiperparametros, early stopping, Platt e limiar",
             ROLE_TEST: "avalia so depois de congelado; nao seleciona nada",
         },
+        "exclusao_por_janela": {
+            "radius_bp": args.window_exclusion_bp,
+            "aplicada_em": [ROLE_TRAIN] if args.window_exclusion_bp > 0 else [],
+            "nota": "zera a exposicao de janela dos membros por construcao; alternativa mais barata que excluir "
+                    "o cluster inteiro",
+        },
         "politica_de_cluster": {
             "escolhida": args.cluster_exclusion,
             "recortes_atingidos": list(CLUSTER_POLICY_SCOPE[args.cluster_exclusion]),
@@ -514,7 +560,8 @@ def main(argv: list[str] | None = None) -> int:
         },
         "por_tier": {role: counts_by(rows, ["label_tier"]) for role, rows in splits.items()},
         "identidade": {
-            "snapshot_id": f"core_locus_run{args.run_id}_menos_estudos_br_cluster_{args.cluster_exclusion}",
+            "snapshot_id": (f"core_locus_run{args.run_id}_menos_estudos_br_cluster_{args.cluster_exclusion}"
+                            f"_janela{args.window_exclusion_bp}"),
             "receita_dos_hashes": {
                 "composicao": "sha256 das linhas 'variant_id\\trole' ordenadas -- identifica quem esta em cada "
                               "recorte, NAO o conteudo (trocar um rotulo nao muda este hash)",
@@ -560,6 +607,7 @@ def main(argv: list[str] | None = None) -> int:
         "antes": before,
         "depois": report["depois_das_exclusoes"],
         "politica_de_cluster": args.cluster_exclusion,
+        "exclusao_por_janela_bp": args.window_exclusion_bp,
         "hash_composicao": report["identidade"]["hash_composicao"],
         "hash_conteudo": report["identidade"]["hash_conteudo"],
         "pronto_para_congelar": pronto,
