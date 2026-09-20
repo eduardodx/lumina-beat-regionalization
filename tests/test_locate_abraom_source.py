@@ -82,28 +82,19 @@ def test_arvore_monta_uri_por_path_declarado():
     with _tmp.TemporaryDirectory() as tmp:
         raiz = Path(tmp)
         (raiz / "config").mkdir()
-        (raiz / "config" / "sources.yaml").write_text(
-            "sources:
-"
-            "  abraom_sabe1171:
-"
-            "    path: abraom/SABE1171.Abraom.clean.tsv
-"
-            "    sha256: " + "a" * 64 + "
-"
-            "  clinvar_submission_summary_2026-06:
-"
-            "    path: clinvar/2026-06/submission_summary_2026-06.txt.gz
-"
-            "    sha256: " + "b" * 64 + "
-"
-            "  sem_hash:
-"
-            "    path: x/y.tsv
-"
-            "    sha256: pending
-",
-            encoding="utf-8")
+        conteudo_yaml = (
+            "sources:\n"
+            "  abraom_sabe1171:\n"
+            "    path: abraom/SABE1171.Abraom.clean.tsv\n"
+            f"    sha256: {'a' * 64}\n"
+            "  clinvar_submission_summary_2026-06:\n"
+            "    path: clinvar/2026-06/submission_summary_2026-06.txt.gz\n"
+            f"    sha256: {'b' * 64}\n"
+            "  sem_hash:\n"
+            "    path: x/y.tsv\n"
+            "    sha256: pending\n"
+        )
+        (raiz / "config" / "sources.yaml").write_text(conteudo_yaml, encoding="utf-8")
         fontes = loc.todas_as_fontes(raiz)
         assert set(fontes) == {"abraom_sabe1171", "clinvar_submission_summary_2026-06"}, sorted(fontes)
         assert "sem_hash" not in fontes, "fonte sem sha256 fixado nao entra na conferencia"
