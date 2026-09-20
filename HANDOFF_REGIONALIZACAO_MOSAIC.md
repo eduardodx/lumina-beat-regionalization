@@ -340,6 +340,10 @@ Só 1 das 19 fontes do source-lock mora nessa raiz: é o bucket do arquivo restr
 janela, orientação, configuração e ordem das features) e o **smoke real no R03** — só a cabeça treinável, cabeça
 muda após um passo, backbone bit a bit idêntico, mesma entrada → mesma representação.
 
+**Provado em 20/09:** a construção de janelas do G4 passou ponta a ponta sem GPU — 20.000 janelas **deslocadas**
+(3.941 índices focais distintos entre 64 e 4.031, `window_start` e spans conferidos) contra o hg38, zero descartes.
+O auditor declara `janela_auditada.layout`; se ele disser `centrado` num plano, a auditoria não vale.
+
 **G4 (adapter):** o **pool global do gnomAD** (48 VCFs, >500 GB: varredura completa custa horas, amostragem por
 `.tbi` custa minutos com viés declarado), o **peso da loss** entre posições de variante e de referência, e o
 treinador MLM em si.
@@ -351,6 +355,12 @@ treinador MLM em si.
    diferença seja qual variante é aplicada. **Sem isso, o adapter pode separar as fontes pela região.**
 2. **Decisão E** do Eduardo: chr8 reservado (custa 61.737 variantes do pool) e relato BRCA/TP53.
 3. **Qual campo de AF** do gnomAD joint conta como "AF global" — ele tem dezenas, e a escolha tem de ser declarada.
+   Antes disso: **o que "global" significa** (AF agregada × amostragem por grupos ancestrais) é decisão de desenho.
+6. **Assimetria de presença no ABraOM no estudo clínico** (casos 10,4% × controles 2,3%, 4,6×): parte de um ganho
+   pode vir de "estar no ABraOM" e não de "participação brasileira". Mitigação proposta: relatar a interação também
+   no complemento (2.795 × 3.045, ambos ausentes do ABraOM).
+7. **Procedência do `SABE1171.Abraom.clean.tsv`**: 448 variantes/Mb e 5,9× de variação entre cromossomos indicam
+   subconjunto filtrado, não callset completo. Perguntar o critério ao Eduardo.
 4. **Peso da loss** nas posições de variante × referência.
 
 ### Fixado nesta fase (não reabrir)

@@ -367,12 +367,25 @@ A ordem correta das decisões é esta, e ela importa:
 
 Por isso o balanceamento por cromossomo fica como **proposta**, não requisito, até o gnomAD ser inspecionado.
 
+**Medido em 20/09: a concentração é do arquivo, não da amostragem.** No pool, a densidade por megabase varia
+**5,9×** entre o chr16 (2,75× a média) e o chr14 (0,46×); o chr16 tem 2,9× a densidade do chr1, que é quase três
+vezes maior. A estratificação por AF é geograficamente neutra — a maior diferença entre a fração de um cromossomo
+no pool e no plano amostrado é de 0,0029.
+
+E há um sinal mais forte sobre a procedência: o pool tem **448 variantes por megabase**, ou uma a cada ~2,2 kb.
+Um callset WGS de 1.171 indivíduos produz densidade uma a duas ordens de grandeza maior. O arquivo é, portanto, um
+**subconjunto filtrado**, e qual filtro foi aplicado decide o que "a metade brasileira" da mistura representa.
+`SABE1171.Abraom.clean.tsv` é `academic_request` e o `clean` no nome sugere pipeline próprio: **perguntar ao
+Eduardo a procedência exata e o critério de filtragem** antes de fechar a receita do lado global.
+
 **Pool de amostragem do ABraOM [FIXADO em 20/09; contagem final pendente].** O arquivo traz o cromossomo como `1`
 enquanto o snapshot e o FASTA usam `chr1`: juntar sem normalizar daria **zero sobreposição em silêncio**, que é o
 pior erro possível aqui porque se parece com "nenhum vazamento". `scripts/audit_abraom_source.py` normaliza os dois
 lados e descarta, em ordem declarada: AF inválida (NaN, negativa, > 1), AF nas extremidades, não-SNV, fora
 de chr1–chr22, **membro dos estudos**, **alelo do conjunto de seleção ou da validação e teste do core**, e chr8 se
 reservado.
+
+Medido em 20/09: **1.812 com `AF = 0` e 514 com `AF = 1`** (total 2.326, que é o motivo agregado).
 
 **As duas extremidades de AF não são a mesma coisa, e nenhuma delas é "AF inválida".** `AF = 0` significa que o ALT
 não foi observado na amostra — não há variação populacional ali para o adapter aprender. `AF = 1` é uma
@@ -397,7 +410,36 @@ ser classificadas como chr8 ou membro de estudo. Comparar dois relatórios motiv
 
 **Os 2.282 membros removidos não demonstram, sozinhos, qual estudo estava presente.** Subtrair totais não é
 composição: o `br_population_observed` é definido como "gold presente no ABraOM", então a afirmação que interessa é
-a **interseção por estudo e papel**, que o relatório passou a publicar em `membros_encontrados_por_estudo`.
+a **interseção por estudo e papel**, publicada em `membros_encontrados_por_estudo`. Medida em 20/09:
+
+| estudo | papel | membros | no ABraOM |
+|---|---|---:|---:|
+| `br_population_observed` | case + unmatched_case | 1.889 | **1.889 (100%)** |
+| `br_population_observed` | control | 751 | **0 (0%)** |
+| `br_clinical_evidence` | case (+1 unmatched) | 3.119 | 324 (10,4%) |
+| `br_clinical_evidence` | control | 3.116 | 71 (2,3%) |
+
+O estudo populacional sai **exato nos dois extremos**: todo caso presente, nenhum controle. Isso é a definição dele,
+e serve de conferência forte da cadeia inteira — normalização de cromossomo, construção da chave, importação do
+membership e leitura do ABraOM. Qualquer defeito em qualquer um desses passos apareceria como ruído aqui.
+
+A soma das interseções é 2.284, e o motivo `membro_de_estudo` conta 2.282: **2 membros foram pegos por uma regra
+anterior** (AF nas extremidades, não-SNV ou fora dos autossomos), porque as regras são sequenciais. Os dois números
+respondem perguntas diferentes e ambos estão certos.
+
+**[ABERTO — achado de 20/09] Os casos do estudo clínico estão 4,6× mais presentes no ABraOM que seus controles**
+(10,4% × 2,3%). O pareamento do Mosaic é por `rótulo | painel | bin de AF do gnomAD`, e **não** inclui presença no
+ABraOM: a assimetria sobrevive ao pareamento. Isso importa porque a interação mede (ganho nos casos) − (ganho nos
+controles), e o MR é justamente o braço adaptado ao ABraOM. Parte de um ganho positivo pode ser atribuível a
+**estar no ABraOM**, não a **ter participação brasileira** — construtos correlacionados, não iguais. Os alelos dos
+membros saem do pool do adapter, então não é memorização do alelo; é o contexto deles estar super-representado no
+treino.
+
+O protocolo do Mosaic já pede relatar o subconjunto `present_abraom` do estudo clínico — agora sabe-se o tamanho:
+**324 casos e 71 controles**. Proposta a acrescentar: relatar também o **complemento** (2.795 casos × 3.045
+controles, todos ausentes do ABraOM). Se a interação sobreviver no complemento, ela não é explicada por presença no
+ABraOM; se desaparecer, o achado é sobre o banco, não sobre participação. Custa uma linha de relatório e é o teste
+de falsificação mais barato que existe nesta campanha.
 
 O espectro de AF observado é **compatível com passos de 1/2342** — o mínimo do pool, 0,000427, corresponde a um
 alelo em 1.171 genomas diploides. Isso **não demonstra denominador constante**: o arquivo não traz AC/AN, os
