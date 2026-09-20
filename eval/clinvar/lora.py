@@ -46,6 +46,7 @@ class LoRALinear(nn.Module):
         rank: int,
         alpha: float,
         dropout: float,
+        use_rslora: bool = False,
     ) -> None:
         super().__init__()
         self.base = base
@@ -55,7 +56,11 @@ class LoRALinear(nn.Module):
 
         in_features = base.in_features
         out_features = base.out_features
-        self.scaling = alpha / rank
+        # rsLoRA (rank-stabilized): escala por alpha/sqrt(r) em vez de alpha/r. Com alpha/r, subir o rank
+        # encolhe a contribuicao efetiva de cada direcao e o ganho satura; com sqrt(r) o efeito por direcao
+        # fica estavel. Default desligado para nao mudar em silencio o comportamento das execucoes antigas.
+        self.use_rslora = use_rslora
+        self.scaling = alpha / (rank ** 0.5 if use_rslora else rank)
         param_kwargs = {
             "device": base.weight.device,
             "dtype": base.weight.dtype,
@@ -99,6 +104,7 @@ class LoRASummary:
     dropout: float
     module_names: tuple[str, ...]
     total_params: int
+    use_rslora: bool = False
 
     @property
     def module_count(self) -> int:
@@ -114,6 +120,7 @@ def apply_lora(
     rank: int = 4,
     alpha: float = 8.0,
     dropout: float = 0.1,
+    use_rslora: bool = False,
 ) -> LoRASummary:
     """Replace eligible nn.Linear layers with LoRA-wrapped versions.
 
@@ -129,7 +136,8 @@ def apply_lora(
         # ATENCAO: isto NAO congela o backbone. Quem congela e `freeze_backbone=True` (o default e False), e
         # dropout so some com `freeze_backbone_in_eval`. Ver `assert_only_head_trains`.
         log.info("LoRA desativado (rank=0): nenhum Linear embrulhado. O congelamento do backbone e separado.")
-        return LoRASummary(rank=rank, alpha=alpha, dropout=dropout, module_names=(), total_params=0)
+        return LoRASummary(rank=rank, alpha=alpha, dropout=dropout, module_names=(), total_params=0,
+                           use_rslora=use_rslora)
 
     targets: list[str] = []
     for name, module in backbone.named_modules():
@@ -142,17 +150,18 @@ def apply_lora(
         for part in parts[:-1]:
             parent = getattr(parent, part)
         original = getattr(parent, parts[-1])
-        wrapped = LoRALinear(original, rank=rank, alpha=alpha, dropout=dropout)
+        wrapped = LoRALinear(original, rank=rank, alpha=alpha, dropout=dropout, use_rslora=use_rslora)
         setattr(parent, parts[-1], wrapped)
 
     total = sum(
         p.numel() for n, p in backbone.named_parameters()
         if "lora_" in n and p.requires_grad
     )
-    log.info("LoRA applied to %d modules (%d trainable params, rank=%d)", len(targets), total, rank)
+    log.info("LoRA applied to %d modules (%d trainable params, rank=%d, rslora=%s)",
+             len(targets), total, rank, use_rslora)
     return LoRASummary(
         rank=rank, alpha=alpha, dropout=dropout,
-        module_names=tuple(targets), total_params=total,
+        module_names=tuple(targets), total_params=total, use_rslora=use_rslora,
     )
 
 

@@ -449,6 +449,7 @@ def _compute_and_save_final_metrics(
             "lora_rank": config.lora_rank,
             "lora_alpha": config.lora_alpha,
             "lora_dropout": config.lora_dropout,
+            "lora_use_rslora": config.lora_use_rslora,
             "lr_backbone": config.lr_backbone,
             "lr_head": config.lr_head,
             "freeze_backbone_steps": config.freeze_backbone_steps,
@@ -689,6 +690,7 @@ def run_finetune(config: FineTuneConfig) -> dict[str, Any]:
     lora_summary = apply_lora(
         model.backbone, rank=config.lora_rank,
         alpha=config.lora_alpha, dropout=config.lora_dropout,
+        use_rslora=config.lora_use_rslora,
     )
     if not config.freeze_backbone:  # v10/v11: destrava LayerNorms (lora_plus_norm). §4.1 mantem congelado.
         enable_layernorm_training(model.backbone)

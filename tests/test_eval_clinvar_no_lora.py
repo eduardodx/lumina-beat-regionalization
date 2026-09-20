@@ -136,6 +136,34 @@ def test_com_backbone_congelado_e_rank_zero_so_a_cabeca_recebe_gradiente():
     assert all(torch.equal(a, b) for a, b in zip(antes, backbone.parameters()))
 
 
+def test_rslora_muda_so_a_escala_e_fica_no_sumario():
+    """rsLoRA: alpha/sqrt(r) no lugar de alpha/r. Sugestao do Eduardo (20/09), default desligado."""
+    padrao = apply_lora(_TinyBackbone(), rank=16, alpha=8.0, dropout=0.0)
+    estabilizado = apply_lora(_TinyBackbone(), rank=16, alpha=8.0, dropout=0.0, use_rslora=True)
+    assert padrao.use_rslora is False and estabilizado.use_rslora is True
+    assert padrao.module_names == estabilizado.module_names, "a superficie embrulhada nao muda"
+
+    def escala(backbone):
+        return next(m.scaling for m in backbone.modules() if isinstance(m, LoRALinear))
+
+    b_padrao, b_rs = _TinyBackbone(), _TinyBackbone()
+    apply_lora(b_padrao, rank=16, alpha=8.0, dropout=0.0)
+    apply_lora(b_rs, rank=16, alpha=8.0, dropout=0.0, use_rslora=True)
+    assert escala(b_padrao) == 8.0 / 16
+    assert escala(b_rs) == 8.0 / (16 ** 0.5)
+
+
+def test_rslora_nao_muda_a_saida_inicial():
+    """lora_b comeca em zero, entao a escala nao pode alterar a saida antes de treinar."""
+    x = torch.randn(3, 4)
+    b_padrao, b_rs = _TinyBackbone(), _TinyBackbone()
+    b_rs.load_state_dict(b_padrao.state_dict())
+    apply_lora(b_padrao, rank=8, alpha=8.0, dropout=0.0)
+    apply_lora(b_rs, rank=8, alpha=8.0, dropout=0.0, use_rslora=True)
+    with torch.no_grad():
+        assert torch.allclose(b_padrao(x), b_rs(x))
+
+
 def test_rank_positivo_continua_embrulhando():
     backbone = _TinyBackbone()
     summary = apply_lora(backbone, rank=2, alpha=8.0, dropout=0.0)

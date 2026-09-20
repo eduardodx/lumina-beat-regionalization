@@ -78,6 +78,9 @@ class FineTuneConfig:
     lora_rank: int = 4
     lora_alpha: float = 8.0
     lora_dropout: float = 0.1
+    # rsLoRA: escala alpha/sqrt(r) no lugar de alpha/r (sugestao do Eduardo, 20/09). Default desligado para
+    # preservar as execucoes antigas; quando ligado, entra no manifesto como parte da receita do adapter.
+    lora_use_rslora: bool = False
 
     # -- Optimizer --
     lr_backbone: float = 5e-6
