@@ -44,7 +44,11 @@ def test_janela_desliza_em_torno_da_variante():
     plano = gen.montar_plano(amostras, fonte=gen.FONTE_ABRAOM, rng=rng, window_bp=4096, margem=64,
                              span_min=3, span_max=10, spans_de_referencia=1)
     for linha in plano.itertuples():
-        assert linha.window_start + linha.focal_index == linha.pos - 1
+        assert linha.window_start + linha.focal_index == linha.pos_1based - 1
+    # O plano fala o vocabulario da campanha, senao o auditor de janelas nao o consome.
+    for coluna in ("variant_id", "chrom", "pos_1based", "ref", "alt"):
+        assert coluna in plano.columns, coluna
+    assert plano["variant_id"].is_unique
 
 
 def test_focal_respeita_a_margem_do_contexto_local():

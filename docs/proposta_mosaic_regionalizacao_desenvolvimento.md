@@ -341,6 +341,23 @@ lista de exclusões aplicadas.
 - ABraOM: o snapshot do source-lock, conferido por sha256 em 20/09. gnomAD v4.1 por grupo para a parte global da
   mistura; o `af_gnomad` antigo, condicional ao índice ABraOM, não serve.
 
+**O lado global é de outra ordem de grandeza [medido em 20/09].** O gnomAD v4.1 joint em
+`s3://ai4bio-lumina/data/external/gnomad-joint-v4.1/` são 48 objetos, um VCF por cromossomo com o seu `.tbi`: só o
+chr1 tem **72 GB**, e o conjunto passa de meio terabyte. Ler tudo como se fez com o TSV de 33 MB do ABraOM não é
+opção. Duas estratégias, com custos diferentes:
+
+| Estratégia | Custo | O que ela introduz |
+|---|---|---|
+| varredura completa com subamostragem por bin | uma passada por cromossomo (horas de I/O) | nenhum viés adicional |
+| amostragem por região via índice `.tbi` | minutos, lê ~1% | o viés da escolha das regiões, que precisa ser declarado |
+
+**[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
+o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
+as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
+"brasileiro" pela região em vez de pela estatística populacional. Proposta: amostrar o pool global **casado à
+distribuição por cromossomo do pool do ABraOM**, para que a única diferença sistemática seja qual variante é
+aplicada. Decidir antes de gerar o plano da campanha.
+
 **Pool de amostragem do ABraOM [FIXADO em 20/09; contagem final pendente].** O arquivo traz o cromossomo como `1`
 enquanto o snapshot e o FASTA usam `chr1`: juntar sem normalizar daria **zero sobreposição em silêncio**, que é o
 pior erro possível aqui porque se parece com "nenhum vazamento". `scripts/audit_abraom_source.py` normaliza os dois

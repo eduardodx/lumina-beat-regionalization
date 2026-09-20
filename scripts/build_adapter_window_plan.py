@@ -137,21 +137,25 @@ def montar_plano(
     span_min: int, span_max: int, spans_de_referencia: int,
 ) -> pd.DataFrame:
     if amostras.empty:
-        return pd.DataFrame(columns=["chrom", "pos", "ref", "alt", "af", "fonte", "af_bin",
-                                     "focal_index", "window_start", "spans"])
+        return pd.DataFrame(columns=["variant_id", "chrom", "pos_1based", "ref", "alt", "af", "fonte",
+                                     "af_bin", "focal_index", "window_start", "spans"])
     focais = posicoes_focais(rng, quantidade=len(amostras), window_bp=window_bp, margem=margem)
     linhas = []
     for (_, variante), focal in zip(amostras.iterrows(), focais):
         spans = spans_da_janela(rng, focal_index=int(focal), window_bp=window_bp, span_min=span_min,
                                 span_max=span_max, spans_de_referencia=spans_de_referencia, margem=margem)
+        chrom, pos = variante["chrom"], int(variante["pos"])
+        ref, alt = str(variante["ref"]).upper(), str(variante["alt"]).upper()
         linhas.append({
-            "chrom": variante["chrom"], "pos": int(variante["pos"]),
-            "ref": variante["ref"], "alt": variante["alt"],
+            # Vocabulario da campanha: `variant_id` e `pos_1based`, como no snapshot e nos estudos. O ABraOM nao
+            # tem variant_id do Mosaic, entao a chave e a coordenada normalizada -- estavel e comparavel.
+            "variant_id": f"{chrom}:{pos}:{ref}:{alt}",
+            "chrom": chrom, "pos_1based": pos, "ref": ref, "alt": alt,
             "af": float(variante["af_abraom"]), "fonte": fonte,
             "af_bin": variante.get("af_bin"),
             "focal_index": int(focal),
             # A janela e deslocada em torno da variante: a coordenada genomica dela nao muda.
-            "window_start": int(variante["pos"]) - 1 - int(focal),
+            "window_start": pos - 1 - int(focal),
             "spans": json.dumps(spans),
         })
     return pd.DataFrame(linhas)
