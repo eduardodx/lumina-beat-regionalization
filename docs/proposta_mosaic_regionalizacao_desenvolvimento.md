@@ -372,6 +372,24 @@ por bin** ao longo de todas as regiões (senão encher o bin comum exigiria guar
 O relatório publica `vistos_por_bin` e `fracao_amostrada_por_bin`: a fração amostrada de cada bin **é** o viés da
 receita, declarado em número.
 
+**Segundo piloto (200 regiões, 4 Mb lidos, `--por-bin 3000`) — a receita está dimensionada.** Cinco dos sete bins
+saturaram a capacidade; os dois que não são `(0,05; 0,1]` com 1.922 e `(0,5; 1,0]` com 2.010. **Isso não é
+defeito de amostragem: é o espectro de frequências em U.** Variantes em frequência intermediária são as mais
+raras, e o excesso perto de 1,0 aparece porque `AF_joint` é do alelo ALT — em muitos sítios o alelo do genoma de
+referência é o minoritário. O bin escasso é o que dimensiona a rodada: **~9,6 por região** em `(0,05; 0,1]`.
+
+Com casamento por cromossomo, a maior diferença de geografia contra o ABraOM caiu para **−0,0123** (chr16); com
+40 regiões era −0,0356. O resíduo é arredondamento da alocação, e diminui com mais regiões.
+
+As exclusões dispararam em dado real, em volume pequeno mas não nulo: 1 membro de estudo, 2 alelos de avaliação,
+4 com AF nas extremidades — a maquinaria está ligada, não só compilando.
+
+**O custo do piso, relido corretamente.** Sobre o pool estratificado ele é 15,65%, mas esse número engana: o corte
+cai **inteiro dentro de um único bin**, e ali remove **2.958 de 3.000 (98,6%)**. Ou seja, aplicar o piso não
+"encolhe 16% do pool" — ele **esvazia o bin mais raro**, porque a faixa que sobra (4,3 × 10⁻⁴ a 10⁻³) é uma fatia
+estreita do espectro do gnomAD. O relatório passou a publicar `fracao_dentro_do_bin_atingido` para que a leitura
+não dependa de quem souber dividir.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de

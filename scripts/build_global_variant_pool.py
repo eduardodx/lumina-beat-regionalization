@@ -331,11 +331,18 @@ def custo_do_piso(frame: pd.DataFrame, af_min: float) -> dict[str, Any]:
     if frame.empty:
         return {"piso": af_min, "removeria": 0}
     abaixo = frame[frame[COLUNA_AF] < af_min]
+    por_bin_abaixo = distribuicao_af(abaixo[COLUNA_AF]) if len(abaixo) else {}
+    por_bin_total = distribuicao_af(frame[COLUNA_AF])
+    # A fracao do POOL subestima o efeito: o piso cai todo dentro de um bin so. Quem decide e a fracao DENTRO
+    # dele -- se ela for ~1, aplicar o piso praticamente esvazia aquele bin e a estratificacao deixa de encher.
+    dentro_do_bin = {nome: round(q / por_bin_total[nome], 4)
+                     for nome, q in por_bin_abaixo.items() if por_bin_total.get(nome)}
     return {
         "piso": af_min,
         "removeria": int(len(abaixo)),
         "fracao": round(len(abaixo) / len(frame), 4),
-        "por_bin": distribuicao_af(abaixo[COLUNA_AF]) if len(abaixo) else {},
+        "fracao_dentro_do_bin_atingido": dentro_do_bin,
+        "por_bin": por_bin_abaixo,
         "por_cromossomo": {str(c): int(n) for c, n in abaixo["chrom"].value_counts().sort_index().items()},
         "o_que_nao_faz": ("aproxima o intervalo de frequencias observadas; nao iguala distribuicoes, "
                           "ancestralidades, cobertura nem processo de descoberta"),
@@ -498,7 +505,8 @@ def main(argv: list[str] | None = None) -> int:
     (out_dir / "pool_global.json").write_text(
         json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps({k: relatorio[k] for k in
-                      ("receita", "motivos_de_leitura", "por_motivo_de_exclusao", "pool",
+                      ("receita", "motivos_de_leitura", "vistos_por_bin", "fracao_amostrada_por_bin",
+                       "por_motivo_de_exclusao", "pool",
                        "custo_de_casar_o_piso", "geografia_contra_o_abraom", "pronto_para_amostrar",
                        "pendencias", "saidas")}, ensure_ascii=False, indent=2))
     return 0 if pode_publicar else 2
