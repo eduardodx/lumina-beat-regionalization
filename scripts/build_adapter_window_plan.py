@@ -70,6 +70,19 @@ TOLERANCIA_DA_MISTURA = 0.01
 TIPO_REFERENCIA = "referencia"
 
 
+#: Como cada metade da mistura chama a sua frequencia. Aceitar as duas e o que permite ao mesmo gerador montar
+#: o plano do ABraOM e o do gnomAD sem renomear coluna -- renomear seria a forma mais facil de trocar as fontes.
+COLUNAS_DE_AF = ("af_abraom", "af_gnomad")
+
+
+def coluna_de_af(pool: pd.DataFrame) -> str:
+    """Qual coluna carrega a AF deste pool. Falha alto se nenhuma ou as duas aparecerem."""
+    presentes = [c for c in COLUNAS_DE_AF if c in pool.columns]
+    if len(presentes) != 1:
+        raise ValueError(f"esperava exatamente uma de {COLUNAS_DE_AF}, achei {presentes or list(pool.columns)}")
+    return presentes[0]
+
+
 def rotular_bins(af: pd.Series) -> pd.Series:
     return pd.cut(af, bins=list(AF_BINS), include_lowest=True, right=True).astype(str)
 
@@ -82,7 +95,7 @@ def amostrar_estratificado(pool: pd.DataFrame, *, n: int, rng: np.random.Generat
     if n <= 0:
         return pool.iloc[0:0].copy()
     ordenado = pool.sort_values(["chrom", "pos", "ref", "alt"], kind="mergesort").reset_index(drop=True)
-    ordenado["af_bin"] = rotular_bins(ordenado["af_abraom"])
+    ordenado["af_bin"] = rotular_bins(ordenado[coluna_de_af(ordenado)])
 
     # Do bin mais CURTO para o mais farto: assim o que um bin curto nao consegue entregar sobra para quem tem
     # folga, em vez de se perder. Percorrer na ordem contraria deixaria o total abaixo do pedido.
@@ -143,6 +156,7 @@ def montar_plano(
     if amostras.empty:
         return pd.DataFrame(columns=["variant_id", "chrom", "pos_1based", "ref", "alt", "af", "fonte",
                                      "af_bin", "focal_index", "window_start", "spans"])
+    coluna = coluna_de_af(amostras)
     focais = posicoes_focais(rng, quantidade=len(amostras), window_bp=window_bp, margem=margem)
     linhas = []
     for (_, variante), focal in zip(amostras.iterrows(), focais):
@@ -155,7 +169,7 @@ def montar_plano(
             # tem variant_id do Mosaic, entao a chave e a coordenada normalizada -- estavel e comparavel.
             "variant_id": f"{chrom}:{pos}:{ref}:{alt}",
             "chrom": chrom, "pos_1based": pos, "ref": ref, "alt": alt,
-            "af": float(variante["af_abraom"]), "fonte": fonte,
+            "af": float(variante[coluna]), "fonte": fonte,
             "af_bin": variante.get("af_bin"),
             "focal_index": int(focal),
             # A janela e deslocada em torno da variante: a coordenada genomica dela nao muda.

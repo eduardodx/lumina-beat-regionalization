@@ -351,6 +351,12 @@ opção. Duas estratégias, com custos diferentes:
 | varredura completa com subamostragem por bin | uma passada por cromossomo (horas de I/O) | nenhum viés adicional |
 | amostragem por região via índice `.tbi` | minutos, lê ~1% | o viés da escolha das regiões, que precisa ser declarado |
 
+**Escolhida a amostragem por região**, por custo. O `copy_local: false` do `sources.yaml` proíbe **copiar** o VCF
+naquele fluxo e o `specs/GNOMAD_S3_READ.md` explica por que o join não faz scan (817 GiB; ausência de alelo é
+`not_found`, não se prova lendo tudo). Nada disso proíbe uma varredura remota para montar pool — é padrão de
+acesso **novo**, que o contrato do lookup não cobre e que entra declarado no manifesto. As regiões são sorteadas
+por semente a partir dos comprimentos dos cromossomos e **nunca a partir dos loci do benchmark**.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
@@ -359,8 +365,18 @@ as duas metades da mistura passam a diferir **também pela localização**, e o 
 A ordem correta das decisões é esta, e ela importa:
 
 1. **Primeiro, o que "global" significa.** Frequência agregada do gnomAD joint, ou amostragem por grupos
-   ancestrais? São desenhos diferentes, com campos diferentes no VCF, e a resposta muda o que se amostra. Só dá
-   para decidir depois de ler o cabeçalho completo e declarar campos, filtros e grupos usados.
+   ancestrais? São desenhos diferentes, com campos diferentes no VCF, e a resposta muda o que se amostra.
+
+   **[PROPOSTO] Usar `INFO/AF_joint`** — a agregada — também na amostragem do treino. O fundamento é coerência: é
+   o campo que alimenta `gnomad_v4_af` e, por ele, o `gnomad_af_bin` que pareia caso e controle nos dois estudos
+   brasileiros (`src/mosaic/annotations/derived.py`, `specs/GNOMAD_S3_READ.md`). Com outro campo, a campanha teria
+   duas noções de "AF global": uma no pareamento da avaliação, outra no treino do adapter.
+
+   **Mas isto é proposta nossa, não decisão herdada.** O Mosaic fixou a unidade de comparação da AVALIAÇÃO; ele
+   não determina por qual estatística o adapter deve amostrar. São perguntas distintas — qual AF compara casos e
+   controles, qual AF decide o que o adapter vê, e quanto cada ancestralidade contribui. A terceira continua
+   totalmente em aberto. Do mesmo modo, o `PLAN.md` §13 proíbe usar `AF_amr` como **proxy brasileiro** no release;
+   isso não implica que o treino deva usar só a agregada.
 2. **Depois, a receita de amostragem.** Balancear cromossomos **pode reduzir diferenças espaciais grosseiras entre
    as fontes; não demonstra equivalência dos contextos** — dentro do mesmo cromossomo ainda diferem genes, regiões
    codificantes, cobertura e os filtros de descoberta de cada projeto. É mitigação declarada, não controle.
@@ -373,10 +389,11 @@ vezes maior. A estratificação por AF é geograficamente neutra — a maior dif
 no pool e no plano amostrado é de 0,0029.
 
 E há um sinal mais forte sobre a procedência: o pool tem **448 variantes por megabase**, ou uma a cada ~2,2 kb.
-Um callset WGS de 1.171 indivíduos produz densidade uma a duas ordens de grandeza maior. O arquivo é, portanto, um
-**subconjunto filtrado**, e qual filtro foi aplicado decide o que "a metade brasileira" da mistura representa.
-`SABE1171.Abraom.clean.tsv` é `academic_request` e o `clean` no nome sugere pipeline próprio: **perguntar ao
-Eduardo a procedência exata e o critério de filtragem** antes de fechar a receita do lado global.
+Um callset WGS de 1.171 indivíduos produz densidade uma a duas ordens de grandeza maior. Isso é **incompatível com
+um callset completo** e indica filtragem ou subconjunto — mas **não identifica qual filtro**: densidade e nome de
+arquivo não são procedência. O que a métrica autoriza a dizer é que a pergunta precisa ser feita, não que a
+resposta já se conhece. `SABE1171.Abraom.clean.tsv` é `academic_request`: **perguntar ao Eduardo a procedência e o
+critério** antes de fechar a receita do lado global, porque o filtro decide o que "a metade brasileira" representa.
 
 **Pool de amostragem do ABraOM [FIXADO em 20/09; contagem final pendente].** O arquivo traz o cromossomo como `1`
 enquanto o snapshot e o FASTA usam `chr1`: juntar sem normalizar daria **zero sobreposição em silêncio**, que é o
@@ -436,10 +453,17 @@ membros saem do pool do adapter, então não é memorização do alelo; é o con
 treino.
 
 O protocolo do Mosaic já pede relatar o subconjunto `present_abraom` do estudo clínico — agora sabe-se o tamanho:
-**324 casos e 71 controles**. Proposta a acrescentar: relatar também o **complemento** (2.795 casos × 3.045
-controles, todos ausentes do ABraOM). Se a interação sobreviver no complemento, ela não é explicada por presença no
-ABraOM; se desaparecer, o achado é sobre o banco, não sobre participação. Custa uma linha de relatório e é o teste
-de falsificação mais barato que existe nesta campanha.
+**324 casos e 71 controles**.
+
+**Proposta de sensibilidade [PROPOSTO], corrigida:** restringir aos **pares em que caso E controle estão ambos
+ausentes** do ABraOM, **preservando o pareamento materializado pelo Mosaic**. Comparar "todos os casos ausentes"
+contra "todos os controles ausentes" seria errado: descasa os pares que o release construiu e ainda mistura os
+`unmatched_case`. O tamanho desse subconjunto tem de ser medido pelo `matched_variant_id`, não estimado por
+subtração — 3.116 − 324 − 71 não é o número de pares completos. Relatar tamanho, classes e painéis do que sobra.
+
+E o resultado não conclui sozinho, nos dois sentidos. Se o efeito **sumir** ali, isso não prova que era "sobre o
+banco": o subconjunto tem menos poder e composição diferente. Se **persistir**, não elimina todos os efeitos de
+contexto — só o mais direto. É análise de sensibilidade declarada, não teste decisivo.
 
 O espectro de AF observado é **compatível com passos de 1/2342** — o mínimo do pool, 0,000427, corresponde a um
 alelo em 1.171 genomas diploides. Isso **não demonstra denominador constante**: o arquivo não traz AC/AN, os

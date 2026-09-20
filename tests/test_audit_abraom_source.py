@@ -233,6 +233,38 @@ def test_sem_study_id_a_contagem_por_estudo_e_none():
         assert aud.membros_encontrados_por_estudo(caminho, set()) is None
 
 
+def test_pares_classificados_preservando_o_pareamento():
+    """Comparar "casos ausentes" x "controles ausentes" descasaria os pares; aqui o par e a unidade."""
+    with tempfile.TemporaryDirectory() as tmp:
+        caminho = Path(tmp) / "m.parquet"
+        pd.DataFrame({
+            "variant_id": ["c1", "k1", "c2", "k2", "c3", "k3", "c4"],
+            "study_id": ["br_clinical_evidence"] * 7,
+            "member_role": ["case", "control", "case", "control", "case", "control", "case"],
+            "matched_variant_id": ["k1", "c1", "k2", "c2", "k3", "c3", None],
+            "chrom": ["chr1"] * 7,
+            "pos_1based": [1, 2, 3, 4, 5, 6, 7],
+            "ref": ["A"] * 7, "alt": ["G"] * 7,
+        }).to_parquet(caminho, index=False)
+        # par 1: so o caso no ABraOM; par 2: ambos; par 3: nenhum; c4 sem par.
+        no_abraom = {aud.chave("chr1", 1, "A", "G"), aud.chave("chr1", 3, "A", "G"),
+                     aud.chave("chr1", 4, "A", "G")}
+        contagem = aud.pares_por_presenca_no_abraom(caminho, no_abraom)["br_clinical_evidence"]
+        assert contagem["so_o_caso"] == 1, contagem
+        assert contagem["ambos_presentes"] == 1, contagem
+        assert contagem["ambos_ausentes"] == 1, contagem
+        assert contagem["sem_par"] == 1, contagem
+        assert contagem["pares"] == 4
+
+
+def test_sem_pareamento_a_classificacao_de_pares_e_none():
+    with tempfile.TemporaryDirectory() as tmp:
+        caminho = Path(tmp) / "m.parquet"
+        pd.DataFrame({"chrom": ["chr1"], "pos_1based": [1], "ref": ["A"], "alt": ["G"]}).to_parquet(
+            caminho, index=False)
+        assert aud.pares_por_presenca_no_abraom(caminho, set()) is None
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

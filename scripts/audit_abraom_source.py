@@ -53,6 +53,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.build_core_locus_head_snapshot import ROLE_TEST, ROLE_TRAIN, ROLE_VALIDATION, normalize_chrom
+from scripts.import_mosaic_brazil_studies import ROLE_CASE  # noqa: E402
 from scripts.import_mosaic_brazil_studies import sha256_file  # noqa: E402
 from scripts.locate_abraom_source import expected_source  # noqa: E402
 
@@ -111,8 +112,13 @@ def classificar(
     alelos_de_avaliacao: set[str],
     reservar_chr8: bool,
     manter_af_degenerada: bool = False,
+    coluna_af: str = "af_abraom",
 ) -> pd.Series:
-    """Motivo de cada linha, primeira regra que se aplica. A ordem esta em ORDEM_DOS_MOTIVOS."""
+    """Motivo de cada linha, primeira regra que se aplica. A ordem esta em ORDEM_DOS_MOTIVOS.
+
+    `coluna_af` existe porque o pool global (gnomAD) usa as MESMAS regras com outro nome de coluna: duplicar a
+    logica seria a forma mais facil de as duas metades da mistura divergirem sem ninguem notar.
+    """
     motivos = pd.Series(MOTIVO_OK, index=linhas.index, dtype="object")
     chrom_norm = linhas["chrom"].map(normalize_chrom)
     chaves = pd.Series(
@@ -123,12 +129,12 @@ def classificar(
     def aplicar(mascara: pd.Series, motivo: str) -> None:
         motivos[mascara & (motivos == MOTIVO_OK)] = motivo
 
-    aplicar(linhas["af_abraom"].map(af_invalida), MOTIVO_AF_INVALIDA)
+    aplicar(linhas[coluna_af].map(af_invalida), MOTIVO_AF_INVALIDA)
     if not manter_af_degenerada:
         # So avalia onde o AF ja passou pela checagem de validade; `aplicar` cuida de nao sobrescrever motivo.
         degenerada = pd.Series(
             [motivo == MOTIVO_OK and af_degenerada(valor)
-             for motivo, valor in zip(motivos, linhas["af_abraom"])],
+             for motivo, valor in zip(motivos, linhas[coluna_af])],
             index=linhas.index, dtype=bool)
         aplicar(degenerada, MOTIVO_AF_DEGENERADA)
     aplicar(~pd.Series([e_snv(r, a) for r, a in zip(linhas["ref"], linhas["alt"])], index=linhas.index),
@@ -176,6 +182,50 @@ def membros_encontrados_por_estudo(caminho: Path, chaves: set[str]) -> dict[str,
     for (estudo, papel), linhas in frame.groupby(["study_id", "member_role"], sort=True):
         out.setdefault(str(estudo), {})[str(papel)] = {
             "membros": int(len(linhas)), "no_abraom": int(linhas["_no_abraom"].sum())}
+    return out
+
+
+def pares_por_presenca_no_abraom(caminho: Path, chaves: set[str]) -> dict[str, Any] | None:
+    """Classifica cada PAR caso-controle pela presenca das duas pontas no ABraOM.
+
+    A sensibilidade correta contra a assimetria de presenca (casos 10,4% x controles 2,3% no estudo clinico) e
+    repetir a interacao nos pares em que AS DUAS pontas estao ausentes -- nao comparar "todos os casos ausentes"
+    contra "todos os controles ausentes", que descasa os pares materializados pelo release e ainda mistura os
+    `unmatched_case`. Subtrair totais tambem nao serve: 3.116 - 324 - 71 nao e o numero de pares completos.
+
+    Devolve, por estudo, quantos pares caem em cada combinacao. None se a tabela nao trouxer o pareamento.
+    """
+    frame = pd.read_parquet(caminho)
+    obrigatorias = {"variant_id", "study_id", "member_role", "matched_variant_id"}
+    if not obrigatorias.issubset(frame.columns):
+        return None
+    presenca = {
+        (str(estudo), str(vid)): chave(c, pos, r, a) in chaves
+        for estudo, vid, c, pos, r, a in zip(frame["study_id"], frame["variant_id"], frame["chrom"],
+                                             frame["pos_1based"], frame["ref"], frame["alt"])
+    }
+    out: dict[str, Any] = {}
+    casos = frame[frame["member_role"] == ROLE_CASE]
+    for estudo, linhas in casos.groupby("study_id", sort=True):
+        contagem = {"ambos_ausentes": 0, "so_o_caso": 0, "so_o_controle": 0, "ambos_presentes": 0,
+                    "sem_par": 0}
+        for vid, par in zip(linhas["variant_id"], linhas["matched_variant_id"]):
+            chave_caso = (str(estudo), str(vid))
+            chave_par = (str(estudo), str(par))
+            if par is None or pd.isna(par) or chave_par not in presenca:
+                contagem["sem_par"] += 1
+                continue
+            no_caso, no_controle = presenca[chave_caso], presenca[chave_par]
+            if no_caso and no_controle:
+                contagem["ambos_presentes"] += 1
+            elif no_caso:
+                contagem["so_o_caso"] += 1
+            elif no_controle:
+                contagem["so_o_controle"] += 1
+            else:
+                contagem["ambos_ausentes"] += 1
+        contagem["pares"] = int(len(linhas))
+        out[str(estudo)] = contagem
     return out
 
 
@@ -232,12 +282,14 @@ def main(argv: list[str] | None = None) -> int:
     identidades: dict[str, str] = {}
     membros: set[str] = set()
     membros_por_estudo: dict[str, Any] | None = None
+    pares_por_presenca: dict[str, Any] | None = None
     if args.brazil_variants:
         membros = chaves_do_parquet(args.brazil_variants.expanduser())
         identidades[str(args.brazil_variants)] = sha256_file(args.brazil_variants.expanduser())
         chaves_do_arquivo = {chave(c, p, r, a) for c, p, r, a in
                              zip(linhas["chrom"], linhas["pos"], linhas["ref"], linhas["alt"])}
         membros_por_estudo = membros_encontrados_por_estudo(args.brazil_variants.expanduser(), chaves_do_arquivo)
+        pares_por_presenca = pares_por_presenca_no_abraom(args.brazil_variants.expanduser(), chaves_do_arquivo)
 
     avaliacao: set[str] = set()
     if args.selection:
@@ -301,6 +353,11 @@ def main(argv: list[str] | None = None) -> int:
         },
         "sobreposicao_com_o_treino_da_cabeca": sobreposicao_treino,
         "membros_encontrados_por_estudo": membros_por_estudo,
+        "pares_por_presenca_no_abraom": pares_por_presenca,
+        "para_que_serve_pares_por_presenca": (
+            "os pares `ambos_ausentes` sao o subconjunto da analise de sensibilidade contra a assimetria de "
+            "presenca; ele preserva o pareamento do release. Nao conclui sozinho: menos poder e composicao "
+            "diferente se o efeito sumir, efeitos de contexto remanescentes se persistir"),
         "af_nas_extremidades": {
             "af_zero": int((linhas["af_abraom"] == 0).sum()),
             "af_um": int((linhas["af_abraom"] == 1).sum()),
@@ -333,7 +390,8 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps({k: relatorio[k] for k in
                       ("por_motivo", "duplicatas_exatas", "sobreposicao_com_o_treino_da_cabeca",
-                       "membros_encontrados_por_estudo", "af_nas_extremidades", "pronto_para_amostrar",
+                       "membros_encontrados_por_estudo", "pares_por_presenca_no_abraom",
+                       "af_nas_extremidades", "pronto_para_amostrar",
                        "pendencias", "saidas")}, ensure_ascii=False, indent=2))
     print(json.dumps({"pool_n": relatorio["pool"]["n"], "af": relatorio["pool"]["af"]},
                      ensure_ascii=False, indent=2))

@@ -210,6 +210,27 @@ def test_manifesto_registra_a_receita_inteira():
         assert len(manifesto["saidas"]["plano_sha256"]) == 64
 
 
+def test_pool_global_e_lido_pela_coluna_dele():
+    """O pool do gnomAD traz `af_gnomad`; renomear para `af_abraom` seria trocar as fontes por descuido."""
+    global_pool = _pool(10).rename(columns={"af_abraom": "af_gnomad"})
+    amostra = gen.amostrar_estratificado(global_pool, n=14, rng=np.random.default_rng(3))
+    assert len(amostra) == 14 and "af_gnomad" in amostra.columns
+    plano = gen.montar_plano(amostra.head(3), fonte=gen.FONTE_GLOBAL, rng=np.random.default_rng(1),
+                             window_bp=4096, margem=64, span_min=3, span_max=10, spans_de_referencia=1)
+    assert set(plano["fonte"]) == {gen.FONTE_GLOBAL} and plano["af"].notna().all()
+
+
+def test_pool_sem_coluna_de_af_falha_alto():
+    sem_af = _pool(2).drop(columns=["af_abraom"])
+    for chamada in (lambda: gen.coluna_de_af(sem_af),
+                    lambda: gen.coluna_de_af(_pool(2).assign(af_gnomad=0.1))):
+        try:
+            chamada()
+        except ValueError:
+            continue
+        raise AssertionError("coluna de AF ausente ou ambigua tinha de falhar")
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []
