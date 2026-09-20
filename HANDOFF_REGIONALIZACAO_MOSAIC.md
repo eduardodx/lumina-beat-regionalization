@@ -3,8 +3,8 @@
 > **Para quem pega num chat novo: este doc é auto-contido.** Leia inteiro antes de tocar em código.
 > Datado **2026-09-16**. Autor: Gabriel (dev, TCC). Gestor: Eduardo (mantém o Mosaic).
 > Branch: **`new_regionalization`**.
-> Nada está treinando. **O Eduardo respondeu em 15/09 e fechou as decisões A, B, C e D** (§4); G0, G1 e G2 estão
-> desbloqueados.
+> Nada está treinando. Decisões A–D fechadas pelo Eduardo (§4). **G1 e G2 concluídos, G3 e G4 em curso** —
+> o estado atual está na §13, que é por onde começar.
 
 ---
 
@@ -300,3 +300,64 @@ Detalhes de implementação que faltavam e que decidem como escrever o código d
 `hidden_states`/`mid_hidden_states` e `head_outputs`. O `r03_adapter.py` só expõe `last_hidden_state` (448) — o
 extrator de 172 dims vive em `eval/embedding_probe/rich.py` na branch `embedding-probe-mosaic`
 (`head_readouts`, `MidStackTaps`, `substitution_onehot`, `assert_r03_head_layout`).
+
+
+---
+
+## 13. Estado em 20/09 (ler primeiro)
+
+### Artefatos prontos, com hash
+
+| Artefato | Conteúdo | Identidade |
+|---|---|---|
+| `g1_brazil_studies/brazil_study_variants.parquet` | 8.875 membros + coordenadas | validado contra o protocolo |
+| `g5_comum/selecao_comum.parquet` | 2.799 variantes, 156 clusters | `sha256 693eb234…` |
+| `g2_final_nenhum/core_head_snapshot.parquet` | treino 167.346 (24.097 P) | `9022167f…` |
+| `g2_final_janela2048/…` | treino 99.992 (8.421 P) | `af886ad5…` |
+| `g2_final_janela4096/…` | treino 86.560 (6.355 P) | `7ffed513…` |
+| `g0_fontes/SABE1171.Abraom.clean.tsv` | ABraOM do source-lock | `3cd33784…`, igual ao `sources.yaml` |
+| `g4_abraom/abraom_pool.parquet` | 1.224.029 variantes | `40bd0f79…` |
+| `g2_verificacao/sha256_declarado.json` | hashes congelados | usado com `verify_campaign_artifacts --esperado` |
+
+O ABraOM está em `s3://croma-bioai-shared-data-us-east-2/lumina/lumina-mosaic/abraom/SABE1171.Abraom.clean.tsv`.
+Só 1 das 19 fontes do source-lock mora nessa raiz: é o bucket do arquivo restrito, não um espelho.
+
+### Código novo desta fase
+
+| Script | Papel |
+|---|---|
+| `verify_campaign_artifacts.py` | portão que o treino chama antes de começar: disjunção, comparabilidade e sha256 |
+| `audit_variant_windows.py` | REF contra o FASTA, bordas e `N`; código 2 em qualquer `ref_mismatch` |
+| `locate_abraom_source.py` | acha fonte por sha256 do `sources.yaml`; `--root` confere a árvore inteira |
+| `audit_abraom_source.py` | publica o pool do adapter com as exclusões e a identidade |
+| `build_adapter_window_plan.py` | plano de janelas do adapter (a receita da §5.1) |
+| `eval/embedding_probe/{rich,windows}.py` | extrator e janelas portados, fidelidade verificada por texto |
+| `eval/clinvar/lora.py` | `rank=0`, `freeze_backbone_in_eval`, `assert_only_head_trains`, `assert_optimizer_covers_trainables`, rsLoRA |
+
+### O que falta, por gate
+
+**G3 (M0):** cache de embeddings por sistema, com a chave ampliada (checkpoint, adapter, extrator, variante, FASTA,
+janela, orientação, configuração e ordem das features) e o **smoke real no R03** — só a cabeça treinável, cabeça
+muda após um passo, backbone bit a bit idêntico, mesma entrada → mesma representação.
+
+**G4 (adapter):** o **pool global do gnomAD** (48 VCFs, >500 GB: varredura completa custa horas, amostragem por
+`.tbi` custa minutos com viés declarado), o **peso da loss** entre posições de variante e de referência, e o
+treinador MLM em si.
+
+### Decisões abertas
+
+1. **Confundimento espacial** entre as fontes da mistura: o pool do ABraOM é concentrado (chr16 aparece mais que
+   chr1). Proposta registrada: casar a distribuição por cromossomo do pool global à do ABraOM, para que a única
+   diferença seja qual variante é aplicada. **Sem isso, o adapter pode separar as fontes pela região.**
+2. **Decisão E** do Eduardo: chr8 reservado (custa 61.737 variantes do pool) e relato BRCA/TP53.
+3. **Qual campo de AF** do gnomAD joint conta como "AF global" — ele tem dezenas, e a escolha tem de ser declarada.
+4. **Peso da loss** nas posições de variante × referência.
+
+### Fixado nesta fase (não reabrir)
+
+- Mistura **60/40 global/ABraOM** confirmada pelo Eduardo em 20/09: "focar no ABraOM" era prioridade de trabalho,
+  não mudança de desenho.
+- **rsLoRA sim, MiCA não** — migrar para o `peft` daria trabalho e exigiria reproduzir a superfície de exclusão
+  das cabeças nativas do R03. rsLoRA está implementado nativo, default desligado, e entra no manifesto.
+- Política para `N`: soft-mask normalizado, janela com base fora de ACGT descartada. Custo medido: **zero**, porque
+  o `sequence_eligible` do release já garantiu ACGT na janela de 32 kb.
