@@ -41,12 +41,17 @@ recomendação nossa · **[ABERTO]** decisão necessária antes de implementar.
 | Backbone | `LUM-20260719-001-R03`, `best_checkpoint.pt`, passo 71.000, pesos sem EMA, em `s3://croma-bioai-lumina-artifacts-us-east-2/experiments/LUM-20260719-001/runs/R03/checkpoints/final/best_checkpoint.pt` (README e `config/lumina_r03_base.json` do `lumina-inference`). Não trocar pelo `final_checkpoint.pt` (passo 75.000). | **[FIXADO]**. sha256 do arquivo já registrado no contrato v1 (`f2983560…`); reconferir o arquivo carregado em cada run |
 | Mosaic, código | `https://github.com/croma-bioai/lumina-mosaic`, commit `814e7f0a17ac45c9bd4a63958aafb3cffaddfe22`; ponta de `main` conferida em 14/09; clone do notebook no mesmo commit | **[FIXADO]**; reconferir a ponta antes de congelar |
 | Mosaic, dados | release `clinvar-pb-capability-suite/v1` em `~/mosaic-v1/`. Já conferido: `membership.parquet` com o hash lógico de referência (`1c1cd65d…`, 8.875 linhas). O S3 ainda usa o layout anterior ao ADR 0006 (`bundle.manifest.json` em vez de `release.manifest.json`) | **[FIXADO]** como fonte; registrar o hash real de cada arquivo usado |
-| ABraOM | snapshot `abraom_sabe1171` do source-lock do Mosaic: `abraom/SABE1171.Abraom.clean.tsv`, `obtained: academic_request` (sem URL), sha256 `3cd33784…`, colunas `[chrom, pos, ref, alt, af_abraom]`. Obrigatório para o sistema regionalizado | **[FIXADO]**; **pedir o arquivo ao Eduardo** — o índice ABraOM da v1 não é o mesmo objeto |
+| ABraOM | snapshot `abraom_sabe1171`: `s3://croma-bioai-shared-data-us-east-2/lumina/lumina-mosaic/abraom/SABE1171.Abraom.clean.tsv`, 33,6 MB, colunas `[chrom, pos, ref, alt, af_abraom]` | **[FIXADO e CONFERIDO em 20/09]**: sha256 `3cd3378432909b80053d3a92a1b7d544053a51697623845f6a44f67ba7dbd9d6`, igual ao do `sources.yaml`. O índice ABraOM da v1 **não** é este objeto |
 | gnomAD (parte global da mistura) | v4.1 joint com AF por grupo (`s3://ai4bio-lumina/data/external/gnomad-joint-v4.1/`) | **[PROPOSTO]**; fixar versão e grupos |
 | Genoma | GRCh38, `hg38.fa` (sha256 `056974f6…`) | **[FIXADO]** |
 | Snapshot de treino da cabeça | derivado do `core_locus` do release v1; ID, hash e cutoff a registrar (seção 4.2) | **[FIXADO]** como fonte; identidade a gerar |
 
 Código e dados têm identidades separadas: ter o commit certo não prova que o release foi gerado por ele.
+
+**Onde as fontes moram (medido em 20/09).** Das 19 fontes do source-lock com sha256 fixado, só o ABraOM está em
+`s3://croma-bioai-shared-data-us-east-2/lumina/lumina-mosaic/` — é o bucket do arquivo de acesso restrito, não um
+espelho do source-lock. As outras 18 (ClinVar, dbNSFP, conservação, SpliceAI, VEP, MANE, HGNC) continuam vindo das
+suas origens públicas. `scripts/locate_abraom_source.py --root` refaz essa conferência quando for preciso.
 
 ---
 
