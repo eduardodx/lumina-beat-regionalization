@@ -338,8 +338,22 @@ lista de exclusões aplicadas.
 
 ### 4.3 Dados populacionais [PROPOSTO]
 
-- ABraOM: o snapshot do source-lock. gnomAD v4.1 por grupo para a parte global da mistura; o `af_gnomad` antigo,
-  condicional ao índice ABraOM, não serve.
+- ABraOM: o snapshot do source-lock, conferido por sha256 em 20/09. gnomAD v4.1 por grupo para a parte global da
+  mistura; o `af_gnomad` antigo, condicional ao índice ABraOM, não serve.
+
+**Pool de amostragem do ABraOM [FIXADO em 20/09; contagem final pendente].** O arquivo traz o cromossomo como `1`
+enquanto o snapshot e o FASTA usam `chr1`: juntar sem normalizar daria **zero sobreposição em silêncio**, que é o
+pior erro possível aqui porque se parece com "nenhum vazamento". `scripts/audit_abraom_source.py` normaliza os dois
+lados e descarta, em ordem declarada: AF inválida, AF degenerada (0 ou 1 não são variação utilizável), não-SNV, fora
+de chr1–chr22, **membro dos estudos**, **alelo do conjunto de seleção ou da validação e teste do core**, e chr8 se
+reservado.
+
+A distinção que importa: **ver o contexto genômico** de uma variante que será pontuada é diferente de **treinar o
+adapter a reconstruir o alelo dela**. Por isso os alelos que serão pontuados saem do pool; a sobreposição com o
+treino da cabeça é medida e declarada, não eliminada — ela é esperada, porque as duas coisas vêm do mesmo genoma.
+
+O script só publica o pool com as exclusões em mãos, registra o sha256 de cada arquivo usado para excluir, e para
+com código 2 se o ABraOM não bater o source-lock ou se houver o mesmo alelo com AF conflitante.
 - Janelas: **nenhum alelo de variante dos dois estudos** e nada do chr8 enquanto ele estiver reservado. Contexto de
   referência pode aparecer; alelo do estudo, nunca. Isso vale com mais força agora: `br_population_observed` é, por
   definição, gold presente no ABraOM, que passa a ser fonte de treino do adapter.
