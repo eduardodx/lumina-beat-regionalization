@@ -53,6 +53,9 @@ SOURCE_KEY = "abraom_sabe1171"
 #: Prefixos onde o arquivo pode estar. O primeiro e a aposta principal: os brutos do ClinVar do Mosaic ficam em
 #: `.../mosaic/data/raw/clinvar/`, entao o bruto do ABraOM deve seguir a mesma simetria.
 PREFIXOS_PADRAO = (
+    # Raiz do source-lock: aqui o caminho bate LITERALMENTE com o `path` do sources.yaml
+    # (`abraom/SABE1171.Abraom.clean.tsv`), o que indica que a arvore inteira das fontes mora neste prefixo.
+    "s3://croma-bioai-shared-data-us-east-2/lumina/lumina-mosaic/",
     "s3://ai4bio-lumina/benchmarks/mosaic/data/raw/",
     "s3://ai4bio-lumina/benchmarks/mosaic/data/processed/gen-abraom-seqs/",
     "s3://ai4bio-lumina/data/external/",
@@ -136,6 +139,48 @@ def confere(caminho: Path, esperado: str) -> tuple[bool, dict[str, str]]:
     return esperado in calculados.values(), calculados
 
 
+def todas_as_fontes(mosaic_root: Path) -> dict[str, dict[str, Any]]:
+    """Todas as fontes do source-lock que tem `path` e `sha256` fixado."""
+    import yaml
+
+    caminho = mosaic_root.expanduser() / "config" / "sources.yaml"
+    dados = yaml.safe_load(caminho.read_text(encoding="utf-8"))
+    fontes = dados.get("sources") or {}
+    return {
+        chave: dict(spec) for chave, spec in fontes.items()
+        if isinstance(spec, dict) and spec.get("path") and spec.get("sha256") not in (None, "pending")
+    }
+
+
+def existe_no_s3(uri: str) -> int | None:
+    """Tamanho em bytes se o objeto existir, senao None."""
+    try:
+        saida = subprocess.run(["aws", "s3", "ls", uri], check=True, capture_output=True, text=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    for linha in saida.splitlines():
+        partes = linha.split()
+        if len(partes) >= 4:
+            try:
+                return int(partes[2])
+            except ValueError:
+                continue
+    return None
+
+
+def verificar_arvore(mosaic_root: Path, root: str) -> list[dict[str, Any]]:
+    """Confere se `<root>/<path>` existe para cada fonte do source-lock. Entrega do G0."""
+    fontes = todas_as_fontes(mosaic_root)
+    base = root.rstrip("/")
+    linhas: list[dict[str, Any]] = []
+    for chave, spec in sorted(fontes.items()):
+        uri = f"{base}/{spec['path']}"
+        tamanho = existe_no_s3(uri)
+        linhas.append({"fonte": chave, "uri": uri, "bytes": tamanho, "existe": tamanho is not None,
+                       "sha256_declarado": spec["sha256"]})
+    return linhas
+
+
 def listar(prefixo: str) -> list[tuple[str, int]]:
     try:
         saida = subprocess.run(["aws", "s3", "ls", "--recursive", prefixo],
@@ -153,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-key", default=SOURCE_KEY)
     parser.add_argument("--prefix", action="append", default=None,
                         help="pode repetir; sem isto usa a lista padrao")
+    parser.add_argument("--root", help="raiz do source-lock no S3: confere <root>/<path> de TODAS as fontes "
+                                       "do sources.yaml, que e a entrega do G0")
     parser.add_argument("--download", action="store_true", help="baixa os candidatos e confere o sha256")
     parser.add_argument("--max-mb", type=int, default=4000, help="nao baixa candidato maior que isto")
     parser.add_argument("--out-dir", type=Path)
@@ -163,6 +210,36 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[abraom] fonte {args.source_key}: path declarado {spec.get('path')!r}, "
           f"sha256 {esperado[:16]}…, schema {spec.get('schema')}")
     print(f"[abraom] valor lido de {spec['arquivo_de_origem']}")
+
+    if args.root:
+        linhas = verificar_arvore(args.mosaic_root, args.root)
+        print(f"\n[abraom] arvore do source-lock em {args.root}:")
+        for linha in linhas:
+            marca = f"{linha['bytes'] / 1e6:10.1f} MB" if linha["existe"] else "    AUSENTE"
+            print(f"  {marca}  {linha['fonte']:<40} {linha['uri']}")
+        presentes = sum(1 for linha in linhas if linha["existe"])
+        print(f"[abraom] {presentes} de {len(linhas)} fontes presentes nesta raiz")
+        if args.out_dir is not None:
+            args.out_dir.expanduser().mkdir(parents=True, exist_ok=True)
+            (args.out_dir.expanduser() / "arvore_do_source_lock.json").write_text(
+                json.dumps(linhas, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        alvo = next((linha for linha in linhas if linha["fonte"] == args.source_key and linha["existe"]), None)
+        if alvo and args.download:
+            destino = (args.out_dir or Path("./abraom_candidatos")).expanduser()
+            destino.mkdir(parents=True, exist_ok=True)
+            local = destino / alvo["uri"].rsplit("/", 1)[-1]
+            if not local.exists():
+                subprocess.run(["aws", "s3", "cp", alvo["uri"], str(local)], check=True)
+            bate, calculados = confere(local, esperado)
+            print(f"\n[abraom] {'BATE' if bate else 'NAO BATE'}  {alvo['uri']}\n  {calculados}")
+            if bate:
+                print(f"\nENCONTRADO: {alvo['uri']}\n"
+                      f"Registrar como a fonte `{args.source_key}` no G0.")
+                return 0
+            print("\nO arquivo esta no lugar declarado mas o conteudo nao bate o sha256 do source-lock: "
+                  "levar ao Eduardo antes de usar.")
+            return 2
+        return 0
 
     prefixos = args.prefix or list(PREFIXOS_PADRAO)
     candidatos: list[tuple[str, int]] = []

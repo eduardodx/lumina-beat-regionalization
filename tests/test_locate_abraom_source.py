@@ -71,6 +71,56 @@ def test_gz_confere_tambem_o_conteudo_descomprimido():
         assert calculados["arquivo"] != esperado_descomprimido, "o hash do .gz nao e o do conteudo"
 
 
+def test_arvore_monta_uri_por_path_declarado():
+    """`<root>/<path>` do sources.yaml: e assim que o G0 confere a arvore inteira de fontes."""
+    try:
+        import yaml  # noqa: F401
+    except ImportError as exc:
+        raise Skip(f"pyyaml indisponivel: {exc}") from exc
+
+    import tempfile as _tmp
+    with _tmp.TemporaryDirectory() as tmp:
+        raiz = Path(tmp)
+        (raiz / "config").mkdir()
+        (raiz / "config" / "sources.yaml").write_text(
+            "sources:
+"
+            "  abraom_sabe1171:
+"
+            "    path: abraom/SABE1171.Abraom.clean.tsv
+"
+            "    sha256: " + "a" * 64 + "
+"
+            "  clinvar_submission_summary_2026-06:
+"
+            "    path: clinvar/2026-06/submission_summary_2026-06.txt.gz
+"
+            "    sha256: " + "b" * 64 + "
+"
+            "  sem_hash:
+"
+            "    path: x/y.tsv
+"
+            "    sha256: pending
+",
+            encoding="utf-8")
+        fontes = loc.todas_as_fontes(raiz)
+        assert set(fontes) == {"abraom_sabe1171", "clinvar_submission_summary_2026-06"}, sorted(fontes)
+        assert "sem_hash" not in fontes, "fonte sem sha256 fixado nao entra na conferencia"
+
+        original = loc.existe_no_s3
+        loc.existe_no_s3 = lambda uri: 123 if "abraom" in uri else None
+        try:
+            linhas = loc.verificar_arvore(raiz, "s3://balde/lumina/lumina-mosaic/")
+        finally:
+            loc.existe_no_s3 = original
+        por_fonte = {linha["fonte"]: linha for linha in linhas}
+        assert por_fonte["abraom_sabe1171"]["uri"] == (
+            "s3://balde/lumina/lumina-mosaic/abraom/SABE1171.Abraom.clean.tsv")
+        assert por_fonte["abraom_sabe1171"]["existe"] is True
+        assert por_fonte["clinvar_submission_summary_2026-06"]["existe"] is False
+
+
 def test_hash_esperado_vem_do_sources_yaml_do_mosaic():
     """Nunca digitado: se o Mosaic nao declarar, o script para."""
     try:
