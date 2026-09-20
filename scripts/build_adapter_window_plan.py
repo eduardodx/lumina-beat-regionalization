@@ -63,6 +63,10 @@ FONTE_GLOBAL = "global"
 MARGEM_PADRAO = 64
 
 TIPO_VARIANTE = "variante"
+
+# Quanto a mistura medida nas linhas pode se afastar da pedida antes de reprovar. Nao e folga de desenho: e
+# arredondamento de 60/40 em N janelas.
+TOLERANCIA_DA_MISTURA = 0.01
 TIPO_REFERENCIA = "referencia"
 
 
@@ -228,6 +232,23 @@ def main(argv: list[str] | None = None) -> int:
             span_min=args.span_min, span_max=args.span_max,
             spans_de_referencia=args.spans_de_referencia)], ignore_index=True)
 
+    # O amostrador entrega o que o pool tem, sem inventar: se um bin faltou, o TOTAL e a MISTURA saem diferentes
+    # do pedido -- em silencio. Medimos as duas coisas nas linhas produzidas, nao nos numeros pedidos.
+    produzido = int(len(plano))
+    contagem = plano["fonte"].value_counts().to_dict() if produzido else {}
+    n_global_produzido = int(contagem.get(FONTE_GLOBAL, 0))
+    fracao_efetiva = round(n_global_produzido / produzido, 4) if produzido else 0.0
+
+    bloqueios: list[str] = []
+    if not tem_global:
+        bloqueios.append("sem pool global: o plano e 100% ABraOM e serve de smoke, nao da campanha")
+    if produzido != args.n_janelas:
+        bloqueios.append(f"plano com {produzido} janelas, {args.n_janelas} pedidas: algum bin de AF nao tinha "
+                         f"variantes suficientes")
+    if tem_global and abs(fracao_efetiva - args.fracao_global) > TOLERANCIA_DA_MISTURA:
+        bloqueios.append(f"mistura efetiva {fracao_efetiva} fora de {args.fracao_global} "
+                         f"+/- {TOLERANCIA_DA_MISTURA}: os pools tem capacidades diferentes")
+
     out_dir = args.out_dir.expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     plano_path = out_dir / "plano_de_janelas.parquet"
@@ -250,20 +271,34 @@ def main(argv: list[str] | None = None) -> int:
             "global_pool_sha256": sha256_file(args.global_pool.expanduser()) if tem_global else None,
         },
         "resumo": resumo_do_plano(plano, window_bp=args.window_bp),
-        "pronto_para_campanha": tem_global,
-        "pendencias": [] if tem_global else [
-            "sem pool global: o plano e 100% ABraOM e serve de smoke, nao da campanha"
+        "conferencia": {
+            "janelas_pedidas": args.n_janelas, "janelas_produzidas": produzido,
+            "fracao_global_efetiva_nas_linhas": fracao_efetiva,
+            "tolerancia_da_mistura": TOLERANCIA_DA_MISTURA,
+        },
+        "pronto_para_campanha": not bloqueios,
+        "pendencias": bloqueios,
+        "falta_antes_de_treinar": [
+            "auditar ESTE plano contra o FASTA (audit_variant_windows.py le focal_index, window_start e spans)",
+            "declarar a separacao populacional entre treino e validacao do adapter, por loci",
+            "fixar o peso da loss entre posicoes de variante e de referencia",
         ],
         "o_que_nao_prova": [
-            "o plano nao le o FASTA: janela invalida so aparece no gerador de sequencia",
+            "o plano nao le o FASTA: janela invalida so aparece na auditoria de janelas",
             "spans de referencia sao guarda contra o atalho 'mascarado = variante', ainda a investigar no piloto",
+            "a conferencia olha total e mistura, nao a representatividade das fontes",
         ],
         "saidas": {"plano": str(plano_path), "plano_sha256": sha256_file(plano_path)},
     }
     (out_dir / "manifesto_do_plano.json").write_text(
         json.dumps(manifesto, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    print(json.dumps({k: manifesto[k] for k in ("resumo", "pronto_para_campanha", "pendencias", "saidas")},
-                     ensure_ascii=False, indent=2))
+    print(json.dumps({k: manifesto[k] for k in ("resumo", "conferencia", "pronto_para_campanha", "pendencias",
+                                                "saidas")}, ensure_ascii=False, indent=2))
+    # Sem pool global o plano e smoke declarado e isso nao e falha. Total ou mistura errados, sim: o plano pedido
+    # nao foi o produzido, e seguir com ele mudaria o desenho sem ninguem decidir.
+    if produzido != args.n_janelas or (tem_global and abs(fracao_efetiva - args.fracao_global) > TOLERANCIA_DA_MISTURA):
+        print("\nFALHOU: o plano produzido nao e o plano pedido (veja `conferencia`).")
+        return 2
     return 0
 
 

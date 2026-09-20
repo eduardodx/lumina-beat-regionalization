@@ -159,6 +159,26 @@ def distribuicao_af(af: pd.Series) -> dict[str, int]:
             for intervalo, quantidade in cortes.value_counts().sort_index().items()}
 
 
+def membros_encontrados_por_estudo(caminho: Path, chaves: set[str]) -> dict[str, Any] | None:
+    """Quantos membros de cada estudo/papel o ABraOM realmente contem.
+
+    Subtrair totais NAO demonstra composicao: "removi 2.284 linhas" nao diz que os 1.889 casos do
+    `br_population_observed` estavam la. O estudo e definido como "gold presente no ABraOM", entao a intersecao
+    por estudo e papel e a unica leitura que sustenta a afirmacao. Devolve None se a tabela nao trouxer `study_id`.
+    """
+    frame = pd.read_parquet(caminho)
+    if "study_id" not in frame.columns or "member_role" not in frame.columns:
+        return None
+    frame = frame.copy()
+    frame["_no_abraom"] = [chave(c, p, r, a) in chaves for c, p, r, a in
+                           zip(frame["chrom"], frame["pos_1based"], frame["ref"], frame["alt"])]
+    out: dict[str, Any] = {}
+    for (estudo, papel), linhas in frame.groupby(["study_id", "member_role"], sort=True):
+        out.setdefault(str(estudo), {})[str(papel)] = {
+            "membros": int(len(linhas)), "no_abraom": int(linhas["_no_abraom"].sum())}
+    return out
+
+
 def chaves_do_parquet(caminho: Path, papeis: tuple[str, ...] | None = None) -> set[str]:
     colunas = ["chrom", "pos_1based", "ref", "alt"]
     disponiveis = set(pd.read_parquet(caminho).columns) if papeis else None
@@ -211,9 +231,13 @@ def main(argv: list[str] | None = None) -> int:
 
     identidades: dict[str, str] = {}
     membros: set[str] = set()
+    membros_por_estudo: dict[str, Any] | None = None
     if args.brazil_variants:
         membros = chaves_do_parquet(args.brazil_variants.expanduser())
         identidades[str(args.brazil_variants)] = sha256_file(args.brazil_variants.expanduser())
+        chaves_do_arquivo = {chave(c, p, r, a) for c, p, r, a in
+                             zip(linhas["chrom"], linhas["pos"], linhas["ref"], linhas["alt"])}
+        membros_por_estudo = membros_encontrados_por_estudo(args.brazil_variants.expanduser(), chaves_do_arquivo)
 
     avaliacao: set[str] = set()
     if args.selection:
@@ -225,7 +249,16 @@ def main(argv: list[str] | None = None) -> int:
         avaliacao |= chaves_do_parquet(expandido, papeis=(ROLE_VALIDATION, ROLE_TEST))
         identidades[str(caminho_snapshot)] = sha256_file(expandido)
 
-    pode_publicar = bool(membros) and bool(avaliacao)
+    # Publicar o pool sem TODAS as exclusoes e entregar dado contaminado pronto para treinar. Basta uma faltar:
+    # so a selecao, sem os snapshots, deixaria passar a validacao e o teste da cabeca -- e vice-versa.
+    exclusoes_ausentes: list[str] = []
+    if not args.brazil_variants:
+        exclusoes_ausentes.append("--brazil-variants: membros dos dois estudos brasileiros (G1)")
+    if not args.selection:
+        exclusoes_ausentes.append("--selection: conjunto de selecao comum (G5)")
+    if not (args.snapshot or []):
+        exclusoes_ausentes.append("--snapshot: validacao e teste da cabeca (G2)")
+    pode_publicar = not exclusoes_ausentes
     motivos = classificar(linhas, membros=membros, alelos_de_avaliacao=avaliacao,
                           reservar_chr8=not args.no_reserve_chr8,
                           manter_af_degenerada=args.manter_af_degenerada)
@@ -267,9 +300,22 @@ def main(argv: list[str] | None = None) -> int:
             },
         },
         "sobreposicao_com_o_treino_da_cabeca": sobreposicao_treino,
-        "pronto_para_treino": pode_publicar,
-        "pendencias": [] if pode_publicar else [
-            "faltou --brazil-variants e/ou os recortes de avaliacao: o pool NAO foi publicado"
+        "membros_encontrados_por_estudo": membros_por_estudo,
+        "af_nas_extremidades": {
+            "af_zero": int((linhas["af_abraom"] == 0).sum()),
+            "af_um": int((linhas["af_abraom"] == 1).sum()),
+            "justificativa": {
+                "af_zero": "ALT nao observado na amostra: nao ha variacao populacional para o adapter aprender",
+                "af_um": "ALT fixado na amostra; e uma FREQUENCIA VALIDA -- excluir e escolha de desenho, nao "
+                         "correcao. Mantivel com --manter-af-degenerada",
+            },
+        },
+        "pronto_para_amostrar": pode_publicar,
+        "pendencias": exclusoes_ausentes or [],
+        "falta_antes_de_treinar": [
+            "amostrar o plano de janelas (build_adapter_window_plan.py) e audita-lo contra o FASTA",
+            "montar o pool global e declarar o campo de AF usado",
+            "fixar o peso da loss entre posicoes de variante e de referencia",
         ],
         "o_que_nao_prova": [
             "nao explica como o arquivo foi filtrado: o tamanho e compativel com filtragem, os filtros em si "
@@ -277,6 +323,9 @@ def main(argv: list[str] | None = None) -> int:
             "sobreposicao com o treino da cabeca e declarada, nao eliminada: ver contexto nao e o mesmo que "
             "treinar para reconstruir o alelo que sera pontuado",
             "chr8 aqui e custo medido, nao decisao",
+            "as AF do arquivo nao trazem AC/AN: o passo observado e compativel com 1/2342, mas nao demonstra "
+            "denominador constante em todos os locos",
+            "o pool estar pronto para amostrar nao o torna pronto para treinar: ver `falta_antes_de_treinar`",
         ],
         "saidas": saidas,
     }
@@ -284,7 +333,8 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps({k: relatorio[k] for k in
                       ("por_motivo", "duplicatas_exatas", "sobreposicao_com_o_treino_da_cabeca",
-                       "pronto_para_treino", "pendencias", "saidas")}, ensure_ascii=False, indent=2))
+                       "membros_encontrados_por_estudo", "af_nas_extremidades", "pronto_para_amostrar",
+                       "pendencias", "saidas")}, ensure_ascii=False, indent=2))
     print(json.dumps({"pool_n": relatorio["pool"]["n"], "af": relatorio["pool"]["af"]},
                      ensure_ascii=False, indent=2))
     return 0 if pode_publicar else 2

@@ -133,15 +133,20 @@ def test_end_to_end_publica_pool_normalizado_e_relatorio():
         pd.DataFrame({"chrom": ["chr1", "chr5"], "pos_1based": [100, 900], "ref": ["A", "A"],
                       "alt": ["G", "G"], "role": ["train", "validation"]}).to_parquet(snapshot, index=False)
 
+        selecao = raiz / "selecao.parquet"
+        pd.DataFrame({"chrom": ["chr7"], "pos_1based": [1], "ref": ["A"], "alt": ["G"]}).to_parquet(
+            selecao, index=False)
+
         saida = raiz / "out"
-        rc = aud.main(["--abraom", str(tsv), "--brazil-variants", str(membros),
+        rc = aud.main(["--abraom", str(tsv), "--brazil-variants", str(membros), "--selection", str(selecao),
                        "--snapshot", str(snapshot), "--out-dir", str(saida)])
         assert rc == 0
         relatorio = json.loads((saida / "auditoria_abraom.json").read_text(encoding="utf-8"))
         assert relatorio["por_motivo"] == {aud.MOTIVO_OK: 1, aud.MOTIVO_NAO_SNV: 1,
                                            aud.MOTIVO_MEMBRO_DE_ESTUDO: 1,
                                            aud.MOTIVO_ALELO_DE_AVALIACAO: 1, aud.MOTIVO_CHR8: 1}
-        assert relatorio["pronto_para_treino"] is True
+        assert relatorio["pronto_para_amostrar"] is True
+        assert relatorio["falta_antes_de_treinar"], "pronto para amostrar nao e pronto para treinar"
         assert str(membros) in relatorio["identidades_das_exclusoes"]
         assert str(snapshot) in relatorio["identidades_das_exclusoes"]
         pool = pd.read_parquet(saida / "abraom_pool.parquet")
@@ -161,7 +166,7 @@ def test_sem_exclusoes_nao_publica_o_pool():
         rc = aud.main(["--abraom", str(tsv), "--out-dir", str(saida)])
         assert rc == 2
         relatorio = json.loads((saida / "auditoria_abraom.json").read_text(encoding="utf-8"))
-        assert relatorio["pronto_para_treino"] is False and relatorio["pendencias"]
+        assert relatorio["pronto_para_amostrar"] is False and len(relatorio["pendencias"]) == 3
         assert not (saida / "abraom_pool.parquet").exists()
 
 
@@ -179,6 +184,53 @@ def test_end_to_end_reprova_arquivo_sem_as_colunas():
         tsv = raiz / "errado.tsv"
         pd.DataFrame({"cromossomo": ["1"], "posicao": [100]}).to_csv(tsv, sep="\t", index=False)
         assert aud.main(["--abraom", str(tsv), "--out-dir", str(raiz / "out")]) == 2
+
+
+def test_faltar_uma_exclusao_ja_impede_publicar():
+    """So a selecao, sem os snapshots, deixaria a validacao e o teste da cabeca entrarem no pool -- e vice-versa."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = Path(tmp)
+        tsv = raiz / "abraom.tsv"
+        _abraom([("1", 100, "A", "G", 0.01)]).to_csv(tsv, sep="\t", index=False)
+        membros = raiz / "membros.parquet"
+        pd.DataFrame({"chrom": ["chr2"], "pos_1based": [400], "ref": ["A"], "alt": ["G"]}).to_parquet(
+            membros, index=False)
+        selecao = raiz / "selecao.parquet"
+        pd.DataFrame({"chrom": ["chr7"], "pos_1based": [1], "ref": ["A"], "alt": ["G"]}).to_parquet(
+            selecao, index=False)
+        saida = raiz / "out"
+        rc = aud.main(["--abraom", str(tsv), "--brazil-variants", str(membros),
+                       "--selection", str(selecao), "--out-dir", str(saida)])
+        assert rc == 2, "faltou --snapshot: nao pode publicar"
+        relatorio = json.loads((saida / "auditoria_abraom.json").read_text(encoding="utf-8"))
+        assert any("--snapshot" in p for p in relatorio["pendencias"]), relatorio["pendencias"]
+        assert not (saida / "abraom_pool.parquet").exists()
+
+
+def test_membros_contados_por_estudo_e_papel():
+    """A afirmacao e sobre COMPOSICAO: quantos membros de cada estudo o ABraOM tem, nao quantas linhas sairam."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = Path(tmp)
+        membros = raiz / "membros.parquet"
+        pd.DataFrame({
+            "chrom": ["chr1", "chr2", "chr3"], "pos_1based": [100, 200, 300],
+            "ref": ["A", "A", "A"], "alt": ["G", "G", "G"],
+            "study_id": ["br_population_observed", "br_population_observed", "br_clinical_evidence"],
+            "member_role": ["case", "control", "case"],
+        }).to_parquet(membros, index=False)
+        no_arquivo = {aud.chave("chr1", 100, "A", "G"), aud.chave("chr3", 300, "A", "G")}
+        contagem = aud.membros_encontrados_por_estudo(membros, no_arquivo)
+        assert contagem["br_population_observed"]["case"] == {"membros": 1, "no_abraom": 1}
+        assert contagem["br_population_observed"]["control"] == {"membros": 1, "no_abraom": 0}
+        assert contagem["br_clinical_evidence"]["case"] == {"membros": 1, "no_abraom": 1}
+
+
+def test_sem_study_id_a_contagem_por_estudo_e_none():
+    with tempfile.TemporaryDirectory() as tmp:
+        caminho = Path(tmp) / "m.parquet"
+        pd.DataFrame({"chrom": ["chr1"], "pos_1based": [1], "ref": ["A"], "alt": ["G"]}).to_parquet(
+            caminho, index=False)
+        assert aud.membros_encontrados_por_estudo(caminho, set()) is None
 
 
 if __name__ == "__main__":

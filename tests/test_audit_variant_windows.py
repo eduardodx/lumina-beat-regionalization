@@ -135,6 +135,107 @@ def test_end_to_end_ok_reporta_fracao_descartada():
         assert relatorio["fracao_descartada"] == 1.0 and relatorio["por_motivo"]["non_acgt"] == 1
 
 
+def _linhas_de_plano(rows):
+    """Vocabulario do plano do adapter: focal sorteado, inicio derivado e spans."""
+    return pd.DataFrame(rows, columns=["variant_id", "chrom", "pos_1based", "ref", "alt",
+                                       "focal_index", "window_start", "spans"])
+
+
+def test_janela_centrada_passa_mas_a_planejada_falha():
+    """O DEFEITO relatado: sem usar o focal do plano, o auditor confere outro trecho do cromossomo.
+
+    Montamos um genoma onde a janela centrada e limpa e a planejada cobre um `N`. Auditar a centrada diria `ok`
+    para uma janela que o treinador nao conseguiria construir.
+    """
+    focal_planejado = 10
+    pos = FOCAL + 1  # a mesma variante das outras provas: na janela centrada ela cai em FOCAL
+    genoma = list("C" * (JANELA * 4))
+    genoma[FOCAL] = "A"
+    # O N fica fora da janela centrada [0, 64) e dentro da planejada [pos-1-10, pos-1-10+64).
+    inicio_planejado = pos - 1 - focal_planejado
+    n_em = inicio_planejado + JANELA - 1
+    assert n_em >= JANELA, "o N tem de cair fora da janela centrada, senao o teste nao separa os dois casos"
+    genoma[n_em] = "N"
+    fetch = _fetch("".join(genoma))
+
+    centrada = _linhas([("var:1", "chr1", pos, "A", "G", "train", "missense", 1)])
+    motivos, _ = aud.audit_windows(centrada, fetch, window_bp=JANELA)
+    assert motivos["ok"] == 1, ("a janela centrada era para passar", motivos)
+
+    planejada = _linhas_de_plano([("var:1", "chr1", pos, "A", "G", focal_planejado, inicio_planejado,
+                                   json.dumps([[focal_planejado, focal_planejado + 3, "variante"]]))])
+    motivos, falhas = aud.audit_windows(planejada, fetch, window_bp=JANELA)
+    assert motivos["non_acgt"] == 1 and motivos["ok"] == 0, ("a planejada tinha de reprovar", motivos)
+    assert falhas[0]["focal_index"] == focal_planejado
+
+
+def test_window_start_que_nao_bate_com_o_focal_e_erro():
+    pos = FOCAL + 1
+    focal = 10
+    linhas = _linhas_de_plano([("var:1", "chr1", pos, "A", "G", focal, pos - 1 - focal + 3,
+                                json.dumps([[focal, focal + 2, "variante"]]))])
+    motivos, falhas = aud.audit_windows(linhas, _fetch(_genoma("A")), window_bp=JANELA)
+    assert motivos[aud.MOTIVO_INICIO_INCOERENTE] == 1, motivos
+    assert "pos-1-focal" in falhas[0]["detalhe"]
+
+
+def test_span_de_referencia_cobrindo_o_focal_e_erro():
+    """Se o span que cobre o focal for de referencia, o alvo do MLM deixa de ser a mutacao."""
+    pos = FOCAL + 1
+    focal = FOCAL
+    linhas = _linhas_de_plano([("var:1", "chr1", pos, "A", "G", focal, pos - 1 - focal,
+                                json.dumps([[focal - 1, focal + 2, "referencia"]]))])
+    motivos, _ = aud.audit_windows(linhas, _fetch(_genoma("A")), window_bp=JANELA)
+    assert motivos[aud.MOTIVO_SPAN_FOCAL] == 1, motivos
+
+
+def test_span_fora_da_janela_e_erro():
+    pos = FOCAL + 1
+    focal = FOCAL
+    linhas = _linhas_de_plano([("var:1", "chr1", pos, "A", "G", focal, pos - 1 - focal,
+                                json.dumps([[focal, focal + 2, "variante"], [JANELA - 1, JANELA + 5, "referencia"]]))])
+    motivos, _ = aud.audit_windows(linhas, _fetch(_genoma("A")), window_bp=JANELA)
+    assert motivos[aud.MOTIVO_SPAN_FORA] == 1, motivos
+
+
+def test_plano_coerente_passa():
+    pos = FOCAL + 1
+    focal = FOCAL
+    linhas = _linhas_de_plano([("var:1", "chr1", pos, "A", "G", focal, pos - 1 - focal,
+                                json.dumps([[focal, focal + 2, "variante"], [2, 5, "referencia"]]))])
+    motivos, falhas = aud.audit_windows(linhas, _fetch(_genoma("A")), window_bp=JANELA)
+    assert motivos["ok"] == 1 and falhas == [], (motivos, falhas)
+
+
+def test_layout_declarado_no_relatorio():
+    """Sem dizer QUAL janela foi auditada, um `ok` no JSON e ambiguo."""
+    sem_plano = _linhas([("var:1", "chr1", FOCAL + 1, "A", "G", "train", "missense", 1)])
+    assert aud.descrever_layout(sem_plano, window_bp=JANELA)["layout"] == "centrado"
+    com_plano = _linhas_de_plano([("var:1", "chr1", FOCAL + 1, "A", "G", 10, FOCAL - 10, "[]")])
+    descricao = aud.descrever_layout(com_plano, window_bp=JANELA)
+    assert descricao["layout"] == "declarado pelo plano"
+    assert descricao["focal_index"]["min"] == 10 and descricao["window_start_conferido"] is True
+
+
+def test_end_to_end_reprova_plano_incoerente():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = Path(tmp)
+        pos, focal = FOCAL + 1, 10
+        _linhas_de_plano([("var:1", "chr1", pos, "A", "G", focal, 0,
+                           json.dumps([[focal, focal + 2, "variante"]]))]).to_parquet(
+            raiz / "plano.parquet", index=False)
+        original = aud.abrir_fasta
+        aud.abrir_fasta = lambda caminho: (_fetch(_genoma("A")), "fake")  # type: ignore[assignment]
+        try:
+            rc = aud.main(["--variants", str(raiz / "plano.parquet"), "--fasta", str(raiz / "x.fa"),
+                           "--window-bp", str(JANELA), "--out-dir", str(raiz / "out")])
+        finally:
+            aud.abrir_fasta = original
+        assert rc == 2, rc
+        relatorio = json.loads((raiz / "out" / "auditoria_de_janelas.json").read_text(encoding="utf-8"))
+        assert relatorio["janela_auditada"]["layout"] == "declarado pelo plano"
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

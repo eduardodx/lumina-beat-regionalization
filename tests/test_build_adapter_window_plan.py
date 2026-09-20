@@ -140,6 +140,33 @@ def _executa(tmp: Path, **extra):
     return rc, manifesto, plano
 
 
+def test_pool_curto_reprova_em_vez_de_encolher_calado():
+    """Pedir 60 e receber 2 mudaria a mistura sem ninguem decidir: tem de reprovar, nao publicar quieto."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = Path(tmp)
+        pool_path = raiz / "abraom.parquet"
+        _pool(1).head(2).to_parquet(pool_path, index=False)
+        saida = raiz / "out"
+        rc = gen.main(["--abraom-pool", str(pool_path), "--n-janelas", "60", "--out-dir", str(saida)])
+        assert rc == 2, rc
+        manifesto = json.loads((saida / "manifesto_do_plano.json").read_text(encoding="utf-8"))
+        assert manifesto["pronto_para_campanha"] is False
+        assert manifesto["conferencia"]["janelas_produzidas"] < 60
+        assert any("nao tinha variantes suficientes" in p for p in manifesto["pendencias"]), manifesto["pendencias"]
+
+
+def test_mistura_conferida_nas_linhas_produzidas():
+    """`pronto_para_campanha` nao pode significar so 'recebi um arquivo global'."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = Path(tmp)
+        global_path = raiz / "global.parquet"
+        _pool(2).to_parquet(global_path, index=False)  # 14 linhas: nao sustenta 60% de 50
+        rc, manifesto, _ = _executa(raiz, global_pool=global_path)
+        assert rc == 2, rc
+        assert manifesto["pronto_para_campanha"] is False
+        assert manifesto["conferencia"]["fracao_global_efetiva_nas_linhas"] < 0.6
+
+
 def test_sem_pool_global_o_plano_e_smoke():
     with tempfile.TemporaryDirectory() as tmp:
         rc, manifesto, plano = _executa(Path(tmp))
@@ -158,6 +185,9 @@ def test_com_pool_global_a_mistura_sai_na_proporcao():
         rc, manifesto, plano = _executa(raiz, global_pool=global_path)
         assert rc == 0 and manifesto["pronto_para_campanha"] is True
         assert manifesto["resumo"]["fracao_global"] == 0.6, manifesto["resumo"]
+        assert manifesto["conferencia"]["janelas_produzidas"] == 50
+        assert manifesto["conferencia"]["fracao_global_efetiva_nas_linhas"] == 0.6
+        assert manifesto["falta_antes_de_treinar"], "auditar as janelas contra o FASTA continua faltando"
         assert manifesto["resumo"]["por_fonte"] == {gen.FONTE_GLOBAL: 30, gen.FONTE_ABRAOM: 20}
 
 

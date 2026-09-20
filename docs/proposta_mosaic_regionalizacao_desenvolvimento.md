@@ -354,16 +354,31 @@ opção. Duas estratégias, com custos diferentes:
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
-"brasileiro" pela região em vez de pela estatística populacional. Proposta: amostrar o pool global **casado à
-distribuição por cromossomo do pool do ABraOM**, para que a única diferença sistemática seja qual variante é
-aplicada. Decidir antes de gerar o plano da campanha.
+"brasileiro" pela região em vez de pela estatística populacional.
+
+A ordem correta das decisões é esta, e ela importa:
+
+1. **Primeiro, o que "global" significa.** Frequência agregada do gnomAD joint, ou amostragem por grupos
+   ancestrais? São desenhos diferentes, com campos diferentes no VCF, e a resposta muda o que se amostra. Só dá
+   para decidir depois de ler o cabeçalho completo e declarar campos, filtros e grupos usados.
+2. **Depois, a receita de amostragem.** Balancear cromossomos **pode reduzir diferenças espaciais grosseiras entre
+   as fontes; não demonstra equivalência dos contextos** — dentro do mesmo cromossomo ainda diferem genes, regiões
+   codificantes, cobertura e os filtros de descoberta de cada projeto. É mitigação declarada, não controle.
+
+Por isso o balanceamento por cromossomo fica como **proposta**, não requisito, até o gnomAD ser inspecionado.
 
 **Pool de amostragem do ABraOM [FIXADO em 20/09; contagem final pendente].** O arquivo traz o cromossomo como `1`
 enquanto o snapshot e o FASTA usam `chr1`: juntar sem normalizar daria **zero sobreposição em silêncio**, que é o
 pior erro possível aqui porque se parece com "nenhum vazamento". `scripts/audit_abraom_source.py` normaliza os dois
-lados e descarta, em ordem declarada: AF inválida, AF degenerada (0 ou 1 não são variação utilizável), não-SNV, fora
+lados e descarta, em ordem declarada: AF inválida (NaN, negativa, > 1), AF nas extremidades, não-SNV, fora
 de chr1–chr22, **membro dos estudos**, **alelo do conjunto de seleção ou da validação e teste do core**, e chr8 se
 reservado.
+
+**As duas extremidades de AF não são a mesma coisa, e nenhuma delas é "AF inválida".** `AF = 0` significa que o ALT
+não foi observado na amostra — não há variação populacional ali para o adapter aprender. `AF = 1` é uma
+**frequência perfeitamente válida**: o ALT está fixado na amostra. Excluir as duas é **escolha de desenho** desta
+campanha (o adapter deve ver variação, não alelos monomórficos), reversível com `--manter-af-degenerada`. O
+relatório conta as duas separadamente e registra a justificativa de cada uma.
 
 A distinção que importa: **ver o contexto genômico** de uma variante que será pontuada é diferente de **treinar o
 adapter a reconstruir o alelo dela**. Por isso os alelos que serão pontuados saem do pool; a sobreposição com o
@@ -373,13 +388,23 @@ O script só publica o pool com as exclusões em mãos, registra o sha256 de cad
 com código 2 se o ABraOM não bater o source-lock ou se houver o mesmo alelo com AF conflitante.
 
 **Medido em 20/09** (de 1.365.230 linhas): pool com **1.224.029** variantes, `sha256 40bd0f79…`. Saíram 74.532 fora
-dos autossomos, **61.737 no chr8** (o custo da decisão E do lado do adapter), 2.326 com AF degenerada, 2.282
+dos autossomos, **61.737 no chr8** (o custo da decisão E do lado do adapter), 2.326 nas extremidades de AF, 2.282
 membros dos estudos e 324 alelos do conjunto de seleção ou da validação e teste. Zero não-SNV e zero duplicatas.
 A sobreposição declarada com o treino da cabeça é de 16.649 variantes no candidato `nenhum` e 6.733 no `janela4096`.
 
-O espectro de AF é **discreto em passos de 1/2342** — o mínimo do pool, 0,000427, é um alelo em 1.171 genomas
-diploides — e **54% das variantes caem no bin mais raro**. Amostrar uniformemente faria o adapter ver quase só
-singletons: é por isso que a amostragem é estratificada por bin.
+As contagens por motivo são **sequenciais**: tirar as extremidades de AF primeiro reduz quantas linhas sobram para
+ser classificadas como chr8 ou membro de estudo. Comparar dois relatórios motivo a motivo exige lembrar disso.
+
+**Os 2.282 membros removidos não demonstram, sozinhos, qual estudo estava presente.** Subtrair totais não é
+composição: o `br_population_observed` é definido como "gold presente no ABraOM", então a afirmação que interessa é
+a **interseção por estudo e papel**, que o relatório passou a publicar em `membros_encontrados_por_estudo`.
+
+O espectro de AF observado é **compatível com passos de 1/2342** — o mínimo do pool, 0,000427, corresponde a um
+alelo em 1.171 genomas diploides. Isso **não demonstra denominador constante**: o arquivo não traz AC/AN, os
+valores estão arredondados, e o AN pode variar por loco conforme as chamadas disponíveis, como acontece no próprio
+gnomAD. O fato robusto é outro e basta para a receita: **54% das variantes caem no bin mais raro** (≤ 0,001, que
+comporta singletons e doubletons, não só singletons). Amostrar uniformemente encheria o adapter de variantes
+raríssimas; é por isso que a amostragem é estratificada por bin.
 - Janelas: **nenhum alelo de variante dos dois estudos** e nada do chr8 enquanto ele estiver reservado. Contexto de
   referência pode aparecer; alelo do estudo, nunca. Isso vale com mais força agora: `br_population_observed` é, por
   definição, gold presente no ABraOM, que passa a ser fonte de treino do adapter.
