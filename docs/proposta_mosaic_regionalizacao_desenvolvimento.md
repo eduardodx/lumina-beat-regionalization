@@ -357,6 +357,21 @@ naquele fluxo e o `specs/GNOMAD_S3_READ.md` explica por que o join não faz scan
 acesso **novo**, que o contrato do lookup não cobre e que entra declarado no manifesto. As regiões são sorteadas
 por semente a partir dos comprimentos dos cromossomos e **nunca a partir dos loci do benchmark**.
 
+**Medido no piloto de 20/09 (40 regiões, 800 kb lidos):** o gnomAD tem ~**200 variantes por kb** — duas ordens
+de grandeza acima do pool do ABraOM (448/Mb). O espectro é dominado pelo raro: **96,3% no bin ≤ 0,001** e **0,15%
+acima de 0,5**. Cortar o lado global no piso do ABraOM (4,27 × 10⁻⁴) removeria **95,1%** do que foi amostrado, todo
+do bin mais raro.
+
+Isso tem uma consequência de desenho que o número sozinho esconde: **o mesmo bin não significa a mesma coisa nas
+duas fontes.** Uma AF entre 4,3 × 10⁻⁴ e 10⁻³ é 1 a 2 cópias em 2.342 alelos no ABraOM, e algumas centenas de
+cópias em ~1,6 milhão no gnomAD. Estratificar pela mesma grade iguala o rótulo, não a quantidade observada.
+
+Por causa da desproporção entre bins, a coleta usa **dois limites declarados**: teto por bin **dentro de cada
+região** (contra desequilíbrio de ligação — variantes vizinhas não são observações independentes) e **reservatório
+por bin** ao longo de todas as regiões (senão encher o bin comum exigiria guardar milhões de linhas do bin raro).
+O relatório publica `vistos_por_bin` e `fracao_amostrada_por_bin`: a fração amostrada de cada bin **é** o viés da
+receita, declarado em número.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de

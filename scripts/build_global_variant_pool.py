@@ -69,7 +69,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.audit_abraom_source import (  # noqa: E402
-    AUTOSSOMOS, MOTIVO_OK, chave, chaves_do_parquet, classificar, distribuicao_af, e_snv)
+    AF_BINS, AUTOSSOMOS, MOTIVO_OK, chave, chaves_do_parquet, classificar, distribuicao_af, e_snv)
 from scripts.build_core_locus_head_snapshot import ROLE_TEST, ROLE_VALIDATION, normalize_chrom  # noqa: E402
 from scripts.import_mosaic_brazil_studies import sha256_file  # noqa: E402
 
@@ -201,34 +201,81 @@ def linhas_do_registro(
     return linhas, motivos
 
 
+def bin_de_af(af: float) -> str:
+    """Rotulo do bin de AF de um valor, na mesma grade declarada de `AF_BINS`."""
+    for inicio, fim in zip(AF_BINS, AF_BINS[1:]):
+        if af <= fim:
+            return f"({inicio}, {fim}]"
+    return f"({AF_BINS[-2]}, {AF_BINS[-1]}]"
+
+
+def _no_reservatorio(
+    reservatorios: dict[str, list], vistos: Counter, nome: str, item: dict[str, Any],
+    capacidade: int, rng: np.random.Generator,
+) -> None:
+    """Amostragem de reservatorio (algoritmo R): amostra uniforme do fluxo sem guardar o fluxo.
+
+    Necessaria porque os bins do gnomAD sao desproporcionais em ordens de grandeza -- no piloto, 96% das
+    variantes caem no bin mais raro e 0,15% no mais comum. Sem reservatorio por bin, encher o bin comum
+    exigiria guardar milhoes de linhas do bin raro na memoria.
+    """
+    vistos[nome] += 1
+    alvo = reservatorios.setdefault(nome, [])
+    if len(alvo) < capacidade:
+        alvo.append(item)
+        return
+    sorteado = int(rng.integers(0, vistos[nome]))
+    if sorteado < capacidade:
+        alvo[sorteado] = item
+
+
 def coletar(
     fetch: Callable[[str, int, int], Iterable[Any]],
     regioes: list[tuple[str, int, int]],
     *,
+    rng: np.random.Generator,
     af_campo: str,
     af_min: float | None,
-    max_por_regiao: int | None,
-) -> tuple[pd.DataFrame, Counter]:
-    """Percorre as regioes sorteadas e junta as linhas. `max_por_regiao` limita o aglomerado por desequilibrio."""
+    max_por_bin_por_regiao: int | None,
+    por_bin: int,
+) -> tuple[pd.DataFrame, Counter, dict[str, int]]:
+    """Percorre as regioes sorteadas e junta as linhas, com DOIS limites, cada um com seu motivo.
+
+    `max_por_bin_por_regiao` limita quantas variantes DO MESMO BIN saem da MESMA regiao. E contra desequilibrio
+    de ligacao: variantes vizinhas sao correlacionadas, entao 4.000 de uma janela de 20 kb nao valem por 4.000
+    observacoes independentes. O corte e SORTEADO, nao "as primeiras" -- cortar por posicao guardaria so o
+    comeco de cada regiao, que foi o defeito do piloto de 20/09.
+
+    `por_bin` e a capacidade do reservatorio de cada bin, mantido ao longo de TODAS as regioes. Como o teto e
+    por bin, o bin escasso (AF alta) guarda tudo que aparece enquanto o abundante e podado: e isso que permite
+    encher os dois lendo a mesma quantidade de bases.
+    """
     motivos: Counter = Counter()
-    coletadas: list[dict[str, Any]] = []
+    vistos: Counter = Counter()
+    reservatorios: dict[str, list] = {}
     for chrom, inicio, fim in regioes:
-        da_regiao: list[dict[str, Any]] = []
+        da_regiao: dict[str, list[dict[str, Any]]] = {}
         for rec in fetch(chrom, inicio, fim):
             linhas, parciais = linhas_do_registro(rec, af_campo=af_campo, af_min=af_min)
             motivos.update(parciais)
-            da_regiao.extend(linhas)
-        if max_por_regiao is not None and len(da_regiao) > max_por_regiao:
-            motivos[MOTIVO_TETO_DA_REGIAO] += len(da_regiao) - max_por_regiao
-            da_regiao = da_regiao[:max_por_regiao]
-        coletadas.extend(da_regiao)
+            for linha in linhas:
+                da_regiao.setdefault(bin_de_af(linha[COLUNA_AF]), []).append(linha)
+        for nome, linhas in da_regiao.items():
+            if max_por_bin_por_regiao is not None and len(linhas) > max_por_bin_por_regiao:
+                motivos[MOTIVO_TETO_DA_REGIAO] += len(linhas) - max_por_bin_por_regiao
+                escolhidos = rng.choice(len(linhas), size=max_por_bin_por_regiao, replace=False)
+                linhas = [linhas[i] for i in sorted(escolhidos)]
+            for linha in linhas:
+                _no_reservatorio(reservatorios, vistos, nome, linha, por_bin, rng)
+
+    coletadas = [linha for nome in sorted(reservatorios) for linha in reservatorios[nome]]
     if not coletadas:
-        return pd.DataFrame(columns=["chrom", "pos", "ref", "alt", COLUNA_AF]), motivos
+        return pd.DataFrame(columns=["chrom", "pos", "ref", "alt", COLUNA_AF]), motivos, dict(vistos)
     frame = pd.DataFrame(coletadas)
     antes = len(frame)
     frame = frame.drop_duplicates(subset=["chrom", "pos", "ref", "alt"]).reset_index(drop=True)
     motivos["duplicata_entre_regioes"] += antes - len(frame)
-    return frame, motivos
+    return frame, motivos, dict(vistos)
 
 
 def caminho_do_tbi(tbi_dir: Path, chrom: str) -> Path:
@@ -319,7 +366,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--af-min", type=float, help="sem ele NAO ha piso; o custo e medido de todo jeito")
     parser.add_argument("--n-regioes", type=int, default=2000)
     parser.add_argument("--tamanho-regiao-bp", type=int, default=20000)
-    parser.add_argument("--max-por-regiao", type=int, default=50)
+    parser.add_argument("--max-por-bin-por-regiao", type=int, default=20,
+                        help="teto por BIN dentro de uma regiao, contra desequilibrio de ligacao")
+    parser.add_argument("--por-bin", type=int, default=20000,
+                        help="capacidade do reservatorio de cada bin de AF, ao longo de todas as regioes")
     parser.add_argument("--brazil-variants", type=Path)
     parser.add_argument("--selection", type=Path)
     parser.add_argument("--snapshot", action="append", type=Path, default=None)
@@ -354,9 +404,9 @@ def main(argv: list[str] | None = None) -> int:
     regioes = sortear_regioes(rng, comprimentos, alocacao, tamanho_bp=args.tamanho_regiao_bp)
 
     tbi_dir = args.tbi_dir.expanduser()
-    bruto, motivos_leitura = coletar(fetch_por_cromossomo(regioes, tbi_dir=tbi_dir), regioes,
-                                     af_campo=args.af_campo, af_min=args.af_min,
-                                     max_por_regiao=args.max_por_regiao)
+    bruto, motivos_leitura, vistos_por_bin = coletar(
+        fetch_por_cromossomo(regioes, tbi_dir=tbi_dir), regioes, rng=rng, af_campo=args.af_campo,
+        af_min=args.af_min, max_por_bin_por_regiao=args.max_por_bin_por_regiao, por_bin=args.por_bin)
 
     identidades: dict[str, str] = {str(args.abraom_pool): sha256_file(args.abraom_pool.expanduser())}
     # O indice escolhe quais bytes do VCF sao lidos: sem o sha256 dele a leitura nao e reproduzivel.
@@ -401,7 +451,8 @@ def main(argv: list[str] | None = None) -> int:
         "receita": {
             "af_campo": args.af_campo, "af_min_aplicado": args.af_min,
             "geografia": args.geografia, "n_regioes": args.n_regioes,
-            "tamanho_regiao_bp": args.tamanho_regiao_bp, "max_por_regiao": args.max_por_regiao,
+            "tamanho_regiao_bp": args.tamanho_regiao_bp,
+            "max_por_bin_por_regiao": args.max_por_bin_por_regiao, "por_bin": args.por_bin,
             "seed": args.seed, "chr8_reservado": reservar_chr8,
             "regioes_sorteadas": len(regioes),
             "bases_lidas": len(regioes) * args.tamanho_regiao_bp,
@@ -413,6 +464,11 @@ def main(argv: list[str] | None = None) -> int:
                      "tbi_dir": str(args.tbi_dir), "vcf": f"s3://{BUCKET}/{PREFIX}/ (lido remoto, sem copia)"},
         "identidades_das_entradas": identidades,
         "motivos_de_leitura": dict(sorted(motivos_leitura.items())),
+        "vistos_por_bin": dict(sorted(vistos_por_bin.items())),
+        "fracao_amostrada_por_bin": {
+            nome: round(int(distribuicao_af(bruto[COLUNA_AF]).get(nome, 0)) / vistos, 6)
+            for nome, vistos in sorted(vistos_por_bin.items()) if vistos
+        } if len(bruto) else {},
         "por_motivo_de_exclusao": por_motivo,
         "pool": {
             "n": int(len(pool)),
@@ -434,6 +490,8 @@ def main(argv: list[str] | None = None) -> int:
             "casar cromossomo reduz diferenca espacial grosseira; nao demonstra equivalencia de contexto",
             "casar o piso aproxima o intervalo de AF; nao iguala distribuicoes nem ancestralidades",
             "a amostragem por regiao tem vies proprio: variantes do mesmo bloco chegam juntas",
+            "o mesmo BIN nao significa a mesma coisa nas duas fontes: AF entre 4,3e-4 e 1e-3 e 1 a 2 copias em "
+            "2.342 alelos no ABraOM e centenas de copias em ~1,6 milhao no gnomAD",
         ],
         "saidas": saidas,
     }

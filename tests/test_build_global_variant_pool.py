@@ -129,20 +129,67 @@ def test_piso_recusa_e_conta():
     assert len(linhas) == 1, "sem piso declarado, a variante entra"
 
 
+def _coletar(fetch, regioes, *, seed=1, af_min=None, teto=None, por_bin=10_000):
+    return gp.coletar(fetch, regioes, rng=np.random.default_rng(seed), af_campo="AF_joint",
+                      af_min=af_min, max_por_bin_por_regiao=teto, por_bin=por_bin)
+
+
 def test_teto_por_regiao_limita_o_aglomerado():
     def fetch(chrom, inicio, fim):
         return [FakeRec(chrom, inicio + i, "A", ("G",), {"AF_joint": [0.2], "AC_joint": [9]})
                 for i in range(10)]
-    frame, motivos = gp.coletar(fetch, [("chr1", 0, 100)], af_campo="AF_joint", af_min=None,
-                                max_por_regiao=3)
+    frame, motivos, _ = _coletar(fetch, [("chr1", 0, 100)], teto=3)
     assert len(frame) == 3 and motivos[gp.MOTIVO_TETO_DA_REGIAO] == 7
+
+
+def test_teto_sorteia_em_vez_de_pegar_as_primeiras():
+    """O DEFEITO do piloto de 20/09: `linhas[:n]` guardava so o comeco de cada regiao de 20 kb."""
+    def fetch(chrom, inicio, fim):
+        return [FakeRec(chrom, inicio + i, "A", ("G",), {"AF_joint": [0.2], "AC_joint": [9]})
+                for i in range(200)]
+    posicoes = set()
+    for seed in range(6):
+        frame, _, _ = _coletar(fetch, [("chr1", 0, 1000)], seed=seed, teto=5)
+        posicoes.update(int(p) for p in frame["pos"])
+    assert max(posicoes) > 50, f"so posicoes do comeco: {sorted(posicoes)[:10]}..{max(posicoes)}"
+    assert len(posicoes) > 10, posicoes
+
+
+def test_bin_escasso_guarda_tudo_enquanto_o_abundante_e_podado():
+    """O ponto do teto POR BIN: no gnomAD 96% cai no bin raro e 0,15% no comum."""
+    def fetch(chrom, inicio, fim):
+        raras = [FakeRec(chrom, inicio + i, "A", ("G",), {"AF_joint": [1e-4], "AC_joint": [9]})
+                 for i in range(100)]
+        comuns = [FakeRec(chrom, inicio + 500 + i, "A", ("G",), {"AF_joint": [0.8], "AC_joint": [9]})
+                  for i in range(2)]
+        return raras + comuns
+    frame, _, vistos = _coletar(fetch, [("chr1", 0, 1000)], teto=10)
+    por_bin = frame[gp.COLUNA_AF].map(lambda af: af > 0.5).value_counts()
+    assert por_bin.get(True, 0) == 2, "o bin escasso tinha de guardar as duas"
+    assert por_bin.get(False, 0) == 10, "o bin abundante tinha de ser podado ao teto"
+    assert vistos[gp.bin_de_af(1e-4)] == 10 and vistos[gp.bin_de_af(0.8)] == 2
+
+
+def test_reservatorio_respeita_a_capacidade_do_bin():
+    def fetch(chrom, inicio, fim):
+        return [FakeRec(chrom, inicio + i, "A", ("G",), {"AF_joint": [0.2], "AC_joint": [9]})
+                for i in range(50)]
+    frame, _, vistos = _coletar(fetch, [("chr1", 0, 1000), ("chr1", 2000, 3000)], teto=None, por_bin=7)
+    assert len(frame) == 7, len(frame)
+    assert sum(vistos.values()) == 100, vistos
+
+
+def test_bin_de_af_segue_a_grade_declarada():
+    assert gp.bin_de_af(0.0005) == "(0.0, 0.001]"
+    assert gp.bin_de_af(0.001) == "(0.0, 0.001]"
+    assert gp.bin_de_af(0.9) == "(0.5, 1.0]"
+    assert gp.bin_de_af(1.0) == "(0.5, 1.0]"
 
 
 def test_duplicata_entre_regioes_sai():
     def fetch(chrom, inicio, fim):
         return [FakeRec(chrom, 500, "A", ("G",), {"AF_joint": [0.2], "AC_joint": [9]})]
-    frame, motivos = gp.coletar(fetch, [("chr1", 0, 1000), ("chr1", 400, 1400)], af_campo="AF_joint",
-                                af_min=None, max_por_regiao=None)
+    frame, motivos, _ = _coletar(fetch, [("chr1", 0, 1000), ("chr1", 400, 1400)], teto=None)
     assert len(frame) == 1 and motivos["duplicata_entre_regioes"] == 1
 
 
