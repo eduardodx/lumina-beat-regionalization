@@ -334,3 +334,26 @@ def assert_only_head_trains(
     if not permitidos:
         raise AssertionError(f"nenhum parametro treinavel em {list(allowed_prefixes)}")
     return permitidos
+
+
+def assert_optimizer_covers_trainables(model: nn.Module, param_groups: list) -> list[str]:
+    """Todo parametro treinavel em EXATAMENTE um grupo do otimizador.
+
+    Parametro treinavel fora de todo grupo recebe gradiente e nunca e atualizado -- falha silenciosa que nao
+    aparece em nenhuma metrica de treino. Parametro em dois grupos e atualizado duas vezes por passo.
+    """
+    contagem: dict[int, int] = {}
+    for grupo in param_groups:
+        for parametro in grupo["params"]:
+            contagem[id(parametro)] = contagem.get(id(parametro), 0) + 1
+
+    fora = [nome for nome, parametro in model.named_parameters()
+            if parametro.requires_grad and id(parametro) not in contagem]
+    repetidos = [nome for nome, parametro in model.named_parameters()
+                 if contagem.get(id(parametro), 0) > 1]
+    if fora or repetidos:
+        raise AssertionError(
+            f"otimizador inconsistente: {len(fora)} treinaveis fora de todo grupo (ex.: {fora[:5]}), "
+            f"{len(repetidos)} em mais de um grupo (ex.: {repetidos[:5]})"
+        )
+    return [nome for nome, parametro in model.named_parameters() if parametro.requires_grad]

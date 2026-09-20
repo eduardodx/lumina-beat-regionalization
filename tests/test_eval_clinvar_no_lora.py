@@ -16,6 +16,7 @@ from eval.clinvar.lora import (
     LoRALinear,
     apply_lora,
     assert_only_head_trains,
+    assert_optimizer_covers_trainables,
     freeze_backbone_in_eval,
 )
 
@@ -134,6 +135,67 @@ def test_com_backbone_congelado_e_rank_zero_so_a_cabeca_recebe_gradiente():
     antes = [p.clone() for p in backbone.parameters()]
     torch.optim.SGD(head.parameters(), lr=0.1).step()
     assert all(torch.equal(a, b) for a, b in zip(antes, backbone.parameters()))
+
+
+def test_otimizador_tem_de_cobrir_o_variant_encoder():
+    """Parametro treinavel fora de todo grupo recebe gradiente e nunca e atualizado: falha silenciosa."""
+    modelo = _Modelo(_TinyBackbone())
+    freeze_backbone_in_eval(modelo.backbone)
+    apply_lora(modelo.backbone, rank=0, alpha=8.0, dropout=0.1)
+
+    so_head = [{"params": list(modelo.head.parameters()), "lr": 1e-3}]
+    try:
+        assert_optimizer_covers_trainables(modelo, so_head)
+    except AssertionError as erro:
+        assert "variant_encoder" in str(erro), erro
+    else:
+        raise AssertionError("deixar o variant_encoder de fora tinha de reprovar")
+
+    classificador = [{"params": [p for n, p in modelo.named_parameters()
+                                 if p.requires_grad and n.startswith(CLASSIFIER_PREFIXES)], "lr": 1e-3}]
+    cobertos = assert_optimizer_covers_trainables(modelo, classificador)
+    assert any(n.startswith("variant_encoder.") for n in cobertos), cobertos
+
+
+def test_otimizador_reprova_parametro_em_dois_grupos():
+    modelo = _Modelo(_TinyBackbone())
+    freeze_backbone_in_eval(modelo.backbone)
+    apply_lora(modelo.backbone, rank=0, alpha=8.0, dropout=0.1)
+    treinaveis = [p for p in modelo.parameters() if p.requires_grad]
+    duplicado = [{"params": treinaveis, "lr": 1e-3}, {"params": treinaveis, "lr": 1e-4}]
+    try:
+        assert_optimizer_covers_trainables(modelo, duplicado)
+    except AssertionError as erro:
+        assert "mais de um grupo" in str(erro), erro
+        return
+    raise AssertionError("parametro em dois grupos tinha de reprovar")
+
+
+def test_rslora_sobrevive_ao_salvar_e_recarregar():
+    """Checkpoint treinado com rsLoRA recarregado sem a flag usaria alpha/r: predicao muda em silencio."""
+    torch.manual_seed(0)
+    original = _TinyBackbone()
+    apply_lora(original, rank=8, alpha=8.0, dropout=0.0, use_rslora=True)
+    with torch.no_grad():  # tira lora_b do zero para a escala importar
+        for modulo in original.modules():
+            if isinstance(modulo, LoRALinear):
+                modulo.lora_b.add_(torch.randn_like(modulo.lora_b) * 0.1)
+    estado = {k: v.clone() for k, v in original.state_dict().items()}
+    x = torch.randn(4, 4)
+    with torch.no_grad():
+        esperado = original(x)
+
+    certo = _TinyBackbone()
+    apply_lora(certo, rank=8, alpha=8.0, dropout=0.0, use_rslora=True)
+    certo.load_state_dict(estado)
+    with torch.no_grad():
+        assert torch.allclose(certo(x), esperado), "recarregar com a mesma flag tem de reproduzir"
+
+    errado = _TinyBackbone()
+    apply_lora(errado, rank=8, alpha=8.0, dropout=0.0)  # sem rsLoRA: alpha/r
+    errado.load_state_dict(estado)
+    with torch.no_grad():
+        assert not torch.allclose(errado(x), esperado), "sem a flag a escala muda, e o teste tem de ver isso"
 
 
 def test_rslora_muda_so_a_escala_e_fica_no_sumario():

@@ -221,6 +221,9 @@ def load_model(
         rank=config.lora_rank,
         alpha=config.lora_alpha,
         dropout=config.lora_dropout,
+        # Sem isto, um checkpoint treinado com rsLoRA seria recarregado com escala alpha/r em vez de
+        # alpha/sqrt(r): as predicoes mudariam em silencio.
+        use_rslora=getattr(config, "lora_use_rslora", False),
     )
     enable_layernorm_training(model.backbone)
     native_selection = getattr(adapter, "native_variant_head_selection", None)

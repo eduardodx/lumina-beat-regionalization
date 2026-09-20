@@ -51,6 +51,7 @@ from eval.clinvar.lora import (
     apply_lora,
     CLASSIFIER_PREFIXES,
     assert_only_head_trains,
+    assert_optimizer_covers_trainables,
     count_trainable_parameters,
     enable_layernorm_training,
     freeze_backbone_in_eval,
@@ -767,13 +768,25 @@ def run_finetune(config: FineTuneConfig) -> dict[str, Any]:
         p for n, p in raw_model.backbone.named_parameters()
         if "lora_" not in n and p.requires_grad
     ]
-    head_params = list(raw_model.head.parameters())
+    # O classificador nao e so `head`: o `variant_encoder` tem pesos proprios (ver CLASSIFIER_PREFIXES). Antes
+    # ele ficava de fora do otimizador -- recebia gradiente e nunca era atualizado, sem erro visivel.
+    head_params = [parametro for nome, parametro in raw_model.named_parameters()
+                   if parametro.requires_grad and nome.startswith(CLASSIFIER_PREFIXES)]
 
-    optimizer = torch.optim.AdamW([
+    param_groups = [
         {"params": lora_params, "lr": config.lr_backbone, "weight_decay": config.wd_backbone},
         {"params": norm_params, "lr": config.lr_backbone, "weight_decay": config.wd_backbone},
         {"params": head_params, "lr": config.lr_head, "weight_decay": config.wd_head},
-    ])
+    ]
+    try:
+        cobertos = assert_optimizer_covers_trainables(raw_model, param_groups)
+        log.info("otimizador cobre %d parametros treinaveis, cada um uma vez.", len(cobertos))
+    except AssertionError as erro:
+        if config.campaign_system:
+            raise
+        log.warning("%s (tolerado fora da campanha)", erro)
+
+    optimizer = torch.optim.AdamW(param_groups)
 
     if config.freeze_backbone_steps > 0:
         log.info("Backbone LR held at 0 for first %d steps", config.freeze_backbone_steps)
