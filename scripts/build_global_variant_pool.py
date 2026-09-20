@@ -45,7 +45,8 @@ USO (notebook)
     export WORK=~/testeArq/lumina-beat-regionalization
     PYTHONPATH="$WORK" python3 "$WORK"/scripts/build_global_variant_pool.py \\
         --fai ~/hg38/hg38.fa.fai --abraom-pool ~/artifacts/redesenho/g4_abraom/abraom_pool.parquet \\
-        --geografia casado_ao_abraom --n-regioes 2000 --tamanho-regiao-bp 20000 \\
+        --geografia casado_ao_abraom --tbi-dir ~/gnomad-tbi \\
+        --n-regioes 2000 --tamanho-regiao-bp 20000 \\
         --brazil-variants ~/artifacts/redesenho/g1_brazil_studies/brazil_study_variants.parquet \\
         --selection ~/artifacts/redesenho/g5_comum/selecao_comum.parquet \\
         --snapshot ~/artifacts/redesenho/g2_final_nenhum/core_head_snapshot.parquet \\
@@ -230,11 +231,27 @@ def coletar(
     return frame, motivos
 
 
-def abrir_gnomad(chrom: str) -> Callable[[str, int, int], Iterable[Any]]:
-    """Abre o VCF do cromossomo direto no S3, sem copiar. Unica parte que depende de pysam e de rede."""
+def caminho_do_tbi(tbi_dir: Path, chrom: str) -> Path:
+    return tbi_dir / f"{VCF_NAME.format(chrom=chrom)}.tbi"
+
+
+def abrir_gnomad(chrom: str, *, tbi_dir: Path) -> Callable[[str, int, int], Iterable[Any]]:
+    """Abre o VCF do cromossomo direto no S3, sem copiar. Unica parte que depende de pysam e de rede.
+
+    O INDICE TEM DE SER LOCAL E EXPLICITO. Com URL presignada, pysam procuraria o indice em `<url>.tbi`, e
+    colar `.tbi` numa URL que ja termina em query string assinada da 404 -- foi o `Could not retrieve index
+    file` do piloto de 20/09. Por isso o `.tbi` vem de `--tbi-dir` e entra no manifesto com sha256: ele decide
+    quais bytes do VCF sao lidos, entao e insumo com identidade, nao detalhe de transporte. Os indices somam
+    2,83 MiB no total (o VCF, 816,7 GiB, continua sem ser copiado).
+    """
     import boto3  # import tardio: o resto do modulo roda sem AWS
     import pysam
 
+    indice = caminho_do_tbi(tbi_dir, chrom)
+    if not indice.is_file():
+        raise SystemExit(
+            f"falta o indice {indice}. Copie os .tbi (2,83 MiB no total) antes de rodar:\n"
+            f"  aws s3 cp s3://{BUCKET}/{PREFIX}/ {tbi_dir}/ --recursive --exclude '*' --include '*.tbi'")
     credenciais = boto3.Session().get_credentials()
     if credenciais is None:
         raise RuntimeError("sem credencial AWS (IMDS/env) para ler o gnomAD no S3")
@@ -242,17 +259,19 @@ def abrir_gnomad(chrom: str) -> Callable[[str, int, int], Iterable[Any]]:
         "get_object",
         Params={"Bucket": BUCKET, "Key": f"{PREFIX}/{VCF_NAME.format(chrom=chrom)}"},
         ExpiresIn=PRESIGN_TTL)
-    handle = pysam.VariantFile(url)
+    handle = pysam.VariantFile(url, index_filename=str(indice))
     return lambda c, inicio, fim: handle.fetch(c, inicio, fim)
 
 
-def fetch_por_cromossomo(regioes: list[tuple[str, int, int]]) -> Callable[[str, int, int], Iterable[Any]]:
+def fetch_por_cromossomo(
+    regioes: list[tuple[str, int, int]], *, tbi_dir: Path
+) -> Callable[[str, int, int], Iterable[Any]]:
     """Um handle por cromossomo, reaproveitado entre as regioes dele."""
     handles: dict[str, Callable[[str, int, int], Iterable[Any]]] = {}
 
     def fetch(chrom: str, inicio: int, fim: int) -> Iterable[Any]:
         if chrom not in handles:
-            handles[chrom] = abrir_gnomad(chrom)
+            handles[chrom] = abrir_gnomad(chrom, tbi_dir=tbi_dir)
         return handles[chrom](chrom, inicio, fim)
 
     return fetch
@@ -294,6 +313,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fai", required=True, type=Path, help="indice do hg38, para os comprimentos")
     parser.add_argument("--abraom-pool", required=True, type=Path, help="a outra metade: piso e geografia")
     parser.add_argument("--geografia", required=True, choices=GEOGRAFIAS)
+    parser.add_argument("--tbi-dir", required=True, type=Path,
+                        help="pasta com os gnomad.joint.v4.1.sites.chrN.vcf.bgz.tbi (2,83 MiB no total)")
     parser.add_argument("--af-campo", default="AF_joint")
     parser.add_argument("--af-min", type=float, help="sem ele NAO ha piso; o custo e medido de todo jeito")
     parser.add_argument("--n-regioes", type=int, default=2000)
@@ -332,10 +353,17 @@ def main(argv: list[str] | None = None) -> int:
     rng = np.random.default_rng(args.seed)
     regioes = sortear_regioes(rng, comprimentos, alocacao, tamanho_bp=args.tamanho_regiao_bp)
 
-    bruto, motivos_leitura = coletar(fetch_por_cromossomo(regioes), regioes, af_campo=args.af_campo,
-                                     af_min=args.af_min, max_por_regiao=args.max_por_regiao)
+    tbi_dir = args.tbi_dir.expanduser()
+    bruto, motivos_leitura = coletar(fetch_por_cromossomo(regioes, tbi_dir=tbi_dir), regioes,
+                                     af_campo=args.af_campo, af_min=args.af_min,
+                                     max_por_regiao=args.max_por_regiao)
 
     identidades: dict[str, str] = {str(args.abraom_pool): sha256_file(args.abraom_pool.expanduser())}
+    # O indice escolhe quais bytes do VCF sao lidos: sem o sha256 dele a leitura nao e reproduzivel.
+    for chrom in sorted({c for c, _, _ in regioes}):
+        indice = caminho_do_tbi(tbi_dir, chrom)
+        if indice.is_file():
+            identidades[str(indice)] = sha256_file(indice)
     membros: set[str] = set()
     if args.brazil_variants:
         membros = chaves_do_parquet(args.brazil_variants.expanduser())
@@ -381,7 +409,8 @@ def main(argv: list[str] | None = None) -> int:
             "padrao_de_acesso": ("amostragem por regiao via .tbi, leitura remota sem copia; e um acesso NOVO, "
                                  "nao coberto pelo contrato de lookup do Mosaic"),
         },
-        "entradas": {"fai": str(args.fai), "abraom_pool": str(args.abraom_pool)},
+        "entradas": {"fai": str(args.fai), "abraom_pool": str(args.abraom_pool),
+                     "tbi_dir": str(args.tbi_dir), "vcf": f"s3://{BUCKET}/{PREFIX}/ (lido remoto, sem copia)"},
         "identidades_das_entradas": identidades,
         "motivos_de_leitura": dict(sorted(motivos_leitura.items())),
         "por_motivo_de_exclusao": por_motivo,

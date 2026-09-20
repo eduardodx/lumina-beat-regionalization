@@ -182,11 +182,12 @@ def test_end_to_end_publica_e_declara_a_receita():
         raiz = Path(tmp)
         abraom, membros, selecao, snap = _entradas(raiz)
         original = gp.fetch_por_cromossomo
-        gp.fetch_por_cromossomo = lambda regioes: _fetch_sintetico  # type: ignore[assignment]
+        gp.fetch_por_cromossomo = lambda regioes, **kw: _fetch_sintetico  # type: ignore[assignment]
         try:
             rc = gp.main(["--fai", str(raiz / "g.fai"), "--abraom-pool", str(abraom),
                           "--geografia", "casado_ao_abraom", "--n-regioes", "20",
-                          "--tamanho-regiao-bp", "1000", "--brazil-variants", str(membros),
+                          "--tamanho-regiao-bp", "1000", "--tbi-dir", str(raiz),
+                          "--brazil-variants", str(membros),
                           "--selection", str(selecao), "--snapshot", str(snap),
                           "--out-dir", str(raiz / "out")])
         finally:
@@ -207,11 +208,12 @@ def test_end_to_end_sem_exclusoes_nao_publica():
         raiz = Path(tmp)
         abraom, _, _, _ = _entradas(raiz)
         original = gp.fetch_por_cromossomo
-        gp.fetch_por_cromossomo = lambda regioes: _fetch_sintetico  # type: ignore[assignment]
+        gp.fetch_por_cromossomo = lambda regioes, **kw: _fetch_sintetico  # type: ignore[assignment]
         try:
             rc = gp.main(["--fai", str(raiz / "g.fai"), "--abraom-pool", str(abraom),
                           "--geografia", "uniforme", "--n-regioes", "5",
-                          "--tamanho-regiao-bp", "1000", "--out-dir", str(raiz / "out")])
+                          "--tamanho-regiao-bp", "1000", "--tbi-dir", str(raiz),
+                          "--out-dir", str(raiz / "out")])
         finally:
             gp.fetch_por_cromossomo = original
         assert rc == 2
@@ -226,11 +228,32 @@ def test_geografia_e_obrigatoria():
         abraom, _, _, _ = _entradas(raiz)
         try:
             gp.main(["--fai", str(raiz / "g.fai"), "--abraom-pool", str(abraom),
-                     "--n-regioes", "5", "--out-dir", str(raiz / "out")])
+                     "--tbi-dir", str(raiz), "--n-regioes", "5", "--out-dir", str(raiz / "out")])
         except SystemExit as exc:
             assert exc.code == 2
             return
         raise AssertionError("--geografia sem default: tem de exigir a declaracao")
+
+
+def test_indice_ausente_falha_com_o_comando_para_resolver():
+    """O piloto de 20/09 morreu em `Could not retrieve index file`: com URL presignada pysam nao acha o .tbi.
+
+    A falha tem de dizer o que fazer, e nao pode ser um traceback de pysam no meio de 2.000 regioes.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            gp.abrir_gnomad("chr1", tbi_dir=Path(tmp))
+        except SystemExit as exc:
+            assert "aws s3 cp" in str(exc) and ".tbi" in str(exc), str(exc)
+            return
+        except ImportError as exc:
+            raise Skip(f"sem boto3/pysam neste ambiente: {exc}") from exc
+        raise AssertionError("sem indice local, abrir_gnomad tinha de parar antes de tocar a rede")
+
+
+def test_caminho_do_tbi_seque_o_nome_do_vcf():
+    caminho = gp.caminho_do_tbi(Path("/x"), "chr7")
+    assert caminho.name == "gnomad.joint.v4.1.sites.chr7.vcf.bgz.tbi"
 
 
 if __name__ == "__main__":
