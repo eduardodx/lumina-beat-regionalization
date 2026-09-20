@@ -354,6 +354,15 @@ treino da cabeça é medida e declarada, não eliminada — ela é esperada, por
 
 O script só publica o pool com as exclusões em mãos, registra o sha256 de cada arquivo usado para excluir, e para
 com código 2 se o ABraOM não bater o source-lock ou se houver o mesmo alelo com AF conflitante.
+
+**Medido em 20/09** (de 1.365.230 linhas): pool com **1.224.029** variantes, `sha256 40bd0f79…`. Saíram 74.532 fora
+dos autossomos, **61.737 no chr8** (o custo da decisão E do lado do adapter), 2.326 com AF degenerada, 2.282
+membros dos estudos e 324 alelos do conjunto de seleção ou da validação e teste. Zero não-SNV e zero duplicatas.
+A sobreposição declarada com o treino da cabeça é de 16.649 variantes no candidato `nenhum` e 6.733 no `janela4096`.
+
+O espectro de AF é **discreto em passos de 1/2342** — o mínimo do pool, 0,000427, é um alelo em 1.171 genomas
+diploides — e **54% das variantes caem no bin mais raro**. Amostrar uniformemente faria o adapter ver quase só
+singletons: é por isso que a amostragem é estratificada por bin.
 - Janelas: **nenhum alelo de variante dos dois estudos** e nada do chr8 enquanto ele estiver reservado. Contexto de
   referência pode aparecer; alelo do estudo, nunca. Isso vale com mais força agora: `br_population_observed` é, por
   definição, gold presente no ABraOM, que passa a ser fonte de treino do adapter.

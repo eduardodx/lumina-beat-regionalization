@@ -125,9 +125,11 @@ def classificar(
 
     aplicar(linhas["af_abraom"].map(af_invalida), MOTIVO_AF_INVALIDA)
     if not manter_af_degenerada:
-        valida = motivos == MOTIVO_OK
-        degenerada = pd.Series(False, index=linhas.index)
-        degenerada[valida] = linhas.loc[valida, "af_abraom"].map(af_degenerada)
+        # So avalia onde o AF ja passou pela checagem de validade; `aplicar` cuida de nao sobrescrever motivo.
+        degenerada = pd.Series(
+            [motivo == MOTIVO_OK and af_degenerada(valor)
+             for motivo, valor in zip(motivos, linhas["af_abraom"])],
+            index=linhas.index, dtype=bool)
         aplicar(degenerada, MOTIVO_AF_DEGENERADA)
     aplicar(~pd.Series([e_snv(r, a) for r, a in zip(linhas["ref"], linhas["alt"])], index=linhas.index),
             MOTIVO_NAO_SNV)
