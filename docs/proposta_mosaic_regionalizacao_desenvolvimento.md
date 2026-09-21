@@ -422,6 +422,14 @@ bloqueia `pronto_para_campanha`.
 sistematicamente de fora do treino do adapter. É inevitável — o modelo não lê essa janela de qualquer forma — mas
 é viés, não neutralidade, e por isso está escrito no manifesto em vez de apenas acontecer.
 
+**Resultado [21/09]: plano final `sha256 c99e5dae…`** — 50.000 janelas, 30.000 globais e 20.000 do ABraOM,
+`fracao_global_efetiva_nas_linhas = 0,6`, sete bins a ~7.143, `janelas_sem_reposicao = 0`, e a reauditoria contra
+o hg38 voltou **50.000 `ok`, zero descarte**. As substituições foram **42, todas do lado global e nenhuma do
+ABraOM** — a assimetria prevista: variante de callset já mora em região chamável.
+
+**Com isso o lado dos DADOS do G4 está fechado.** O que resta no G4 não é mais dado: é o peso da loss, a separação
+populacional por loci entre treino e validação do adapter, e o treinador MLM.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
