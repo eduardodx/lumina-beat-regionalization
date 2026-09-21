@@ -390,6 +390,22 @@ cai **inteiro dentro de um único bin**, e ali remove **2.958 de 3.000 (98,6%)**
 estreita do espectro do gnomAD. O relatório passou a publicar `fracao_dentro_do_bin_atingido` para que a leitura
 não dependa de quem souber dividir.
 
+**Pool global definitivo [MATERIALIZADO em 21/09].** 2.500 regiões de 20 kb, 50 Mb lidos (~1,6% do genoma),
+**21m51s**. Resultado: **139.495 variantes**, `sha256 ce749a6d…`, com os sete bins praticamente cheios
+(20.000 / 19.964 / 19.929 / 19.945 / 19.861 / 19.925 / 19.871). Receita: `AF_joint`, sem piso,
+`--geografia casado_ao_abraom`, teto de 20 por bin por região, reservatório de 20.000 por bin, semente 20260920,
+chr8 reservado.
+
+A geografia convergiu: maior diferença contra o ABraOM de **−0,0073** (chr15), depois de −0,0356 com 40 regiões
+e −0,0123 com 200. O resíduo é arredondamento da alocação por cromossomo.
+
+As exclusões voltaram a disparar em dado real: **10 membros de estudo, 11 alelos de avaliação, 31 nas extremidades
+de AF**. Volume pequeno — 52 em 139.547 — mas o que importa é que nenhum deles chegaria ao adapter.
+
+E o piso confirmou-se na escala definitiva: removeria **19.702 de 20.000 do bin mais raro (98,5%)**, e nada dos
+outros seis. Custo de reamostrar com piso: 22 minutos. **Barato o bastante para materializar as duas versões**
+quando a decisão for tomada, em vez de escolher no escuro.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de

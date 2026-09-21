@@ -346,7 +346,11 @@ descartes. Isso é REF na posição focal, cabimento e ACGT. **Não** cobre mont
 populacional treino/validação, loss nem treino: tudo isso continua pendente. O auditor declara
 `janela_auditada.layout`; se ele disser `centrado` num plano, a auditoria não vale.
 
-**G4 (adapter):** o **pool global do gnomAD** (48 VCFs, >500 GB: varredura completa custa horas, amostragem por
+**G4, lado dos dados: FECHADO em 21/09.** As duas metades da mistura existem e têm identidade — ABraOM
+1.224.029 (`40bd0f79…`) e global 139.495 (`ce749a6d…`, 2.500 regiões, 50 Mb, 22 min, sete bins a ~20 mil). Falta
+rodar o plano 60/40 com as duas e auditar as janelas resultantes.
+
+**G4, lado do treino:** o **pool global do gnomAD** (48 VCFs, >500 GB: varredura completa custa horas, amostragem por
 `.tbi` custa minutos com viés declarado), o **peso da loss** entre posições de variante e de referência, e o
 treinador MLM em si.
 
