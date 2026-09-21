@@ -274,13 +274,14 @@ def test_reparo_repoe_dentro_do_mesmo_estrato_e_mantem_o_total():
     ruins = [int(linha.window_start) + 1 for linha in plano.head(3).itertuples()]
     fetch = _genoma_com_n(ruins)
 
-    reparado, substituicoes, sobrou = gen.reparar_plano(
+    reparado, substituicoes, sobrou, fatais = gen.reparar_plano(
         plano, {gen.FONTE_ABRAOM: pool}, fetch, rng=rng, window_bp=JANELA_TESTE, margem=8,
         span_min=3, span_max=6, spans_de_referencia=1)
 
     assert len(reparado) == len(plano), (len(reparado), len(plano))
-    assert substituicoes[gen.FONTE_ABRAOM] >= 3, substituicoes
-    assert sobrou.empty
+    assert sum(substituicoes.values()) >= 3, substituicoes
+    assert all("non_acgt" in chave for chave in substituicoes), substituicoes
+    assert sobrou.empty and fatais.empty
     assert reparado["variant_id"].is_unique
     assert gen.indices_invalidos(reparado, fetch, window_bp=JANELA_TESTE) == []
 
@@ -293,7 +294,7 @@ def test_reparo_sem_candidato_no_estrato_declara_o_que_sobrou():
                              margem=8, span_min=3, span_max=6, spans_de_referencia=1)
     todas = [int(linha.window_start) + 1 for linha in plano.itertuples()]
     fetch = _genoma_com_n(todas)
-    reparado, _, sobrou = gen.reparar_plano(
+    reparado, _, sobrou, _ = gen.reparar_plano(
         plano, {gen.FONTE_ABRAOM: pool}, fetch, rng=rng, window_bp=JANELA_TESTE, margem=8,
         span_min=3, span_max=6, spans_de_referencia=1, max_rodadas=2)
     assert len(sobrou) > 0, "as invalidas tinham de ser declaradas"
@@ -308,7 +309,50 @@ def test_indices_invalidos_usa_a_janela_declarada():
     limpo = _genoma_com_n([])
     assert gen.indices_invalidos(plano, limpo, window_bp=JANELA_TESTE) == []
     sujo = _genoma_com_n([int(plano.iloc[2]["window_start"]) + 2])
-    assert gen.indices_invalidos(plano, sujo, window_bp=JANELA_TESTE) == [2]
+    assert gen.indices_invalidos(plano, sujo, window_bp=JANELA_TESTE) == [(2, "non_acgt")]
+
+
+def test_ref_mismatch_interrompe_em_vez_de_ser_reposto():
+    """O DEFEITO relatado em 21/09: repor um ref_mismatch faria o erro de FASTA/build SUMIR.
+
+    A reauditoria final voltaria limpa e o defeito seguiria para o treino. Ele tem de sair em `fatais`.
+    """
+    rng = np.random.default_rng(9)
+    pool = _com_metadados(_pool_para_reparo())
+    plano = gen.montar_plano(pool.head(6), fonte=gen.FONTE_ABRAOM, rng=rng, window_bp=JANELA_TESTE,
+                             margem=8, span_min=3, span_max=6, spans_de_referencia=1)
+
+    def fetch(chrom, inicio, fim):
+        # Genoma inteiro de C: a REF declarada (A) nunca bate -> ref_mismatch, nao non_acgt.
+        return "C" * (fim - inicio)
+
+    reparado, substituicoes, sobrou, fatais = gen.reparar_plano(
+        plano, {gen.FONTE_ABRAOM: pool}, fetch, rng=rng, window_bp=JANELA_TESTE, margem=8,
+        span_min=3, span_max=6, spans_de_referencia=1)
+    assert len(fatais) == len(plano), (len(fatais), len(plano))
+    assert set(fatais["motivo"]) == {"ref_mismatch"}, set(fatais["motivo"])
+    assert substituicoes == {}, "nenhuma reposicao podia ter acontecido"
+    assert sobrou.empty
+
+
+def test_motivos_reparaveis_sao_os_declarados():
+    assert set(gen.MOTIVOS_REPARAVEIS) == {"non_acgt", "out_of_bounds"}
+    assert "ref_mismatch" not in gen.MOTIVOS_REPARAVEIS
+    assert "not_snv" not in gen.MOTIVOS_REPARAVEIS
+
+
+def test_substituicao_e_contada_por_fonte_bin_e_motivo():
+    rng = np.random.default_rng(11)
+    pool = _com_metadados(_pool_para_reparo())
+    plano = gen.montar_plano(pool.head(8), fonte=gen.FONTE_ABRAOM, rng=rng, window_bp=JANELA_TESTE,
+                             margem=8, span_min=3, span_max=6, spans_de_referencia=1)
+    ruins = [int(linha.window_start) + 1 for linha in plano.head(2).itertuples()]
+    _, substituicoes, _, _ = gen.reparar_plano(
+        plano, {gen.FONTE_ABRAOM: pool}, _genoma_com_n(ruins), rng=rng, window_bp=JANELA_TESTE,
+        margem=8, span_min=3, span_max=6, spans_de_referencia=1)
+    for chave in substituicoes:
+        fonte, af_bin, motivo = chave.split("|")
+        assert fonte == gen.FONTE_ABRAOM and motivo == "non_acgt" and af_bin
 
 
 if __name__ == "__main__":

@@ -182,16 +182,20 @@ def montar_plano(
     return pd.DataFrame(linhas)
 
 
-def indices_invalidos(plano: pd.DataFrame, fetch, *, window_bp: int) -> list[int]:
-    """Posicoes do plano cuja janela DECLARADA nao se constroi. Mesma regra do auditor de janelas."""
-    ruins: list[int] = []
+#: Motivos que a reposicao PODE tratar: dizem "esta variante nao serve", nao "o dado esta errado".
+MOTIVOS_REPARAVEIS = ("non_acgt", "out_of_bounds")
+
+
+def indices_invalidos(plano: pd.DataFrame, fetch, *, window_bp: int) -> list[tuple[int, str]]:
+    """Posicoes do plano cuja janela DECLARADA nao se constroi, com o motivo. Regra do auditor de janelas."""
+    ruins: list[tuple[int, str]] = []
     for posicao, linha in enumerate(plano.itertuples(index=False)):
         try:
             build_window(fetch, chrom=str(linha.chrom), pos_1based=int(linha.pos_1based),
                          ref=str(linha.ref), alt=str(linha.alt), window_bp=window_bp,
                          focal_index=int(linha.focal_index))
-        except WindowError:
-            ruins.append(posicao)
+        except WindowError as exc:
+            ruins.append((posicao, exc.reason))
     return ruins
 
 
@@ -209,18 +213,36 @@ def reparar_plano(
     sistematicamente de fora. E pequeno (42 em 50.000 na rodada de 21/09) e inevitavel -- o modelo nao consegue
     ler essa janela de qualquer forma --, mas e vies, nao neutralidade.
 
-    Devolve (plano reparado, substituicoes por fonte, linhas que nao deu para repor).
+    O QUE NAO SE REPOE: `ref_mismatch`. Ele nao diz "esta variante nao serve", diz "o FASTA ou o build esta
+    errado" -- e repor faria o erro sumir, com a reauditoria final voltando limpa. Ele volta em `fatais` e o
+    chamador para com codigo 2. `not_snv` idem: os dois pools ja filtram SNV, entao ele so aparece se algo a
+    montante quebrou.
+
+    Devolve (plano reparado, substituicoes por fonte|bin|motivo, sem reposicao no estrato, fatais).
     """
     substituicoes: dict[str, int] = {}
+    vazio = plano.iloc[0:0].copy()
     for _ in range(max_rodadas):
         ruins = indices_invalidos(plano, fetch, window_bp=window_bp)
         if not ruins:
-            return plano, substituicoes, plano.iloc[0:0].copy()
-        maus = plano.iloc[ruins].copy()
-        plano = plano.drop(plano.index[ruins]).reset_index(drop=True)
+            return plano, substituicoes, vazio, vazio
+
+        # `ref_mismatch` nao e "esta variante nao serve", e "o FASTA ou o build esta errado". Repor esconderia o
+        # erro: a reauditoria final voltaria limpa e o defeito seguiria para o treino. Ele sai em separado.
+        fatais_idx = [i for i, motivo in ruins if motivo not in MOTIVOS_REPARAVEIS]
+        if fatais_idx:
+            fatais = plano.iloc[fatais_idx].copy()
+            fatais["motivo"] = [motivo for _, motivo in ruins if motivo not in MOTIVOS_REPARAVEIS]
+            return plano, substituicoes, vazio, fatais
+
+        posicoes = [i for i, _ in ruins]
+        motivos = {i: motivo for i, motivo in ruins}
+        maus = plano.iloc[posicoes].copy()
+        maus["motivo"] = [motivos[i] for i in posicoes]
+        plano = plano.drop(plano.index[posicoes]).reset_index(drop=True)
         usados = set(plano["variant_id"]) | set(maus["variant_id"])
         repostos: list[pd.DataFrame] = []
-        for (fonte, af_bin), grupo in maus.groupby(["fonte", "af_bin"], sort=True):
+        for (fonte, af_bin, motivo), grupo in maus.groupby(["fonte", "af_bin", "motivo"], sort=True):
             pool = pools[str(fonte)]
             candidatos = pool[(pool["af_bin"] == af_bin) & (~pool["variant_id"].isin(usados))]
             if candidatos.empty:
@@ -232,15 +254,20 @@ def reparar_plano(
             repostos.append(montar_plano(amostra, fonte=str(fonte), rng=rng, window_bp=window_bp,
                                          margem=margem, span_min=span_min, span_max=span_max,
                                          spans_de_referencia=spans_de_referencia))
-            substituicoes[str(fonte)] = substituicoes.get(str(fonte), 0) + quantidade
+            chave = f"{fonte}|{af_bin}|{motivo}"
+            substituicoes[chave] = substituicoes.get(chave, 0) + quantidade
         if not repostos:
-            return plano, substituicoes, maus
+            return plano, substituicoes, maus, vazio
         plano = pd.concat([plano, *repostos], ignore_index=True)
 
-    restantes = plano.iloc[indices_invalidos(plano, fetch, window_bp=window_bp)].copy()
+    sobraram = indices_invalidos(plano, fetch, window_bp=window_bp)
+    fatais_idx = [i for i, motivo in sobraram if motivo not in MOTIVOS_REPARAVEIS]
+    if fatais_idx:
+        return plano, substituicoes, vazio, plano.iloc[fatais_idx].copy()
+    restantes = plano.iloc[[i for i, _ in sobraram]].copy()
     if len(restantes):
         plano = plano.drop(restantes.index).reset_index(drop=True)
-    return plano, substituicoes, restantes
+    return plano, substituicoes, restantes, vazio
 
 
 def resumo_do_plano(plano: pd.DataFrame, *, window_bp: int) -> dict[str, Any]:
@@ -345,10 +372,18 @@ def main(argv: list[str] | None = None) -> int:
             anotado["variant_id"] = [f"{c}:{int(pos)}:{str(r).upper()}:{str(a).upper()}" for c, pos, r, a in
                                      zip(anotado["chrom"], anotado["pos"], anotado["ref"], anotado["alt"])]
             pools[fonte] = anotado
-        plano, substituicoes, irrecuperaveis = reparar_plano(
+        plano, substituicoes, irrecuperaveis, fatais = reparar_plano(
             plano, pools, fetch, rng=rng, window_bp=args.window_bp, margem=args.margem,
             span_min=args.span_min, span_max=args.span_max,
             spans_de_referencia=args.spans_de_referencia, max_rodadas=args.max_rodadas_de_reparo)
+        if len(fatais):
+            out_dir = args.out_dir.expanduser()
+            out_dir.mkdir(parents=True, exist_ok=True)
+            fatais.to_parquet(out_dir / "janelas_com_erro_de_dado.parquet", index=False)
+            print(f"FALHOU: {len(fatais)} janelas com erro de DADO (ex.: ref_mismatch), que nao se repoe -- "
+                  f"investigar FASTA/build antes de seguir. Exemplos: "
+                  f"{fatais.head(3)[['chrom', 'pos_1based', 'ref', 'alt']].to_dict(orient='records')}")
+            return 2
 
     out_dir = args.out_dir.expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -393,7 +428,9 @@ def main(argv: list[str] | None = None) -> int:
             "tolerancia_da_mistura": TOLERANCIA_DA_MISTURA,
             "conferido_contra_o_fasta": str(args.fasta) if args.fasta else None,
             "leitor_do_fasta": leitor,
-            "substituicoes_por_fonte": substituicoes,
+            "substituicoes_por_fonte_bin_e_motivo": substituicoes,
+            "motivos_reparaveis": list(MOTIVOS_REPARAVEIS),
+            "motivo_que_interrompe": "ref_mismatch (e qualquer outro fora de motivos_reparaveis)",
             "janelas_sem_reposicao": int(len(irrecuperaveis)),
             "vies_da_reposicao": (
                 "variantes cuja janela contem base fora de ACGT ficam sistematicamente de fora; inevitavel, "

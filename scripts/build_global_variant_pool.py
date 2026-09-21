@@ -27,6 +27,11 @@ DECISOES DECLARADAS (nenhuma e default silencioso)
                    ancestralidades, cobertura nem processo de descoberta, e muda o que "global" significa nesta
                    campanha. Por isso o relatorio SEMPRE mede o custo do piso por bin e por cromossomo, mesmo
                    quando ele nao e aplicado: a decisao tem de ser tomada com numero, nao com argumento.
+
+                   CUIDADO ao ler `custo_de_casar_o_piso`: ele mede filtrar ESTE pool depois de pronto. Nao e o
+                   que acontece ao REEXTRAIR com o piso -- aqui ele entra dentro de `linhas_do_registro`, ou
+                   seja, ANTES do teto por regiao e do reservatorio, entao as variantes abaixo dele nem disputam
+                   vaga e o bin se enche das elegiveis. Se o bin enche ou nao, so outro piloto responde.
 `--af-campo`       qual INFO carrega a AF. Default `AF_joint`, a agregada, por coerencia com o `gnomad_af_bin` que
                    pareia caso e controle na avaliacao. E PROPOSTA nossa: o Mosaic fixou a unidade da AVALIACAO,
                    nao a estatistica de amostragem do treino.
@@ -355,6 +360,9 @@ def custo_do_piso(frame: pd.DataFrame, af_min: float) -> dict[str, Any]:
         "por_cromossomo": {str(c): int(n) for c, n in abaixo["chrom"].value_counts().sort_index().items()},
         "o_que_nao_faz": ("aproxima o intervalo de frequencias observadas; nao iguala distribuicoes, "
                           "ancestralidades, cobertura nem processo de descoberta"),
+        "ATENCAO": ("isto mede FILTRAGEM POSTERIOR deste pool. NAO e o que acontece ao reextrair com --af-min: "
+                    "la o piso entra ANTES do teto por regiao e do reservatorio, entao as variantes abaixo dele "
+                    "deixam de disputar vaga e o bin se enche das elegiveis. Para saber se enche, reextrair"),
     }
 
 

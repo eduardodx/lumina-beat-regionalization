@@ -373,10 +373,12 @@ O relatório publica `vistos_por_bin` e `fracao_amostrada_por_bin`: a fração a
 receita, declarado em número.
 
 **Segundo piloto (200 regiões, 4 Mb lidos, `--por-bin 3000`) — a receita está dimensionada.** Cinco dos sete bins
-saturaram a capacidade; os dois que não são `(0,05; 0,1]` com 1.922 e `(0,5; 1,0]` com 2.010. **Isso não é
-defeito de amostragem: é o espectro de frequências em U.** Variantes em frequência intermediária são as mais
-raras, e o excesso perto de 1,0 aparece porque `AF_joint` é do alelo ALT — em muitos sítios o alelo do genoma de
-referência é o minoritário. O bin escasso é o que dimensiona a rodada: **~9,6 por região** em `(0,05; 0,1]`.
+saturaram a capacidade; os dois que não são `(0,05; 0,1]` com 1.922 e `(0,5; 1,0]` com 2.010. Uma **explicação
+plausível** é o espectro de frequências em U, com o excesso perto de 1,0 vindo de `AF_joint` ser do alelo ALT —
+em muitos sítios o minoritário é o alelo da referência. Mas **estes números não demonstram isso**: os bins têm
+larguras diferentes e os rendimentos passaram por filtro de `FILTER`, teto por região e reservatório. O que se
+pode usar com segurança é operacional: o bin `(0,05; 0,1]` é o escasso e rende **~9,6 por região**, e é ele que
+dimensiona a rodada.
 
 Com casamento por cromossomo, a maior diferença de geografia contra o ABraOM caiu para **−0,0123** (chr16); com
 40 regiões era −0,0356. O resíduo é arredondamento da alocação, e diminui com mais regiões.
@@ -384,11 +386,12 @@ Com casamento por cromossomo, a maior diferença de geografia contra o ABraOM ca
 As exclusões dispararam em dado real, em volume pequeno mas não nulo: 1 membro de estudo, 2 alelos de avaliação,
 4 com AF nas extremidades — a maquinaria está ligada, não só compilando.
 
-**O custo do piso, relido corretamente.** Sobre o pool estratificado ele é 15,65%, mas esse número engana: o corte
-cai **inteiro dentro de um único bin**, e ali remove **2.958 de 3.000 (98,6%)**. Ou seja, aplicar o piso não
-"encolhe 16% do pool" — ele **esvazia o bin mais raro**, porque a faixa que sobra (4,3 × 10⁻⁴ a 10⁻³) é uma fatia
-estreita do espectro do gnomAD. O relatório passou a publicar `fracao_dentro_do_bin_atingido` para que a leitura
-não dependa de quem souber dividir.
+**O custo do piso, e o que ele NÃO mede.** Sobre o pool estratificado o corte é 15,65%, e cai inteiro dentro de
+um único bin, onde remove 98,6%. Mas isso mede **filtrar o pool depois de pronto** — e essa não é a operação que
+está em discussão. Ao **reextrair** com `--af-min`, o piso entra dentro de `linhas_do_registro`, ou seja, **antes
+do teto por região e do reservatório**: as variantes abaixo dele nem disputam vaga, e o bin se enche das
+elegíveis. Quantas elegíveis existem, só outro piloto responde. O campo `custo_de_casar_o_piso` carrega esse
+aviso para quem o ler fora de contexto.
 
 **Pool global definitivo [MATERIALIZADO em 21/09].** 2.500 regiões de 20 kb, 50 Mb lidos (~1,6% do genoma),
 **21m51s**. Resultado: **139.495 variantes**, `sha256 ce749a6d…`, com os sete bins praticamente cheios
@@ -425,7 +428,8 @@ sistematicamente de fora do treino do adapter. É inevitável — o modelo não 
 **Resultado [21/09]: plano final `sha256 c99e5dae…`** — 50.000 janelas, 30.000 globais e 20.000 do ABraOM,
 `fracao_global_efetiva_nas_linhas = 0,6`, sete bins a ~7.143, `janelas_sem_reposicao = 0`, e a reauditoria contra
 o hg38 voltou **50.000 `ok`, zero descarte**. As substituições foram **42, todas do lado global e nenhuma do
-ABraOM** — a assimetria prevista: variante de callset já mora em região chamável.
+ABraOM**. A explicação provável é que variante de callset já mora em região chamável, mas **isto vale para esta
+amostra e não é regra**: uma posição pode ter chamada válida e ainda ter `N` no contexto de 4.096 bp ao redor.
 
 **Separação populacional do adapter [IMPLEMENTADA em 21/09]:** `scripts/split_adapter_plan_by_locus.py`. A
 unidade de separação é o **loco**, não a janela — duas janelas de 4.096 bp a 500 bp de distância compartilham 87%
@@ -442,8 +446,18 @@ O que isso **não** dá: independência estatística. Locos distintos ainda pode
 repetições, famílias de genes. O que está garantido é ausência de **sobreposição de sequência**, que é o
 vazamento grosseiro.
 
-**Com isso o lado dos DADOS do G4 está fechado.** O que resta no G4 é o **peso da loss** (única decisão da §5.1
-ainda sem valor) e o **treinador MLM**.
+**Estado correto: existe um plano CANDIDATO 60/40 com sequências válidas.** Chamar o lado dos dados de "fechado"
+foi cedo demais: a separação por loco é parte dos dados e ainda não rodou sobre o plano real. Falta, além dela,
+fechar a política de AF. O que resta depois disso é o **peso da loss** (única decisão da §5.1 sem valor) e o
+**treinador MLM**.
+
+**Expectativa corrigida sobre os locos.** Eu havia dito que quase todo loco teria uma janela só, tirando 2,7 Gb ÷
+50.000 ≈ 54 kb de espaçamento médio. Isso está errado: as 30.000 janelas globais saíram de **2.500 regiões de
+20 kb**, ou ~12 janelas de 4.096 bp por região — elas se sobrepõem muito entre si. O lado do ABraOM, sim, vem de
+um pool espalhado pelo genoma. Então as duas metades entram na separação com estruturas de loco **diferentes**:
+poucos locos grandes do lado global, muitos pequenos do lado brasileiro. Isso não invalida a separação, mas muda
+o que a validação global mede — generalização entre regiões, não entre janelas —, e tem de ser lido no relatório
+(`locos.maior`, `locos.com_uma_janela`), não presumido.
 
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,

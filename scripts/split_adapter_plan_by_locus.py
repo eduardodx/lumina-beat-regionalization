@@ -164,6 +164,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--folga-bp", type=int, default=0,
                         help="exigir esta distancia ALEM da nao-sobreposicao entre locos")
     parser.add_argument("--fracao-validacao", type=float, default=0.1)
+    parser.add_argument("--tolerancia-da-celula", type=float, default=TOLERANCIA_DA_CELULA,
+                        help="desvio ABSOLUTO admitido por celula; no alvo 0,10 o padrao 0,05 admite 0,05 a 0,15")
     parser.add_argument("--seed", type=int, default=20260921)
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -197,9 +199,9 @@ def main(argv: list[str] | None = None) -> int:
         atingida = round(na_validacao / len(grupo), 4)
         por_celula[f"{fonte}|{af_bin}"] = {"total": int(len(grupo)), "validacao": na_validacao,
                                            "fracao": atingida}
-        if abs(atingida - args.fracao_validacao) > TOLERANCIA_DA_CELULA:
+        if abs(atingida - args.fracao_validacao) > args.tolerancia_da_celula:
             pendencias.append(f"celula {fonte}|{af_bin} com fracao {atingida}, pedida "
-                              f"{args.fracao_validacao} (+/- {TOLERANCIA_DA_CELULA})")
+                              f"{args.fracao_validacao} (+/- {args.tolerancia_da_celula})")
     if problemas:
         pendencias.append(f"{len(problemas)} janelas de lados opostos se tocam: a separacao NAO vale")
     if validacao.empty or treino.empty:
@@ -221,6 +223,12 @@ def main(argv: list[str] | None = None) -> int:
         "entrada": {"plano": str(args.plano), "plano_sha256": sha256_file(args.plano.expanduser())},
         "receita": {"window_bp": args.window_bp, "folga_bp": args.folga_bp,
                     "fracao_validacao": args.fracao_validacao, "seed": args.seed,
+                    "tolerancia_da_celula": args.tolerancia_da_celula,
+                    "leitura_da_tolerancia": (
+                        f"ABSOLUTA: no alvo {args.fracao_validacao} ela admite de "
+                        f"{round(args.fracao_validacao - args.tolerancia_da_celula, 4)} a "
+                        f"{round(args.fracao_validacao + args.tolerancia_da_celula, 4)}. "
+                        "`pendencias: []` NAO quer dizer mistura exata -- ler `por_celula`"),
                     "unidade_de_separacao": "loco (janelas que se sobrepoem, encadeadas por ligacao simples)"},
         "locos": {"total": int(len(tamanhos)), "maior": int(tamanhos.max()),
                   "com_uma_janela": int((tamanhos == 1).sum()),
