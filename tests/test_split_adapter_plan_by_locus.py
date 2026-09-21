@@ -165,6 +165,26 @@ def test_fracao_invalida_reprova():
                         "--out-dir", str(raiz / "out")]) == 2
 
 
+def test_estrutura_separa_as_duas_metades():
+    """As metades chegam com estruturas diferentes: o relatorio tem de mostrar isso, nao so o total."""
+    aglomerado = [("chr1", 0, "global", "b1"), ("chr1", 20, "global", "b1"), ("chr1", 40, "global", "b1")]
+    espalhado = [("chr2", 10_000 * i, "abraom", "b1") for i in range(4)]
+    plano = _plano(aglomerado + espalhado)
+    plano["locus_id"] = sp.atribuir_locus(plano, window_bp=JANELA)
+    estrutura = sp.estrutura_de_locos(plano)
+    assert estrutura["por_fonte"]["global"]["locos_que_a_contem"] == 1
+    assert estrutura["por_fonte"]["global"]["janelas_por_loco_mediana"] == 3.0
+    assert estrutura["por_fonte"]["abraom"]["locos_que_a_contem"] == 4
+    assert estrutura["por_fonte"]["abraom"]["locos_com_uma_janela"] == 4
+    assert estrutura["locos_mistos"] == 0
+
+
+def test_loco_misto_e_contado():
+    plano = _plano([("chr1", 0, "global", "b1"), ("chr1", 20, "abraom", "b1")])
+    plano["locus_id"] = sp.atribuir_locus(plano, window_bp=JANELA)
+    assert sp.estrutura_de_locos(plano)["locos_mistos"] == 1
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

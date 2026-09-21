@@ -29,6 +29,8 @@ O QUE NAO PROVA
 ---------------
 - Nao garante independencia estatistica: locos distintos ainda podem ser parecidos (parologos, repeticoes,
   familias de genes). Garante ausencia de SOBREPOSICAO DE SEQUENCIA, que e o vazamento grosseiro.
+- Nao torna as janelas independentes DENTRO de um loco. O tamanho amostral efetivo da validacao e o numero de
+  LOCOS, nao o de janelas -- `estrutura_de_locos_na_validacao` publica os dois para que ninguem confunda.
 - Nao decide o tamanho da validacao: `--fracao-validacao` e declarado.
 
 USO (notebook)
@@ -144,6 +146,36 @@ def violacoes_de_disjuncao(
     return problemas
 
 
+def estrutura_de_locos(plano: pd.DataFrame) -> dict[str, Any]:
+    """Como cada metade da mistura se distribui em locos -- o numero que diz quantas unidades INDEPENDENTES ha.
+
+    As duas metades nao chegam aqui com a mesma estrutura. As janelas globais saem de regioes sorteadas de 20 kb,
+    entao ~12 janelas de 4.096 bp por regiao se sobrepoem e viram um loco so. Se o lado do ABraOM estivesse
+    espalhado pelo genoma, daria quase um loco por janela. A diferenca entre o esperado e o medido e o que diz se
+    o pool do ABraOM tambem e aglomerado -- o que seria mais um indicio de que o arquivo e um subconjunto por
+    regiao, e nao um callset genomico completo.
+
+    Isto importa para LER a validacao: o tamanho amostral efetivo de cada metade e o numero de LOCOS dela, nao o
+    de janelas. Calcular intervalo de confianca sobre as janelas trataria vizinhas correlacionadas como
+    observacoes independentes.
+    """
+    out: dict[str, Any] = {"por_fonte": {}}
+    for fonte, grupo in plano.groupby("fonte", sort=True):
+        por_loco = grupo.groupby("locus_id", sort=False).size()
+        out["por_fonte"][str(fonte)] = {
+            "janelas": int(len(grupo)),
+            "locos_que_a_contem": int(grupo["locus_id"].nunique()),
+            "janelas_por_loco_mediana": float(por_loco.median()),
+            "janelas_por_loco_maior": int(por_loco.max()),
+            "locos_com_uma_janela": int((por_loco == 1).sum()),
+        }
+    fontes_por_loco = plano.groupby("locus_id", sort=False)["fonte"].nunique()
+    out["locos_mistos"] = int((fontes_por_loco > 1).sum())
+    out["como_ler"] = ("o tamanho amostral efetivo de cada metade e `locos_que_a_contem`, nao `janelas`: janelas "
+                       "do mesmo loco se sobrepoem e nao sao observacoes independentes")
+    return out
+
+
 def composicao(recorte: pd.DataFrame) -> dict[str, Any]:
     if recorte.empty:
         return {"n": 0}
@@ -233,6 +265,8 @@ def main(argv: list[str] | None = None) -> int:
         "locos": {"total": int(len(tamanhos)), "maior": int(tamanhos.max()),
                   "com_uma_janela": int((tamanhos == 1).sum()),
                   "mediana_de_janelas": float(tamanhos.median())},
+        "estrutura_de_locos": estrutura_de_locos(plano),
+        "estrutura_de_locos_na_validacao": estrutura_de_locos(validacao) if not validacao.empty else {},
         "treino": composicao(treino),
         "validacao": composicao(validacao),
         "por_celula": por_celula,
@@ -243,13 +277,16 @@ def main(argv: list[str] | None = None) -> int:
             "locos distintos ainda podem ser parecidos (parologos, repeticoes, familias de genes): isto garante "
             "ausencia de SOBREPOSICAO DE SEQUENCIA, nao independencia estatistica",
             "nao decide o tamanho da validacao, que e declarado",
+            "nao torna as janelas independentes dentro de um loco: o tamanho amostral efetivo e o numero de "
+            "locos, e e por ele que qualquer incerteza tem de ser calculada",
         ],
         "saidas": saidas,
     }
     (out_dir / "separacao_por_locus.json").write_text(
         json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps({k: relatorio[k] for k in
-                      ("receita", "locos", "treino", "validacao", "disjuncao_verificada", "violacoes",
+                      ("receita", "locos", "estrutura_de_locos", "estrutura_de_locos_na_validacao",
+                       "treino", "validacao", "por_celula", "disjuncao_verificada", "violacoes",
                        "pendencias", "saidas")}, ensure_ascii=False, indent=2))
 
     if pendencias:

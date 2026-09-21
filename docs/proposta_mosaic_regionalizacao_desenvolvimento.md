@@ -459,6 +459,25 @@ poucos locos grandes do lado global, muitos pequenos do lado brasileiro. Isso n�
 o que a validação global mede — generalização entre regiões, não entre janelas —, e tem de ser lido no relatório
 (`locos.maior`, `locos.com_uma_janela`), não presumido.
 
+**Separação por loco rodada no plano real [21/09].** `disjuncao_verificada: true`, **zero violações**,
+mistura 0,6003 no treino e 0,5978 na validação, bins de AF equilibrados nos dois lados, `pendencias: []`.
+Treino 44.645 janelas em 7.681 locos; validação 5.355 em 910 locos. Saídas `c76d08d4…` (treino) e `034eca34…`
+(validação).
+
+**A concentração é maior do que eu previa, e nos dois lados.** Medido: **8.591 locos para 50.000 janelas**,
+mediana de **4** janelas por loco, maior com **208**, e só 1.884 singletons. Do lado global isso era esperado — as
+30.000 janelas saem de 2.500 regiões de 20 kb, ~12 janelas de 4.096 bp por região. Do lado do ABraOM **não era**:
+20.000 variantes de um pool de 1,2 milhão deveriam dar ~136 kb de espaçamento médio e quase um loco por janela,
+o que somado ao global daria ~22.500 locos. Faltam ~14 mil. Isso é **mais um indício de que o arquivo do ABraOM é
+um subconjunto por região**, e não um callset genômico uniforme — coerente com os 448 variantes/Mb. Indício, não
+prova: a decomposição por fonte foi acrescentada ao relatório (`estrutura_de_locos`) para medir em vez de inferir.
+
+**Como a validação do adapter tem de ser lida.** O tamanho amostral efetivo de cada metade é o número de **locos**,
+não o de janelas: 910 locos, não 5.355 janelas. Janelas do mesmo loco se sobrepõem e não são observações
+independentes. Qualquer incerteza calculada sobre as janelas trataria vizinhas correlacionadas como
+independentes e sairia otimista por um fator grande. O relatório publica os dois números lado a lado
+(`estrutura_de_locos_na_validacao`) justamente para que a confusão não aconteça por descuido.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
