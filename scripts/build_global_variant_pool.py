@@ -201,12 +201,21 @@ def linhas_do_registro(
     return linhas, motivos
 
 
+#: Rotulos vindos do MESMO `pd.cut` que `distribuicao_af` usa. Montar "({inicio}, {fim}]" na mao dava
+#: "(0.0, 0.001]" enquanto o pandas escreve "(-0.001, 0.001]" -- o `include_lowest` alarga a borda esquerda.
+#: As duas tabelas do relatorio deixavam de casar justamente no bin mais raro, e `fracao_amostrada_por_bin`
+#: saia ZERADA nele: o bin que decide o piso era o unico sem o seu vies declarado.
+ROTULOS_DE_BIN: tuple[str, ...] = tuple(
+    str(c) for c in pd.cut(pd.Series([0.0]), bins=list(AF_BINS), include_lowest=True,
+                           right=True).cat.categories)
+
+
 def bin_de_af(af: float) -> str:
-    """Rotulo do bin de AF de um valor, na mesma grade declarada de `AF_BINS`."""
-    for inicio, fim in zip(AF_BINS, AF_BINS[1:]):
+    """Rotulo do bin de AF de um valor, igual ao que `distribuicao_af` publica."""
+    for indice, fim in enumerate(AF_BINS[1:]):
         if af <= fim:
-            return f"({inicio}, {fim}]"
-    return f"({AF_BINS[-2]}, {AF_BINS[-1]}]"
+            return ROTULOS_DE_BIN[indice]
+    return ROTULOS_DE_BIN[-1]
 
 
 def _no_reservatorio(

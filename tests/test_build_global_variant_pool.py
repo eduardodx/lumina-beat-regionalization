@@ -179,11 +179,29 @@ def test_reservatorio_respeita_a_capacidade_do_bin():
     assert sum(vistos.values()) == 100, vistos
 
 
-def test_bin_de_af_segue_a_grade_declarada():
-    assert gp.bin_de_af(0.0005) == "(0.0, 0.001]"
-    assert gp.bin_de_af(0.001) == "(0.0, 0.001]"
-    assert gp.bin_de_af(0.9) == "(0.5, 1.0]"
-    assert gp.bin_de_af(1.0) == "(0.5, 1.0]"
+def test_bin_de_af_usa_o_mesmo_rotulo_que_o_relatorio():
+    """As duas tabelas do relatorio tem de casar.
+
+    O pandas escreve o primeiro bin como (-0.001, 0.001] por causa do include_lowest. Montar
+    "(0.0, 0.001]" na mao zerava `fracao_amostrada_por_bin` no bin mais raro -- que e exatamente o bin
+    que decide se o piso de AF entra.
+    """
+    from scripts.audit_abraom_source import distribuicao_af
+
+    valores = pd.Series([0.0005, 0.003, 0.9])
+    chaves = set(distribuicao_af(valores))
+    for af in valores:
+        assert gp.bin_de_af(af) in chaves, (af, gp.bin_de_af(af), sorted(chaves))
+    assert gp.bin_de_af(0.001) == gp.bin_de_af(0.0005)
+    assert gp.bin_de_af(1.0) == gp.bin_de_af(0.9)
+
+
+def test_fracao_amostrada_casa_com_o_bin_mais_raro():
+    """Prova de ponta a ponta do defeito: o bin raro precisa aparecer nas DUAS tabelas."""
+    from scripts.audit_abraom_source import distribuicao_af
+
+    raras = pd.Series([1e-4] * 5)
+    assert distribuicao_af(raras)[gp.bin_de_af(1e-4)] == 5
 
 
 def test_duplicata_entre_regioes_sai():
