@@ -427,8 +427,23 @@ sistematicamente de fora do treino do adapter. É inevitável — o modelo não 
 o hg38 voltou **50.000 `ok`, zero descarte**. As substituições foram **42, todas do lado global e nenhuma do
 ABraOM** — a assimetria prevista: variante de callset já mora em região chamável.
 
-**Com isso o lado dos DADOS do G4 está fechado.** O que resta no G4 não é mais dado: é o peso da loss, a separação
-populacional por loci entre treino e validação do adapter, e o treinador MLM.
+**Separação populacional do adapter [IMPLEMENTADA em 21/09]:** `scripts/split_adapter_plan_by_locus.py`. A
+unidade de separação é o **loco**, não a janela — duas janelas de 4.096 bp a 500 bp de distância compartilham 87%
+da sequência, então separar ao acaso mediria memorização do mesmo trecho. Janelas cujas janelas se sobrepõem são
+encadeadas por ligação simples e o loco inteiro vai para um lado só; o encadeamento é necessário, não conservador
+demais (se A cobre B e B cobre C, mandar A e C para lados opostos obrigaria B a sobrepor um deles).
+
+A escolha dos locos é gulosa por célula `fonte × bin de AF`, para que a mistura 60/40 e o espectro sobrevivam nos
+dois recortes. E **a disjunção é verificada, não assumida**: uma varredura por cromossomo falha com código 2 se
+qualquer janela de validação tocar qualquer janela de treino. Sem ela, um erro de encadeamento passaria como
+"separado" e contaminaria a única medida honesta do adapter.
+
+O que isso **não** dá: independência estatística. Locos distintos ainda podem ser parecidos — parálogos,
+repetições, famílias de genes. O que está garantido é ausência de **sobreposição de sequência**, que é o
+vazamento grosseiro.
+
+**Com isso o lado dos DADOS do G4 está fechado.** O que resta no G4 é o **peso da loss** (única decisão da §5.1
+ainda sem valor) e o **treinador MLM**.
 
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
