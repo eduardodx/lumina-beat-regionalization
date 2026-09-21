@@ -574,6 +574,34 @@ pode valer metade focal e metade referencia.
 `lumina/__init__.py` puxa torch no topo. O teste carrega `lumina/constants.py` por caminho e trava a igualdade:
 se o vocabulario do modelo mudar, o teste quebra em vez de o treinador tokenizar errado em silencio.
 
+**Nucleo em torch do treino [IMPLEMENTADO em 21/09]: `eval/adapter/treino.py`.** O que foi conferido no
+codigo antes de escrever, e que corrige duas coisas que eu havia afirmado:
+
+- **`build_finetune_adapter` despacha por FAMILIA**, e `"lumina"` e `"lumina-r03"` sao ramos diferentes. Receber
+  um checkpoint nao seleciona o R03: a familia tem de ser pedida.
+- **`native_feature_heads` so e passado ao ramo `"lumina"`.** O `FineTuneR03Adapter(checkpoint_path, device)` nao
+  o recebe, entao `["none"]` nao remove nem congela nada ali. Eu havia dito que congelava.
+- `FineTuneR03Adapter` carrega com `strict=True` e `forward_hidden_states` **nao** tem `no_grad` (o `no_grad` esta
+  so em `extract_native_pathogenicity_features`). O caminho do MLM e `encode` → `mlm_head`.
+- **`mlm_head` esta em `_EXCLUDE_PATTERNS`**: o `apply_lora` nao a embrulha. Ela fica congelada e mesmo assim no
+  grafo — e por ela que o erro chega ao adapter. Nada de `no_grad()` no caminho de treino.
+- **`lora_b` nasce em zeros.** Logo o gradiente de `lora_a` e zero por construcao no primeiro passo: exigir
+  gradiente nao nulo em TODO tensor do adapter reprovaria um treino correto. O que se exige e que o adapter
+  receba sinal e **mude**, enquanto o congelado fica identico (verificado por hash dos nao treinaveis).
+- `eval()` e decisao **separada** de congelar peso: congelar zera gradiente, nao desliga dropout. O modo vai
+  declarado no manifesto.
+
+**Checkpoint com contrato proprio, `lumina_population_adapter_mlm_v1`.** O antigo (`abraom_frequency_adapter_v1`)
+salvava **todo** parametro com `requires_grad`, o que no modelo dele incluia a cabeca de regressao de AF e
+LayerNorm — nao era "so os deltas", como eu disse. E o carregador dele usava `strict=False` e so recusava
+algumas chaves **inesperadas**: chave **ausente** passava em silencio e deixava parte do adapter na
+inicializacao. O novo exige o **conjunto exato** de chaves nos dois sentidos, confere formas, guarda a
+identidade do checkpoint base e a receita do rsLoRA, e recusa salvar se algo fora do adapter estiver treinavel.
+Ha teste para chave removida e para chave sobrando.
+
+**A loss e reescrita em tensores** porque `mlm.perda_ponderada` converte para `float` e romperia o gradiente. O
+teste que liga os dois mundos confere igualdade numerica entre as duas formulas — se divergirem, quebra.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
