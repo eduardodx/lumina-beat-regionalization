@@ -476,10 +476,15 @@ o que somado ao global daria ~22.500 locos. Faltam ~14 mil. A decomposição por
 | global | 30.000 | 3.889 | 6 | 33 | 529 |
 
 **Referência declarada, por simulação:** 20.000 janelas de 4.096 bp com posições **uniformes sobre os
-autossomos**, encadeadas pela mesma regra, dão **19.401 locos** (20 réplicas, 19.356–19.442). Medido no ABraOM:
-**4.778**, ou seja, **4,06× menos locos** que a referência uniforme. Antes eu havia citado "4,2×" a partir de
-20.000 ÷ 4.778, que é a **média de janelas por loco** — chamar aquilo de razão contra um esperado era erro, e a
-referência agora existe em vez de ser presumida.
+autossomos**, encadeadas pela mesma regra, dão **19.401 locos** (20 réplicas, 19.356–19.442). Antes eu havia
+citado "4,2×" a partir de 20.000 ÷ 4.778, que é a **média de janelas por loco** — chamar aquilo de razão contra
+um esperado era erro.
+
+**Mas a comparação ainda não está fechada.** Os 4.778 são locos **conjuntos** que contêm ABraOM, e a simulação é
+só de ABraOM: são universos diferentes. Para fechar, a comparação tem de usar `locos_da_fonte_sozinha`, com o
+mesmo conjunto de cromossomos e a mesma regra de intervalo. O fator ~4× fica como **indicação**, não como medida
+— e a leitura que se sustenta sem ele continua sendo a qualitativa: a amostra do ABraOM tem concentração
+espacial relevante.
 
 Duas ressalvas de pé: a referência uniforme é escolha declarada, não a distribuição verdadeira de variantes num
 genoma (que já é agrupada), e a estratificação por AF pode alterar a concentração da amostra. Além disso,
@@ -517,18 +522,57 @@ alternativa fica identificada, e a decisão é do Eduardo.
 regiões sobrepostas entrava várias vezes e tinha mais chance de ser guardado. Pouco sob a geografia atual, grave
 sob a ancorada no ABraOM, onde as regiões se sobrepõem muito. Agora é por alelo, antes do reservatório.
 
+**A correção não muda retroativamente o pool já produzido.** O `ce749a6d…` e tudo que dele deriva — plano
+`c99e5dae…`, treino `c76d08d4…`, validação `034eca34…` — vêm da versão anterior do coletor e **ficam assim**,
+identificados como tal, para o smoke do adapter. Uma reextração futura é outra versão e recebe hashes novos; não
+se mistura as duas nem se refaz artefato por causa de um defeito cujo efeito, nesta geografia, era pequeno.
+
 O relatório também passou a medir `sobreposicao_de_alelos_com_o_abraom`: quase toda variante do ABraOM também
 está no gnomAD, então o mesmo alelo pode cair nas duas metades. Não é vazamento — a fonte diz de qual
 distribuição a variante foi sorteada, e o adapter nunca vê a AF —, mas duplica janela de treino e tem de ser
 decisão declarada.
 
 **Como a validação do adapter tem de ser lida.** A validação tem **5.355 janelas agrupadas em 910 locos**, e
-qualquer incerteza tem de respeitar esse agrupamento. Dizer que o tamanho amostral efetivo **é** 910 seria
-exagero: ele depende da correlação entre observações, do tamanho dos grupos e da estatística calculada, e locos
-distintos também podem ser correlacionados. O número de locos é o **teto otimista**, não o valor.
+qualquer incerteza tem de respeitar esse agrupamento na análise. Nem "o tamanho amostral efetivo é 910" nem "910
+é o teto do tamanho amostral efetivo" são afirmações corretas — a segunda também não é regra geral. **910 é o
+número de agrupamentos.** O que se relata é isso: janelas, locos, e o tratamento da dependência.
 
 **[ABERTO] A unidade da média da loss de validação** — por posição mascarada, por janela ou por loco — são
 perguntas diferentes, e a receita do piloto tem de declarar qual. Entra na pauta do Eduardo com o peso da loss.
+
+**Nucleo do MLM do adapter [IMPLEMENTADO em 21/09]: `eval/adapter/mlm.py`.** Stdlib puro, sem torch — a regra
+fica provavel no Windows e a parte que toca o modelo fica fina.
+
+**O que o adapter e, escrito no codigo para nao derivar:** adapter POPULACIONAL treinado com MLM sobre janelas em
+que variantes amostradas por frequencia foram aplicadas. **Ele nao preve AF.** A frequencia entra na AMOSTRAGEM,
+nunca como entrada nem como alvo. Trocar por regressao de frequencia seria outro experimento.
+
+**As tres categorias de posicao mascarada** — e a distincao que se perde quando alguem fala em "loss do span da
+variante":
+
+| categoria | o que e | alvo |
+|---|---|---|
+| `focal_alt` | a UNICA posicao onde o ALT foi aplicado | o alelo alternativo |
+| `contexto_da_variante` | as demais posicoes DENTRO do span que cobre o focal | bases de **referencia** |
+| `referencia` | posicoes dos spans que nao tocam o focal | bases de referencia |
+
+O span tem de 3 a 10 bp, entao ele quase sempre cobre bases de referencia alem do focal: **"loss do span da
+variante" nao e "loss do alelo variante"**, e juntar as duas diluiria justamente a medida da campanha. O teste
+`test_alvo_do_focal_e_o_alt_e_nao_a_referencia` trava isso.
+
+**[FECHADO] A armadilha da varredura de pesos.** Comparar configuracoes pela propria loss ponderada de cada uma
+nao compara nada — cada uma otimiza um objetivo diferente, e venceria a de pesos mais frouxos. O criterio e
+COMUM e independente dos pesos: entropia cruzada media **nao ponderada**, publicada por categoria, com
+`CRITERIO_PRIMARIO = focal_alt` declarado antes de rodar. Ha teste que exibe a armadilha: duas configuracoes
+sobre as mesmas perdas dao losses de treino diferentes e criterio identico.
+
+**Receita inicial declarada** (ponto de partida, nao resultado de busca): peso 1,0 no focal e 0,5 nas outras
+duas, pesando **por posicao** e nao por categoria — com peso igual, uma janela com 1 focal e 12 de referencia nao
+pode valer metade focal e metade referencia.
+
+**O vocabulario do R03** (A=1, C=2, G=3, T=4, N=5, MASK=6) e redeclarado em vez de importado, porque
+`lumina/__init__.py` puxa torch no topo. O teste carrega `lumina/constants.py` por caminho e trava a igualdade:
+se o vocabulario do modelo mudar, o teste quebra em vez de o treinador tokenizar errado em silencio.
 
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
