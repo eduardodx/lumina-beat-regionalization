@@ -163,9 +163,14 @@ def regioes_nos_locos_do_abraom(
 
     Por que existe: casar por cromossomo iguala a distribuicao grossa, mas em escala fina as duas metades da
     mistura continuam em lugares diferentes -- medido em 21/09, so 76 de 8.591 locos do plano continham as duas
-    fontes, que e o que o acaso preveria para duas amostras esparsas independentes. Amostrando o lado global nos
-    mesmos locos, a localizacao deixa de distinguir as fontes e sobra a estatistica populacional, que e o que a
-    campanha quer contrastar.
+    fontes, que e o que o acaso preveria para duas amostras esparsas independentes.
+
+    O QUE ELA NAO FAZ (e nao se deve dizer que faz): nao cria pareamento entre as janelas finais das duas fontes,
+    e portanto NAO garante que a localizacao deixe de distinguir as fontes. O lado do ABraOM continua amostrado
+    a parte, o lado global continua passando por teto e reservatorio por AF, e sortear VARIANTE (nao loco)
+    favorece regiao com mais variantes do ABraOM. Regioes centradas em variantes vizinhas tambem se sobrepoem.
+    E CANDIDATA EXPERIMENTAL, nao controle demonstrado: adotar exige medir a cobertura genomica unica e a
+    sobreposicao entre as fontes no resultado final.
 
     O CUSTO, declarado: o pool global passa a herdar o vies de cobertura do arquivo do ABraOM, que ja se sabe
     concentrado. "Global" deixa de significar "variacao humana amostrada pelo genoma" e passa a significar
@@ -307,12 +312,21 @@ def coletar(
     motivos: Counter = Counter()
     vistos: Counter = Counter()
     reservatorios: dict[str, list] = {}
+    # Deduplicar ANTES do reservatorio, nao depois: regioes podem se sobrepor (e se sobrepoem muito na geografia
+    # ancorada no ABraOM). Um alelo encontrado em tres regioes entraria tres vezes no reservatorio e teria tres
+    # vezes mais chance de ser guardado -- amostragem enviesada para o que cai em regiao sobreposta.
+    ja_vistos: set[tuple[str, int, str, str]] = set()
     for chrom, inicio, fim in regioes:
         da_regiao: dict[str, list[dict[str, Any]]] = {}
         for rec in fetch(chrom, inicio, fim):
             linhas, parciais = linhas_do_registro(rec, af_campo=af_campo, af_min=af_min)
             motivos.update(parciais)
             for linha in linhas:
+                identidade = (linha["chrom"], int(linha["pos"]), linha["ref"], linha["alt"])
+                if identidade in ja_vistos:
+                    motivos["duplicata_entre_regioes"] += 1
+                    continue
+                ja_vistos.add(identidade)
                 da_regiao.setdefault(bin_de_af(linha[COLUNA_AF]), []).append(linha)
         for nome, linhas in da_regiao.items():
             if max_por_bin_por_regiao is not None and len(linhas) > max_por_bin_por_regiao:
@@ -328,7 +342,8 @@ def coletar(
     frame = pd.DataFrame(coletadas)
     antes = len(frame)
     frame = frame.drop_duplicates(subset=["chrom", "pos", "ref", "alt"]).reset_index(drop=True)
-    motivos["duplicata_entre_regioes"] += antes - len(frame)
+    # Rede de seguranca: com a deduplicacao antes do reservatorio isto deve ser sempre zero.
+    motivos["duplicata_apos_o_reservatorio"] += antes - len(frame)
     return frame, motivos, dict(vistos)
 
 

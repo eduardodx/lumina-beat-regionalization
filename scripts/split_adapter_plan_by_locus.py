@@ -29,8 +29,11 @@ O QUE NAO PROVA
 ---------------
 - Nao garante independencia estatistica: locos distintos ainda podem ser parecidos (parologos, repeticoes,
   familias de genes). Garante ausencia de SOBREPOSICAO DE SEQUENCIA, que e o vazamento grosseiro.
-- Nao torna as janelas independentes DENTRO de um loco. O tamanho amostral efetivo da validacao e o numero de
-  LOCOS, nao o de janelas -- `estrutura_de_locos_na_validacao` publica os dois para que ninguem confunda.
+- Nao torna as janelas independentes DENTRO de um loco. A validacao tem 5.355 janelas AGRUPADAS em 910 locos, e
+  a incerteza tem de respeitar o agrupamento; o numero de locos e o teto otimista do tamanho amostral efetivo,
+  nao o valor dele.
+- Nao decide a UNIDADE DA MEDIA da loss de validacao: por posicao mascarada, por janela ou por loco sao perguntas
+  diferentes, e a receita do piloto tem de declarar qual. [ABERTO]
 - Nao decide o tamanho da validacao: `--fracao-validacao` e declarado.
 
 USO (notebook)
@@ -146,7 +149,7 @@ def violacoes_de_disjuncao(
     return problemas
 
 
-def estrutura_de_locos(plano: pd.DataFrame) -> dict[str, Any]:
+def estrutura_de_locos(plano: pd.DataFrame, *, window_bp: int, folga_bp: int = 0) -> dict[str, Any]:
     """Como cada metade da mistura se distribui em locos -- o numero que diz quantas unidades INDEPENDENTES ha.
 
     As duas metades nao chegam aqui com a mesma estrutura. As janelas globais saem de regioes sorteadas de 20 kb,
@@ -155,24 +158,33 @@ def estrutura_de_locos(plano: pd.DataFrame) -> dict[str, Any]:
     o pool do ABraOM tambem e aglomerado -- o que seria mais um indicio de que o arquivo e um subconjunto por
     regiao, e nao um callset genomico completo.
 
-    Isto importa para LER a validacao: o tamanho amostral efetivo de cada metade e o numero de LOCOS dela, nao o
-    de janelas. Calcular intervalo de confianca sobre as janelas trataria vizinhas correlacionadas como
-    observacoes independentes.
+    Isto importa para LER a validacao: as janelas vem AGRUPADAS em locos, e qualquer incerteza tem de respeitar
+    esse agrupamento. Nao se deve dizer que o tamanho amostral efetivo "e" o numero de locos -- ele depende da
+    correlacao entre as observacoes, do tamanho dos grupos e da estatistica calculada, e locos distintos tambem
+    podem ser correlacionados. O numero de locos e o teto otimista, nao o valor.
+
+    `locos_da_fonte_sozinha` existe porque `locos_que_a_contem` conta os locos CONJUNTOS (construidos com as duas
+    fontes juntas): uma janela global pode emendar dois grupos de janelas do ABraOM, inflando a concentracao
+    aparente daquela fonte. A versao "sozinha" refaz o encadeamento so com as janelas da fonte.
     """
     out: dict[str, Any] = {"por_fonte": {}}
     for fonte, grupo in plano.groupby("fonte", sort=True):
         por_loco = grupo.groupby("locus_id", sort=False).size()
+        sozinha = atribuir_locus(grupo, window_bp=window_bp, folga_bp=folga_bp)
         out["por_fonte"][str(fonte)] = {
             "janelas": int(len(grupo)),
             "locos_que_a_contem": int(grupo["locus_id"].nunique()),
+            "locos_da_fonte_sozinha": int(sozinha.nunique()),
             "janelas_por_loco_mediana": float(por_loco.median()),
             "janelas_por_loco_maior": int(por_loco.max()),
             "locos_com_uma_janela": int((por_loco == 1).sum()),
         }
     fontes_por_loco = plano.groupby("locus_id", sort=False)["fonte"].nunique()
     out["locos_mistos"] = int((fontes_por_loco > 1).sum())
-    out["como_ler"] = ("o tamanho amostral efetivo de cada metade e `locos_que_a_contem`, nao `janelas`: janelas "
-                       "do mesmo loco se sobrepoem e nao sao observacoes independentes")
+    out["como_ler"] = ("as janelas vem AGRUPADAS em locos e a incerteza tem de respeitar o agrupamento. O numero "
+                       "de locos e o teto otimista do tamanho amostral efetivo, NAO o valor: ele depende da "
+                       "correlacao, do tamanho dos grupos e da estatistica. `locos_que_a_contem` usa os locos "
+                       "conjuntos; `locos_da_fonte_sozinha` refaz o encadeamento so com a fonte")
     return out
 
 
@@ -265,8 +277,10 @@ def main(argv: list[str] | None = None) -> int:
         "locos": {"total": int(len(tamanhos)), "maior": int(tamanhos.max()),
                   "com_uma_janela": int((tamanhos == 1).sum()),
                   "mediana_de_janelas": float(tamanhos.median())},
-        "estrutura_de_locos": estrutura_de_locos(plano),
-        "estrutura_de_locos_na_validacao": estrutura_de_locos(validacao) if not validacao.empty else {},
+        "estrutura_de_locos": estrutura_de_locos(plano, window_bp=args.window_bp, folga_bp=args.folga_bp),
+        "estrutura_de_locos_na_validacao": (
+            estrutura_de_locos(validacao, window_bp=args.window_bp, folga_bp=args.folga_bp)
+            if not validacao.empty else {}),
         "treino": composicao(treino),
         "validacao": composicao(validacao),
         "por_celula": por_celula,
@@ -277,8 +291,9 @@ def main(argv: list[str] | None = None) -> int:
             "locos distintos ainda podem ser parecidos (parologos, repeticoes, familias de genes): isto garante "
             "ausencia de SOBREPOSICAO DE SEQUENCIA, nao independencia estatistica",
             "nao decide o tamanho da validacao, que e declarado",
-            "nao torna as janelas independentes dentro de um loco: o tamanho amostral efetivo e o numero de "
-            "locos, e e por ele que qualquer incerteza tem de ser calculada",
+            "nao torna as janelas independentes dentro de um loco: a incerteza tem de respeitar o agrupamento, "
+            "e o numero de locos e o teto otimista do tamanho amostral efetivo, nao o valor",
+            "nao decide a unidade da media da loss de validacao (posicao mascarada, janela ou loco): [ABERTO]",
         ],
         "saidas": saidas,
     }

@@ -171,7 +171,7 @@ def test_estrutura_separa_as_duas_metades():
     espalhado = [("chr2", 10_000 * i, "abraom", "b1") for i in range(4)]
     plano = _plano(aglomerado + espalhado)
     plano["locus_id"] = sp.atribuir_locus(plano, window_bp=JANELA)
-    estrutura = sp.estrutura_de_locos(plano)
+    estrutura = sp.estrutura_de_locos(plano, window_bp=JANELA)
     assert estrutura["por_fonte"]["global"]["locos_que_a_contem"] == 1
     assert estrutura["por_fonte"]["global"]["janelas_por_loco_mediana"] == 3.0
     assert estrutura["por_fonte"]["abraom"]["locos_que_a_contem"] == 4
@@ -182,7 +182,18 @@ def test_estrutura_separa_as_duas_metades():
 def test_loco_misto_e_contado():
     plano = _plano([("chr1", 0, "global", "b1"), ("chr1", 20, "abraom", "b1")])
     plano["locus_id"] = sp.atribuir_locus(plano, window_bp=JANELA)
-    assert sp.estrutura_de_locos(plano)["locos_mistos"] == 1
+    assert sp.estrutura_de_locos(plano, window_bp=JANELA)["locos_mistos"] == 1
+
+
+def test_loco_conjunto_pode_inflar_a_concentracao_de_uma_fonte():
+    """Uma janela global entre duas do ABraOM EMENDA os dois grupos: `locos_que_a_contem` conta 1, mas o ABraOM
+    sozinho teria 2. Sem essa distincao, a concentracao aparente de uma fonte vem do vizinho da outra."""
+    plano = _plano([("chr1", 0, "abraom", "b1"), ("chr1", 80, "global", "b1"), ("chr1", 160, "abraom", "b1")])
+    plano["locus_id"] = sp.atribuir_locus(plano, window_bp=JANELA)
+    assert plano["locus_id"].nunique() == 1, "os tres se encadeiam"
+    estrutura = sp.estrutura_de_locos(plano, window_bp=JANELA)
+    assert estrutura["por_fonte"]["abraom"]["locos_que_a_contem"] == 1
+    assert estrutura["por_fonte"]["abraom"]["locos_da_fonte_sozinha"] == 2, estrutura["por_fonte"]["abraom"]
 
 
 if __name__ == "__main__":
