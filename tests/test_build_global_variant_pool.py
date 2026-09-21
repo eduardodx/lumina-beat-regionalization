@@ -321,6 +321,62 @@ def test_caminho_do_tbi_seque_o_nome_do_vcf():
     assert caminho.name == "gnomad.joint.v4.1.sites.chr7.vcf.bgz.tbi"
 
 
+def test_regioes_nos_locos_ficam_centradas_nas_variantes_do_abraom():
+    """A terceira geografia: a localizacao deixa de distinguir as fontes."""
+    abraom = pd.DataFrame({"chrom": ["chr1"] * 4, "pos": [50_000, 60_000, 70_000, 80_000],
+                           "ref": ["A"] * 4, "alt": ["G"] * 4, "af_abraom": [0.1] * 4})
+    comprimentos = {"chr1": 1_000_000}
+    regioes = gp.regioes_nos_locos_do_abraom(np.random.default_rng(1), abraom, comprimentos,
+                                             n_regioes=3, tamanho_bp=2_000)
+    assert len(regioes) == 3
+    for chrom, inicio, fim in regioes:
+        centro = inicio + 1_000
+        assert chrom == "chr1" and fim - inicio == 2_000
+        assert min(abs(centro - (p - 1)) for p in abraom["pos"]) <= 1, (centro, regioes)
+
+
+def test_regioes_nos_locos_respeitam_a_borda_do_cromossomo():
+    abraom = pd.DataFrame({"chrom": ["chr1"], "pos": [5], "ref": ["A"], "alt": ["G"], "af_abraom": [0.1]})
+    regioes = gp.regioes_nos_locos_do_abraom(np.random.default_rng(1), abraom, {"chr1": 10_000},
+                                             n_regioes=1, tamanho_bp=2_000)
+    chrom, inicio, fim = regioes[0]
+    assert inicio == 0 and fim == 2_000, regioes
+
+
+def test_regioes_nos_locos_ignoram_cromossomo_nao_elegivel():
+    """chr8 reservado nao entra nem por essa porta."""
+    abraom = pd.DataFrame({"chrom": ["chr8", "chr1"], "pos": [100, 200], "ref": ["A", "A"],
+                           "alt": ["G", "G"], "af_abraom": [0.1, 0.1]})
+    regioes = gp.regioes_nos_locos_do_abraom(np.random.default_rng(1), abraom, {"chr1": 10_000},
+                                             n_regioes=2, tamanho_bp=1_000)
+    assert {c for c, _, _ in regioes} == {"chr1"}, regioes
+
+
+def test_geografia_dos_locos_e_uma_opcao_declarada():
+    assert gp.GEOGRAFIA_LOCOS in gp.GEOGRAFIAS
+    assert len(gp.GEOGRAFIAS) == 3
+
+
+def test_sobreposicao_de_alelos_e_medida_no_relatorio():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = Path(tmp)
+        abraom, membros, selecao, snap = _entradas(raiz)
+        original = gp.fetch_por_cromossomo
+        gp.fetch_por_cromossomo = lambda regioes, **kw: _fetch_sintetico  # type: ignore[assignment]
+        try:
+            rc = gp.main(["--fai", str(raiz / "g.fai"), "--abraom-pool", str(abraom),
+                          "--geografia", "uniforme", "--n-regioes", "20",
+                          "--tamanho-regiao-bp", "1000", "--tbi-dir", str(raiz),
+                          "--brazil-variants", str(membros), "--selection", str(selecao),
+                          "--snapshot", str(snap), "--out-dir", str(raiz / "out")])
+        finally:
+            gp.fetch_por_cromossomo = original
+        assert rc == 0
+        relatorio = json.loads((raiz / "out" / "pool_global.json").read_text(encoding="utf-8"))
+        medida = relatorio["sobreposicao_de_alelos_com_o_abraom"]
+        assert "alelos_em_ambas_as_metades" in medida and "fracao_do_pool_global" in medida
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

@@ -17,10 +17,15 @@ custo, e o vies que ela introduz entra declarado no manifesto -- nao herdado em 
 
 DECISOES DECLARADAS (nenhuma e default silencioso)
 --------------------------------------------------
-`--geografia`      obrigatorio. `uniforme` sorteia regioes proporcionais ao comprimento do cromossomo;
-                   `casado_ao_abraom` sorteia proporcional a distribuicao do pool do ABraOM. O casamento REDUZ a
-                   diferenca espacial grosseira entre as fontes; NAO demonstra equivalencia de contexto (dentro do
-                   cromossomo continuam diferindo genes, regioes codificantes, cobertura e filtros de descoberta).
+`--geografia`      obrigatorio, com tres opcoes e nenhuma neutra:
+                   `uniforme` sorteia regioes proporcionais ao comprimento do cromossomo.
+                   `casado_ao_abraom` sorteia proporcional a distribuicao POR CROMOSSOMO do pool do ABraOM. Reduz
+                     a diferenca espacial grossa; NAO demonstra equivalencia de contexto, e MEDIDO em 21/09 nao
+                     resolve a escala fina: so 76 de 8.591 locos do plano continham as duas fontes.
+                   `casado_aos_locos_do_abraom` centra cada regiao numa posicao do proprio pool do ABraOM, para
+                     que a localizacao deixe de distinguir as fontes. Custo: o lado global herda o vies de
+                     cobertura do arquivo do ABraOM, e "global" passa a significar "variacao agregada NOS LOCOS
+                     que o ABraOM cobre" -- outra pergunta, nao uma versao melhor da mesma.
 `--af-min`         opcional. Sem ele NAO ha piso. O ABraOM tem 1.171 individuos (AF minima ~4,3e-4) e o gnomAD tem
                    ~800 mil (singleton ~6e-7): tres ordens de grandeza de diferenca no piso. Cortar o lado global
                    no piso do ABraOM aproxima o INTERVALO de frequencias observadas -- nao iguala distribuicoes,
@@ -93,7 +98,10 @@ MOTIVO_AC_ZERO = "ac0"
 MOTIVO_ABAIXO_DO_PISO = "abaixo_do_piso"
 MOTIVO_TETO_DA_REGIAO = "teto_da_regiao"
 
-GEOGRAFIAS = ("uniforme", "casado_ao_abraom")
+GEOGRAFIA_UNIFORME = "uniforme"
+GEOGRAFIA_CROMOSSOMO = "casado_ao_abraom"
+GEOGRAFIA_LOCOS = "casado_aos_locos_do_abraom"
+GEOGRAFIAS = (GEOGRAFIA_UNIFORME, GEOGRAFIA_CROMOSSOMO, GEOGRAFIA_LOCOS)
 
 
 # --------------------------------------------------------------------------- comprimentos e regioes
@@ -145,6 +153,38 @@ def sortear_regioes(
         inicios = np.sort(rng.integers(0, limite, size=quantas))
         regioes.extend((chrom, int(i), int(i) + tamanho_bp) for i in inicios)
     return regioes
+
+
+def regioes_nos_locos_do_abraom(
+    rng: np.random.Generator, abraom: pd.DataFrame, comprimentos: dict[str, int], *,
+    n_regioes: int, tamanho_bp: int
+) -> list[tuple[str, int, int]]:
+    """Regioes CENTRADAS em posicoes do proprio pool do ABraOM.
+
+    Por que existe: casar por cromossomo iguala a distribuicao grossa, mas em escala fina as duas metades da
+    mistura continuam em lugares diferentes -- medido em 21/09, so 76 de 8.591 locos do plano continham as duas
+    fontes, que e o que o acaso preveria para duas amostras esparsas independentes. Amostrando o lado global nos
+    mesmos locos, a localizacao deixa de distinguir as fontes e sobra a estatistica populacional, que e o que a
+    campanha quer contrastar.
+
+    O CUSTO, declarado: o pool global passa a herdar o vies de cobertura do arquivo do ABraOM, que ja se sabe
+    concentrado. "Global" deixa de significar "variacao humana amostrada pelo genoma" e passa a significar
+    "variacao humana agregada NOS LOCOS que o ABraOM cobre". E outra pergunta, nao uma versao melhor da mesma.
+    """
+    elegivel = abraom[abraom["chrom"].isin(comprimentos)]
+    if elegivel.empty:
+        raise ValueError("nenhuma variante do ABraOM nos cromossomos elegiveis")
+    quantidade = min(n_regioes, len(elegivel))
+    escolhidos = rng.choice(len(elegivel), size=quantidade, replace=False)
+    regioes: list[tuple[str, int, int]] = []
+    for linha in elegivel.iloc[np.sort(escolhidos)].itertuples(index=False):
+        chrom = str(linha.chrom)
+        limite = comprimentos[chrom] - tamanho_bp
+        if limite <= 0:
+            continue
+        inicio = min(max(0, int(linha.pos) - 1 - tamanho_bp // 2), limite)
+        regioes.append((chrom, inicio, inicio + tamanho_bp))
+    return sorted(regioes)
 
 
 # --------------------------------------------------------------------------- leitura do VCF
@@ -416,16 +456,21 @@ def main(argv: list[str] | None = None) -> int:
 
     reservar_chr8 = not args.no_reserve_chr8
     elegiveis = {c: v for c, v in comprimentos.items() if not (reservar_chr8 and c == "chr8")}
-    if args.geografia == "casado_ao_abraom":
-        contagem = abraom["chrom"].value_counts()
-        pesos = {c: float(contagem.get(c, 0)) for c in elegiveis}
-        pesos = {c: v for c, v in pesos.items() if v > 0}
-    else:
-        pesos = {c: float(v) for c, v in elegiveis.items()}
-
-    alocacao = alocar_regioes(pesos, n_regioes=args.n_regioes)
     rng = np.random.default_rng(args.seed)
-    regioes = sortear_regioes(rng, comprimentos, alocacao, tamanho_bp=args.tamanho_regiao_bp)
+
+    if args.geografia == GEOGRAFIA_LOCOS:
+        alocacao = {}
+        regioes = regioes_nos_locos_do_abraom(rng, abraom, elegiveis, n_regioes=args.n_regioes,
+                                              tamanho_bp=args.tamanho_regiao_bp)
+    else:
+        if args.geografia == GEOGRAFIA_CROMOSSOMO:
+            contagem = abraom["chrom"].value_counts()
+            pesos = {c: float(contagem.get(c, 0)) for c in elegiveis}
+            pesos = {c: v for c, v in pesos.items() if v > 0}
+        else:
+            pesos = {c: float(v) for c, v in elegiveis.items()}
+        alocacao = alocar_regioes(pesos, n_regioes=args.n_regioes)
+        regioes = sortear_regioes(rng, comprimentos, alocacao, tamanho_bp=args.tamanho_regiao_bp)
 
     tbi_dir = args.tbi_dir.expanduser()
     bruto, motivos_leitura, vistos_por_bin = coletar(
@@ -457,6 +502,24 @@ def main(argv: list[str] | None = None) -> int:
         por_motivo = {m: int(q) for m, q in motivos.value_counts().items()}
     else:
         pool, por_motivo = bruto, {}
+
+    # Um alelo pode estar nas DUAS metades (quase toda variante do ABraOM tambem esta no gnomAD). Nao e
+    # vazamento -- a fonte decide de qual distribuicao a variante foi sorteada, e o adapter nunca ve a AF --, mas
+    # duplica janela de treino e precisa ser decisao declarada, nao surpresa.
+    if len(pool):
+        chaves_abraom = {chave(c, p, r, a) for c, p, r, a in
+                         zip(abraom["chrom"], abraom["pos"], abraom["ref"], abraom["alt"])}
+        chaves_globais = {chave(c, p, r, a) for c, p, r, a in
+                          zip(pool["chrom"], pool["pos"], pool["ref"], pool["alt"])}
+        compartilhados = len(chaves_globais & chaves_abraom)
+        sobreposicao_de_alelos = {
+            "alelos_em_ambas_as_metades": compartilhados,
+            "fracao_do_pool_global": round(compartilhados / len(pool), 4),
+            "como_ler": ("nao e vazamento: a fonte diz de qual distribuicao a variante foi sorteada, e o adapter "
+                         "nunca ve a AF. Mas o mesmo alelo nas duas metades duplica janela de treino"),
+        }
+    else:
+        sobreposicao_de_alelos = {}
 
     pode_publicar = not exclusoes_ausentes and len(pool) > 0
     out_dir = args.out_dir.expanduser()
@@ -500,6 +563,7 @@ def main(argv: list[str] | None = None) -> int:
             if len(pool) else {},
             "por_bin": distribuicao_af(pool[COLUNA_AF]) if len(pool) else {},
         },
+        "sobreposicao_de_alelos_com_o_abraom": sobreposicao_de_alelos,
         "piso_do_abraom": piso_do_abraom,
         "custo_de_casar_o_piso": custo_do_piso(pool, piso_do_abraom),
         "geografia_contra_o_abraom": comparar_geografia(pool, abraom),
@@ -524,7 +588,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({k: relatorio[k] for k in
                       ("receita", "motivos_de_leitura", "vistos_por_bin", "fracao_amostrada_por_bin",
                        "por_motivo_de_exclusao", "pool",
-                       "custo_de_casar_o_piso", "geografia_contra_o_abraom", "pronto_para_amostrar",
+                       "custo_de_casar_o_piso", "geografia_contra_o_abraom",
+                       "sobreposicao_de_alelos_com_o_abraom", "pronto_para_amostrar",
                        "pendencias", "saidas")}, ensure_ascii=False, indent=2))
     return 0 if pode_publicar else 2
 

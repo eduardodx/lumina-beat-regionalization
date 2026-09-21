@@ -468,9 +468,38 @@ Treino 44.645 janelas em 7.681 locos; validação 5.355 em 910 locos. Saídas `c
 mediana de **4** janelas por loco, maior com **208**, e só 1.884 singletons. Do lado global isso era esperado — as
 30.000 janelas saem de 2.500 regiões de 20 kb, ~12 janelas de 4.096 bp por região. Do lado do ABraOM **não era**:
 20.000 variantes de um pool de 1,2 milhão deveriam dar ~136 kb de espaçamento médio e quase um loco por janela,
-o que somado ao global daria ~22.500 locos. Faltam ~14 mil. Isso é **mais um indício de que o arquivo do ABraOM é
-um subconjunto por região**, e não um callset genômico uniforme — coerente com os 448 variantes/Mb. Indício, não
-prova: a decomposição por fonte foi acrescentada ao relatório (`estrutura_de_locos`) para medir em vez de inferir.
+o que somado ao global daria ~22.500 locos. Faltam ~14 mil. A decomposição por fonte **mediu** o que eu tinha inferido:
+
+| fonte | janelas | locos | mediana | maior | singletons |
+|---|---:|---:|---:|---:|---:|
+| ABraOM | 20.000 | **4.778** | 3 | **175** | 1.366 |
+| global | 30.000 | 3.889 | 6 | 33 | 529 |
+
+O lado do ABraOM está **4,2× mais aglomerado** do que estaria se fosse uma amostra espalhada, e seu maior loco
+(175 janelas) é 5,3× o maior do lado global (33) — que tem teto pela própria receita. Isso reforça que o arquivo
+do ABraOM é um subconjunto por região, e não um callset uniforme. Continua sendo indício, não prova de qual
+filtro; a pergunta de procedência ao Eduardo passa a ter consequência prática.
+
+**[MEDIDO, e é o achado principal de 21/09] As duas metades da mistura quase não se encontram no genoma.** Só
+**76 de 8.591 locos** contêm as duas fontes. Isso **não é anomalia**: o lado global cobre ~70 Mb (2,6% do genoma),
+então o acaso preveria ~123 locos compartilhados, e 76 é a mesma ordem de grandeza. É o comportamento esperado de
+duas amostras esparsas e independentes.
+
+Mas é exatamente por isso que importa: **casar por cromossomo iguala a distribuição grossa e não toca na escala
+fina.** As duas metades continuam ocupando lugares diferentes, e a localização continua sendo um sinal que separa
+"global" de "brasileiro". Para o contraste de atribuição (MR × MG, mesma receita com outra mistura) isso morde
+direto, porque os dois braços veriam regiões diferentes.
+
+**Terceira opção implementada, para decidir com número:** `--geografia casado_aos_locos_do_abraom` centra cada
+região numa posição do próprio pool do ABraOM. A localização deixa de distinguir as fontes e sobra a estatística
+populacional. **O custo é real e está declarado**: o lado global herda o viés de cobertura do arquivo do ABraOM, e
+"global" passa a significar "variação humana agregada **nos locos que o ABraOM cobre**". É outra pergunta, não
+uma versão melhor da mesma — e por isso vai para o Eduardo junto com o piso de AF, não é escolha nossa.
+
+O relatório também passou a medir `sobreposicao_de_alelos_com_o_abraom`: quase toda variante do ABraOM também
+está no gnomAD, então o mesmo alelo pode cair nas duas metades. Não é vazamento — a fonte diz de qual
+distribuição a variante foi sorteada, e o adapter nunca vê a AF —, mas duplica janela de treino e tem de ser
+decisão declarada.
 
 **Como a validação do adapter tem de ser lida.** O tamanho amostral efetivo de cada metade é o número de **locos**,
 não o de janelas: 910 locos, não 5.355 janelas. Janelas do mesmo loco se sobrepõem e não são observações
