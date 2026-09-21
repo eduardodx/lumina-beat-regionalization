@@ -130,7 +130,8 @@ def test_loss_em_tensores_bate_com_o_nucleo_sem_torch():
     logits = treino.logits_mlm(adapter, lote.input_ids)
     perda, decomposicao = treino.perda_do_lote(logits, lote, mlm.PESOS_INICIAIS)
     referencia = mlm.perda_ponderada(decomposicao, mlm.PESOS_INICIAIS)
-    assert abs(float(perda) - referencia) < 1e-5, (float(perda), referencia)
+    medido = float(perda.detach())  # sem detach, o torch avisa sobre converter tensor do grafo
+    assert abs(medido - referencia) < 1e-5, (medido, referencia)
 
 
 def test_loss_e_diferenciavel_e_o_relatorio_nao_segura_o_grafo():
