@@ -31,15 +31,24 @@ objetivo diferente e a "melhor" seria a de pesos mais frouxos. O criterio de val
 independente dos pesos de treino -- aqui, a entropia cruzada media por posicao, NAO ponderada, publicada por
 categoria, com uma delas declarada primaria antes de rodar (`CRITERIO_PRIMARIO`).
 
+ESTAS FUNCOES NAO SERVEM PARA `backward()`
+-----------------------------------------
+`decompor_perdas` e `perda_ponderada` convertem para `float`: sao REFERENCIA NUMERICA e relatorio, e romperiam o
+caminho do gradiente se virassem a loss de treino. O treinador calcula a MESMA formula com tensores --
+`sum_i w_cat(i) * CE_i / sum_i w_cat(i)` -- e so depois destaca os valores do grafo para registrar. O teste que
+liga os dois mundos confere igualdade numerica com este nucleo e gradiente nao nulo nos parametros do adapter.
+
 O QUE NAO PROVA
 ---------------
 - Nao valida o modelo: aqui nao ha modelo. Valida a construcao do exemplo e a contabilidade da loss.
 - Nao decide os pesos: eles sao declarados por quem chama.
+- O criterio primario nao demonstra aprendizado de frequencia populacional nem ganho clinico.
 """
 
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -51,6 +60,16 @@ DNA_VOCAB: dict[str, int] = {"A": 1, "C": 2, "G": 3, "T": 4, "N": 5}
 MASK_ID = 6
 VOCAB_SIZE = 8
 
+#: DOIS ESPACOS DE INDICE, e confundi-los e o erro silencioso desta peca.
+#:
+#: A ENTRADA do modelo usa `DNA_VOCAB` (A=1..T=4, N=5, MASK=6, |V|=8).
+#: O ALVO do MLM usa `SNV_ALT_TO_INDEX` (A=0..T=3), porque `lumina/models/model.py:153` define
+#: `self.mlm_head = nn.Linear(d_full, len(SNV_BASES))` -- a cabeca tem QUATRO saidas, nao oito.
+#: Passar um alvo em espaco de vocabulario para uma entropia cruzada de 4 classes erraria a base por um e
+#: estouraria o indice no T. Nao ha classe para N: a auditoria de janelas ja garantiu ACGT.
+SNV_BASES: tuple[str, ...] = ("A", "C", "G", "T")
+SNV_ALT_TO_INDEX: dict[str, int] = {base: indice for indice, base in enumerate(SNV_BASES)}
+
 CATEGORIA_FOCAL = "focal_alt"
 CATEGORIA_CONTEXTO = "contexto_da_variante"
 CATEGORIA_REFERENCIA = "referencia"
@@ -61,9 +80,17 @@ TIPO_REFERENCIA = "referencia"
 
 #: Declarado ANTES de qualquer varredura: e por ele que duas configuracoes de peso sao comparadas. Nao ponderado,
 #: entao nao favorece quem treinou com peso frouxo.
+#:
+#: O QUE ELE NAO DEMONSTRA: reconstruir o ALT das variantes que a receita selecionou nao e, por si, evidencia de
+#: que o adapter aprendeu estrutura populacional, e muito menos de ganho clinico. E por isso que ele e publicado
+#: TAMBEM POR FONTE (global x abraom): a diferenca entre as fontes e mais informativa que o numero agregado.
 CRITERIO_PRIMARIO = CATEGORIA_FOCAL
 
 #: Receita inicial dos pesos de treino. E ponto de partida declarado, nao resultado de busca.
+#:
+#: COMO LER: o peso e POR POSICAO. 1,0 no focal contra 0,5 no contexto da ao focal o dobro do peso de CADA
+#: posicao de contexto -- nao metade da importancia total. Numa janela com 1 focal e 12 de referencia, o focal
+#: pesa 1/(1 + 12 x 0,5) ~ 14,3% do total. Chamar isso de "equilibrio entre focal e contexto" seria errado.
 PESOS_INICIAIS: dict[str, float] = {
     CATEGORIA_FOCAL: 1.0,
     CATEGORIA_CONTEXTO: 0.5,
@@ -77,9 +104,9 @@ class Exemplo:
 
     variant_id: str
     fonte: str
-    input_ids: tuple[int, ...]
+    input_ids: tuple[int, ...]   # espaco DNA_VOCAB (entrada do modelo)
     posicoes: tuple[int, ...]
-    alvos: tuple[int, ...]
+    alvos: tuple[int, ...]       # espaco SNV_ALT_TO_INDEX (classes da cabeca MLM)
     categorias: tuple[str, ...]
     focal_index: int
     metadados: dict[str, Any] = field(default_factory=dict)
@@ -93,7 +120,7 @@ class Exemplo:
 
 
 def codificar(sequencia: str) -> tuple[int, ...]:
-    """DNA para ids do R03. Base fora de ACGTN e erro: a auditoria de janelas ja garantiu ACGT."""
+    """DNA para ids de ENTRADA do R03 (`DNA_VOCAB`). Base fora de ACGTN e erro."""
     ids = []
     for base in sequencia.upper():
         token = DNA_VOCAB.get(base)
@@ -101,6 +128,14 @@ def codificar(sequencia: str) -> tuple[int, ...]:
             raise ValueError(f"base {base!r} fora do vocabulario {sorted(DNA_VOCAB)}")
         ids.append(token)
     return tuple(ids)
+
+
+def indice_do_alvo(base: str) -> int:
+    """Base para a classe da cabeca MLM (`SNV_ALT_TO_INDEX`, 0..3). N nao tem classe e e erro."""
+    indice = SNV_ALT_TO_INDEX.get(base.upper())
+    if indice is None:
+        raise ValueError(f"base {base!r} nao e alvo valido do MLM; classes sao {SNV_BASES}")
+    return indice
 
 
 def spans_do_plano(bruto: Any) -> list[tuple[int, int, str]]:
@@ -111,7 +146,13 @@ def spans_do_plano(bruto: Any) -> list[tuple[int, int, str]]:
 
 
 def categoria_da_posicao(posicao: int, *, focal_index: int, tipo_do_span: str) -> str:
-    """A regra em uma linha: so a posicao focal do span de variante e `focal_alt`."""
+    """A regra em uma linha: so a posicao focal do span de variante e `focal_alt`.
+
+    Tipo desconhecido e ERRO, nao `referencia`: um span mal rotulado viraria silenciosamente contexto de
+    referencia, e a posicao focal dentro dele deixaria de ser medida como a campanha precisa.
+    """
+    if tipo_do_span not in (TIPO_VARIANTE, TIPO_REFERENCIA):
+        raise ValueError(f"tipo de span {tipo_do_span!r} fora de {(TIPO_VARIANTE, TIPO_REFERENCIA)}")
     if tipo_do_span == TIPO_VARIANTE and posicao == focal_index:
         return CATEGORIA_FOCAL
     if tipo_do_span == TIPO_VARIANTE:
@@ -135,12 +176,15 @@ def montar_exemplo(
 
     O alvo de cada posicao e a base de `alt_seq`, entao o alvo do focal e o ALT e os demais sao de referencia. E
     exatamente por isso que as categorias existem: sem elas, "loss do span da variante" misturaria as duas coisas.
+
+    ATENCAO aos dois espacos: `input_ids` sai em `DNA_VOCAB` (o que o modelo recebe) e `alvos` em
+    `SNV_ALT_TO_INDEX` (as quatro classes da cabeca MLM). Ver o comentario no topo do modulo.
     """
     if not 0 <= focal_index < len(alt_seq):
         raise ValueError(f"focal_index {focal_index} fora de [0,{len(alt_seq)})")
 
     ids = list(codificar(alt_seq))
-    alvos_por_posicao: dict[int, int] = {}
+    alvos_por_posicao: dict[int, int] = {}  # em SNV_ALT_TO_INDEX, nao em DNA_VOCAB
     categorias_por_posicao: dict[int, str] = {}
     cobrindo_o_focal = 0
 
@@ -152,7 +196,7 @@ def montar_exemplo(
         for posicao in range(inicio, fim):
             if posicao in alvos_por_posicao:
                 raise ValueError(f"posicao {posicao} coberta por mais de um span")
-            alvos_por_posicao[posicao] = ids[posicao]
+            alvos_por_posicao[posicao] = indice_do_alvo(alt_seq[posicao])
             categorias_por_posicao[posicao] = categoria_da_posicao(
                 posicao, focal_index=focal_index, tipo_do_span=tipo)
 
@@ -192,15 +236,35 @@ def decompor_perdas(
                 "posicoes": quantas[c]} for c in CATEGORIAS}
 
 
+def validar_pesos(pesos: Mapping[str, float]) -> dict[str, float]:
+    """Pesos declarados, finitos e nao negativos. Peso invalido nao pode virar numero plausivel.
+
+    Um peso NaN contamina a loss inteira e aparece; um peso NEGATIVO e pior, porque produz um numero de aparencia
+    normal enquanto o treino empurra aquela categoria na direcao errada.
+    """
+    faltando = [c for c in CATEGORIAS if c not in pesos]
+    if faltando:
+        raise ValueError(f"pesos faltando para {faltando}")
+    limpos: dict[str, float] = {}
+    for categoria in CATEGORIAS:
+        valor = float(pesos[categoria])
+        if not math.isfinite(valor):
+            raise ValueError(f"peso de {categoria} nao e finito: {valor}")
+        if valor < 0:
+            raise ValueError(f"peso de {categoria} e negativo: {valor}")
+        limpos[categoria] = valor
+    if sum(limpos.values()) <= 0:
+        raise ValueError("todos os pesos sao zero: nao ha o que treinar")
+    return limpos
+
+
 def perda_ponderada(por_categoria: Mapping[str, Mapping[str, float]], pesos: Mapping[str, float]) -> float:
     """Loss de TREINO: media das posicoes, com cada categoria pesada como declarado.
 
     Pesa por POSICAO e nao por categoria: com peso igual, uma janela com 1 focal e 12 de referencia nao deve
     valer metade focal e metade referencia. O peso expressa prioridade do objetivo, nao normalizacao.
     """
-    faltando = [c for c in CATEGORIAS if c not in pesos]
-    if faltando:
-        raise ValueError(f"pesos faltando para {faltando}")
+    validar_pesos(pesos)
     numerador = 0.0
     denominador = 0.0
     for categoria in CATEGORIAS:
@@ -214,6 +278,16 @@ def perda_ponderada(por_categoria: Mapping[str, Mapping[str, float]], pesos: Map
     if denominador == 0:
         raise ValueError("nenhuma posicao mascarada com peso positivo")
     return numerador / denominador
+
+
+def agregar_por_fonte(
+    relatorios: Iterable[tuple[str, Mapping[str, Mapping[str, float]]]]
+) -> dict[str, dict[str, dict[str, float]]]:
+    """Mesma agregacao, separada por fonte. O numero agregado esconde a comparacao que interessa."""
+    por_fonte: dict[str, list[Mapping[str, Mapping[str, float]]]] = {}
+    for fonte, relatorio in relatorios:
+        por_fonte.setdefault(str(fonte), []).append(relatorio)
+    return {fonte: agregar(lista) for fonte, lista in sorted(por_fonte.items())}
 
 
 def agregar(relatorios: Iterable[Mapping[str, Mapping[str, float]]]) -> dict[str, dict[str, float]]:

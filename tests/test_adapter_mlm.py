@@ -32,6 +32,8 @@ def test_vocabulario_bate_com_o_do_modelo():
     assert mlm.DNA_VOCAB == modulo.DNA_VOCAB, (mlm.DNA_VOCAB, modulo.DNA_VOCAB)
     assert mlm.MASK_ID == modulo.MASK_ID
     assert mlm.VOCAB_SIZE == modulo.VOCAB_SIZE
+    assert mlm.SNV_BASES == modulo.SNV_BASES, (mlm.SNV_BASES, modulo.SNV_BASES)
+    assert mlm.SNV_ALT_TO_INDEX == modulo.SNV_ALT_TO_INDEX
 
 
 def test_codificar_usa_os_ids_do_treino():
@@ -56,12 +58,13 @@ def test_alvo_do_focal_e_o_alt_e_nao_a_referencia():
     exemplo = mlm.montar_exemplo(alt_seq, spans, variant_id="v1", fonte="abraom", focal_index=10)
     por_posicao = dict(zip(exemplo.posicoes, zip(exemplo.alvos, exemplo.categorias)))
 
-    assert por_posicao[10] == (mlm.DNA_VOCAB["G"], mlm.CATEGORIA_FOCAL), por_posicao[10]
+    # ALVO em SNV_ALT_TO_INDEX (0..3), nao em DNA_VOCAB: a cabeca MLM tem quatro saidas.
+    assert por_posicao[10] == (mlm.SNV_ALT_TO_INDEX["G"], mlm.CATEGORIA_FOCAL), por_posicao[10]
     # 9 e 11 estao DENTRO do span da variante, mas carregam base de referencia.
-    assert por_posicao[9] == (mlm.DNA_VOCAB["A"], mlm.CATEGORIA_CONTEXTO)
-    assert por_posicao[11] == (mlm.DNA_VOCAB["A"], mlm.CATEGORIA_CONTEXTO)
+    assert por_posicao[9] == (mlm.SNV_ALT_TO_INDEX["A"], mlm.CATEGORIA_CONTEXTO)
+    assert por_posicao[11] == (mlm.SNV_ALT_TO_INDEX["A"], mlm.CATEGORIA_CONTEXTO)
     for posicao in (2, 3, 4):
-        assert por_posicao[posicao] == (mlm.DNA_VOCAB["A"], mlm.CATEGORIA_REFERENCIA)
+        assert por_posicao[posicao] == (mlm.SNV_ALT_TO_INDEX["A"], mlm.CATEGORIA_REFERENCIA)
 
 
 def test_uma_unica_posicao_e_focal():
@@ -200,6 +203,110 @@ def test_agregar_pondera_pela_contagem_de_posicoes():
 def test_pesos_iniciais_sao_declarados_para_as_tres():
     assert set(mlm.PESOS_INICIAIS) == set(mlm.CATEGORIAS)
     assert all(v >= 0 for v in mlm.PESOS_INICIAIS.values())
+
+
+def test_tipo_de_span_desconhecido_e_erro():
+    """Tipo mal rotulado virava `referencia` em silencio -- e a posicao focal dentro dele deixava de ser medida."""
+    try:
+        mlm.categoria_da_posicao(10, focal_index=10, tipo_do_span="erro_de_tipo")
+    except ValueError as exc:
+        assert "fora de" in str(exc)
+    else:
+        raise AssertionError("tipo desconhecido tinha de falhar")
+    try:
+        mlm.montar_exemplo("A" * 20, [(9, 12, "erro_de_tipo")], variant_id="v", fonte="f", focal_index=10)
+    except ValueError:
+        return
+    raise AssertionError("montar_exemplo com tipo desconhecido tinha de falhar")
+
+
+def test_peso_nao_finito_ou_negativo_e_recusado():
+    """NaN contamina a loss e aparece; NEGATIVO e pior, porque produz numero de aparencia normal."""
+    base = {c: 1.0 for c in mlm.CATEGORIAS}
+    for ruim in (float("nan"), float("inf"), -0.5):
+        pesos = dict(base, **{mlm.CATEGORIA_CONTEXTO: ruim})
+        try:
+            mlm.validar_pesos(pesos)
+        except ValueError:
+            continue
+        raise AssertionError(f"peso {ruim} tinha de ser recusado")
+    try:
+        mlm.validar_pesos({c: 0.0 for c in mlm.CATEGORIAS})
+    except ValueError as exc:
+        assert "zero" in str(exc)
+        return
+    raise AssertionError("todos os pesos zero tinha de falhar")
+
+
+def test_perda_ponderada_recusa_peso_invalido():
+    por_categoria = {c: {"media": 1.0, "posicoes": 1} for c in mlm.CATEGORIAS}
+    pesos = {c: 1.0 for c in mlm.CATEGORIAS}
+    pesos[mlm.CATEGORIA_FOCAL] = -1.0
+    try:
+        mlm.perda_ponderada(por_categoria, pesos)
+    except ValueError:
+        return
+    raise AssertionError("peso negativo tinha de falhar antes de virar numero plausivel")
+
+
+def test_receita_inicial_nao_e_equilibrio_entre_focal_e_contexto():
+    """Documenta a leitura correta: 1,0 x 0,5 e o dobro POR POSICAO, nao metade da importancia total."""
+    por_categoria = {
+        mlm.CATEGORIA_FOCAL: {"media": 1.0, "posicoes": 1},
+        mlm.CATEGORIA_CONTEXTO: {"media": 0.0, "posicoes": 0},
+        mlm.CATEGORIA_REFERENCIA: {"media": 0.0, "posicoes": 12},
+    }
+    pesos = mlm.PESOS_INICIAIS
+    peso_do_focal = pesos[mlm.CATEGORIA_FOCAL] * 1
+    peso_total = peso_do_focal + pesos[mlm.CATEGORIA_REFERENCIA] * 12
+    assert abs(peso_do_focal / peso_total - 1 / 7) < 0.01, peso_do_focal / peso_total
+    # e a loss ponderada reflete isso: o focal com perda 1 e o resto com 0 da ~14,3%
+    assert abs(mlm.perda_ponderada(por_categoria, pesos) - 1 / 7) < 0.01
+
+
+def test_agregar_por_fonte_separa_global_de_abraom():
+    """O numero agregado esconde a comparacao que interessa."""
+    de_global = {mlm.CATEGORIA_FOCAL: {"media": 2.0, "posicoes": 1},
+                 mlm.CATEGORIA_CONTEXTO: {"media": 0.0, "posicoes": 0},
+                 mlm.CATEGORIA_REFERENCIA: {"media": 1.0, "posicoes": 4}}
+    do_abraom = {mlm.CATEGORIA_FOCAL: {"media": 1.0, "posicoes": 1},
+                 mlm.CATEGORIA_CONTEXTO: {"media": 0.0, "posicoes": 0},
+                 mlm.CATEGORIA_REFERENCIA: {"media": 1.0, "posicoes": 4}}
+    fora = mlm.agregar_por_fonte([("global", de_global), ("abraom", do_abraom), ("global", de_global)])
+    assert set(fora) == {"global", "abraom"}
+    assert fora["global"][mlm.CATEGORIA_FOCAL] == {"media": 2.0, "posicoes": 2}
+    assert fora["abraom"][mlm.CATEGORIA_FOCAL] == {"media": 1.0, "posicoes": 1}
+
+
+def test_alvo_vive_no_espaco_da_cabeca_e_nao_no_do_vocabulario():
+    """`lumina/models/model.py:153`: mlm_head = Linear(d_full, len(SNV_BASES)) -- QUATRO saidas, nao oito.
+
+    Alvo em espaco de vocabulario (A=1..T=4) erraria a base por um e estouraria o indice no T numa entropia
+    cruzada de 4 classes. Este teste trava a separacao dos dois espacos.
+    """
+    alt_seq = "ACGT" * 5
+    exemplo = mlm.montar_exemplo(alt_seq, [(0, 4, mlm.TIPO_VARIANTE)], variant_id="v", fonte="f",
+                                 focal_index=2)
+    assert exemplo.alvos == (0, 1, 2, 3), exemplo.alvos          # A,C,G,T -> 0,1,2,3
+    assert exemplo.input_ids[:4] == (6, 6, 6, 6), exemplo.input_ids[:4]  # mascarados na ENTRADA
+    assert exemplo.input_ids[4:8] == (1, 2, 3, 4)                # nao mascarados: DNA_VOCAB
+    assert max(exemplo.alvos) < len(mlm.SNV_BASES)
+
+
+def test_n_nao_e_alvo_valido_do_mlm():
+    """Nao ha classe para N. A auditoria de janelas ja garante ACGT, mas o contrato tem de recusar."""
+    try:
+        mlm.indice_do_alvo("N")
+    except ValueError as exc:
+        assert "alvo valido" in str(exc)
+    else:
+        raise AssertionError("N tinha de ser recusado como alvo")
+    try:
+        mlm.montar_exemplo("A" * 10 + "N" + "A" * 9, [(9, 12, mlm.TIPO_VARIANTE)],
+                           variant_id="v", fonte="f", focal_index=10)
+    except ValueError:
+        return
+    raise AssertionError("janela com N no alvo tinha de falhar")
 
 
 if __name__ == "__main__":
