@@ -196,6 +196,55 @@ def decomposicao_por_fonte(
     return {fonte: mlm.decompor_perdas(p, c) for fonte, (p, c) in sorted(por_fonte.items())}
 
 
+def receita_do_adapter(modulo: nn.Module) -> dict[str, Any]:
+    """Le do MODELO a receita do rsLoRA, para comparar com a que o checkpoint declara.
+
+    Conferir chaves e formas nao basta: duas configuracoes com as MESMAS formas e escalas diferentes -- `alpha`
+    ou `use_rslora` trocados -- seriam aceitas uma pela outra, e o adapter aplicaria um delta com magnitude
+    errada sem nada reclamar. A escala e recuperavel: `scaling = alpha / (sqrt(r) se rslora senao r)`.
+    """
+    modulos: list[str] = []
+    ranks: set[int] = set()
+    rsloras: set[bool] = set()
+    alphas: set[float] = set()
+    for nome, filho in modulo.named_modules():
+        if not hasattr(filho, "lora_a") or not hasattr(filho, "scaling"):
+            continue
+        modulos.append(nome)
+        rank = int(filho.lora_a.shape[0])
+        usa_rslora = bool(getattr(filho, "use_rslora", False))
+        ranks.add(rank)
+        rsloras.add(usa_rslora)
+        alphas.add(round(float(filho.scaling) * ((rank ** 0.5) if usa_rslora else rank), 6))
+    return {"modulos": sorted(modulos), "rank": sorted(ranks), "use_rslora": sorted(rsloras),
+            "alpha": sorted(alphas)}
+
+
+def gradientes_do_adapter(modulo: nn.Module) -> dict[str, Any]:
+    """Estado dos gradientes ANTES do passo. `optimizer.step()` muda peso mesmo com gradiente zero.
+
+    O AdamW tem `weight_decay` positivo por padrao: um parametro com gradiente nulo continua encolhendo. Logo
+    "o adapter mudou" NAO e evidencia de que ele aprendeu -- so a de que o otimizador rodou.
+    """
+    do_adapter = parametros_do_adapter(modulo)
+    sem_gradiente = sorted(nome for nome, p in do_adapter.items() if p.grad is None)
+    nao_finitos = sorted(nome for nome, p in do_adapter.items()
+                         if p.grad is not None and not bool(torch.isfinite(p.grad).all()))
+    normas = {nome: float(p.grad.abs().sum()) for nome, p in do_adapter.items() if p.grad is not None}
+    congelados_com_gradiente = sorted(
+        nome for nome, p in modulo.named_parameters()
+        if not p.requires_grad and p.grad is not None and float(p.grad.abs().sum()) > 0)
+    return {
+        "tensores_do_adapter": len(do_adapter),
+        "sem_gradiente": sem_gradiente,
+        "nao_finitos": nao_finitos,
+        "com_gradiente_nao_nulo": sorted(n for n, v in normas.items() if v > 0),
+        "congelados_com_gradiente": congelados_com_gradiente,
+        "nota": ("lora_b nasce em zeros, entao no primeiro passo o gradiente de lora_a e zero por construcao: "
+                 "exigir nao nulo em TODOS reprovaria um treino correto"),
+    }
+
+
 # --------------------------------------------------------------------------- checkpoint
 
 def salvar_adapter(
@@ -222,6 +271,7 @@ def salvar_adapter(
         "identidades": dict(identidades),
         "lora": asdict(resumo_lora) if hasattr(resumo_lora, "__dataclass_fields__") else resumo_lora,
         "chaves": sorted(estado),
+        "receita_lida_do_modelo": receita_do_adapter(backbone),
         "formas": {nome: list(t.shape) for nome, t in sorted(estado.items())},
         "metricas": dict(metricas),
         "estado_do_adapter": estado,
@@ -252,6 +302,19 @@ def carregar_adapter(caminho: Path, backbone: nn.Module) -> dict[str, Any]:
     incompativeis = [nome for nome in atuais if tuple(estado[nome].shape) != tuple(atuais[nome].shape)]
     if incompativeis:
         raise RuntimeError(f"formas incompativeis em {incompativeis[:5]}")
+
+    # Formas iguais com ESCALA diferente passariam aqui sem isto: `alpha` ou `use_rslora` trocados aplicam um
+    # delta de magnitude errada, e o resultado sairia diferente sem nada reclamar.
+    declarada = carga.get("lora") or {}
+    atual = receita_do_adapter(backbone)
+    for campo, esperado in (("use_rslora", declarada.get("use_rslora")),
+                            ("rank", declarada.get("rank")),
+                            ("alpha", declarada.get("alpha"))):
+        if esperado is None:
+            continue
+        obtidos = atual[campo]
+        if len(obtidos) != 1 or obtidos[0] != (round(float(esperado), 6) if campo == "alpha" else esperado):
+            raise RuntimeError(f"receita do rsLoRA nao bate em {campo}: checkpoint={esperado} modelo={obtidos}")
 
     with torch.no_grad():
         for nome, tensor in estado.items():
