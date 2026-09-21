@@ -231,6 +231,86 @@ def test_pool_sem_coluna_de_af_falha_alto():
         raise AssertionError("coluna de AF ausente ou ambigua tinha de falhar")
 
 
+JANELA_TESTE = 64
+
+
+def _genoma_com_n(posicoes_ruins):
+    """Cromossomo sintetico onde certas posicoes carregam N: a janela que as cobre nao se constroi."""
+    seq = ["A"] * 40_000
+    for pos in posicoes_ruins:
+        seq[pos] = "N"
+
+    def fetch(chrom, inicio, fim):
+        return "".join(seq[inicio:fim])
+    return fetch
+
+
+def _pool_para_reparo(n=60):
+    """Pool com AF num bin so, para o reparo ter de repor dentro do estrato."""
+    return pd.DataFrame({
+        "chrom": ["chr1"] * n,
+        "pos": [5_000 + 100 * i for i in range(n)],
+        "ref": ["A"] * n, "alt": ["G"] * n,
+        "af_abraom": [0.02] * n,
+    })
+
+
+def _com_metadados(pool):
+    anotado = pool.copy()
+    anotado["af_bin"] = gen.rotular_bins(anotado[gen.coluna_de_af(anotado)])
+    anotado["variant_id"] = [f"{c}:{int(p)}:{r}:{a}" for c, p, r, a in
+                             zip(anotado["chrom"], anotado["pos"], anotado["ref"], anotado["alt"])]
+    return anotado
+
+
+def test_reparo_repoe_dentro_do_mesmo_estrato_e_mantem_o_total():
+    """Descartar encolheria o plano e deslocaria mistura e estratificacao -- que sao a receita declarada."""
+    rng = np.random.default_rng(5)
+    pool = _com_metadados(_pool_para_reparo())
+    amostra = pool.head(10)
+    plano = gen.montar_plano(amostra, fonte=gen.FONTE_ABRAOM, rng=rng, window_bp=JANELA_TESTE,
+                             margem=8, span_min=3, span_max=6, spans_de_referencia=1)
+    # Poe N dentro da janela das tres primeiras linhas planejadas.
+    ruins = [int(linha.window_start) + 1 for linha in plano.head(3).itertuples()]
+    fetch = _genoma_com_n(ruins)
+
+    reparado, substituicoes, sobrou = gen.reparar_plano(
+        plano, {gen.FONTE_ABRAOM: pool}, fetch, rng=rng, window_bp=JANELA_TESTE, margem=8,
+        span_min=3, span_max=6, spans_de_referencia=1)
+
+    assert len(reparado) == len(plano), (len(reparado), len(plano))
+    assert substituicoes[gen.FONTE_ABRAOM] >= 3, substituicoes
+    assert sobrou.empty
+    assert reparado["variant_id"].is_unique
+    assert gen.indices_invalidos(reparado, fetch, window_bp=JANELA_TESTE) == []
+
+
+def test_reparo_sem_candidato_no_estrato_declara_o_que_sobrou():
+    """Sem reposicao possivel, o plano nao mente: as linhas saem e o manifesto acusa."""
+    rng = np.random.default_rng(7)
+    pool = _com_metadados(_pool_para_reparo(n=4))
+    plano = gen.montar_plano(pool, fonte=gen.FONTE_ABRAOM, rng=rng, window_bp=JANELA_TESTE,
+                             margem=8, span_min=3, span_max=6, spans_de_referencia=1)
+    todas = [int(linha.window_start) + 1 for linha in plano.itertuples()]
+    fetch = _genoma_com_n(todas)
+    reparado, _, sobrou = gen.reparar_plano(
+        plano, {gen.FONTE_ABRAOM: pool}, fetch, rng=rng, window_bp=JANELA_TESTE, margem=8,
+        span_min=3, span_max=6, spans_de_referencia=1, max_rodadas=2)
+    assert len(sobrou) > 0, "as invalidas tinham de ser declaradas"
+    assert len(reparado) + len(sobrou) <= len(plano)
+
+
+def test_indices_invalidos_usa_a_janela_declarada():
+    rng = np.random.default_rng(3)
+    pool = _com_metadados(_pool_para_reparo(n=5))
+    plano = gen.montar_plano(pool, fonte=gen.FONTE_ABRAOM, rng=rng, window_bp=JANELA_TESTE,
+                             margem=8, span_min=3, span_max=6, spans_de_referencia=1)
+    limpo = _genoma_com_n([])
+    assert gen.indices_invalidos(plano, limpo, window_bp=JANELA_TESTE) == []
+    sujo = _genoma_com_n([int(plano.iloc[2]["window_start"]) + 2])
+    assert gen.indices_invalidos(plano, sujo, window_bp=JANELA_TESTE) == [2]
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

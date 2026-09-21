@@ -406,6 +406,22 @@ E o piso confirmou-se na escala definitiva: removeria **19.702 de 20.000 do bin 
 outros seis. Custo de reamostrar com piso: 22 minutos. **Barato o bastante para materializar as duas versões**
 quando a decisão for tomada, em vez de escolher no escuro.
 
+**Mistura 60/40 materializada [21/09] e a politica para janela invalida, FECHADA.** O plano com as duas metades
+saiu exato: 50.000 janelas, 30.000 globais e 20.000 do ABraOM, `fracao_global_efetiva_nas_linhas = 0,6`, sete bins
+de AF a ~7.143 cada. A auditoria contra o hg38 encontrou **42 `non_acgt` em 50.000 (0,084%)** — como esperado, o
+lado global vem de regiões sorteadas às cegas e algumas caem em trecho com `N`; o lado do ABraOM não produz isso
+porque suas variantes vêm de um callset.
+
+**Política decidida: repor, não descartar.** Descartar encolheria o plano e deslocaria a mistura e a
+estratificação — que são exatamente o que a receita declara. Com `--fasta`, o gerador confere cada janela e repõe
+a inválida por outra **da mesma fonte e do mesmo bin de AF**, em até `--max-rodadas-de-reparo` rodadas, e publica
+`substituicoes_por_fonte`. O que não tiver reposição no estrato sai declarado em `janelas_sem_reposicao` e
+bloqueia `pronto_para_campanha`.
+
+**O viés que isso introduz, declarado:** variantes cuja janela de 4.096 bp contém base fora de ACGT ficam
+sistematicamente de fora do treino do adapter. É inevitável — o modelo não lê essa janela de qualquer forma — mas
+é viés, não neutralidade, e por isso está escrito no manifesto em vez de apenas acontecer.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de

@@ -53,6 +53,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from eval.embedding_probe.windows import WindowError, build_window  # noqa: E402
+from scripts.audit_variant_windows import abrir_fasta  # noqa: E402
+
 from scripts.audit_abraom_source import AF_BINS  # noqa: E402
 from scripts.import_mosaic_brazil_studies import sha256_file  # noqa: E402
 
@@ -179,6 +182,67 @@ def montar_plano(
     return pd.DataFrame(linhas)
 
 
+def indices_invalidos(plano: pd.DataFrame, fetch, *, window_bp: int) -> list[int]:
+    """Posicoes do plano cuja janela DECLARADA nao se constroi. Mesma regra do auditor de janelas."""
+    ruins: list[int] = []
+    for posicao, linha in enumerate(plano.itertuples(index=False)):
+        try:
+            build_window(fetch, chrom=str(linha.chrom), pos_1based=int(linha.pos_1based),
+                         ref=str(linha.ref), alt=str(linha.alt), window_bp=window_bp,
+                         focal_index=int(linha.focal_index))
+        except WindowError:
+            ruins.append(posicao)
+    return ruins
+
+
+def reparar_plano(
+    plano: pd.DataFrame, pools: dict[str, pd.DataFrame], fetch, *, rng: np.random.Generator,
+    window_bp: int, margem: int, span_min: int, span_max: int, spans_de_referencia: int,
+    max_rodadas: int = 5,
+) -> tuple[pd.DataFrame, dict[str, int], pd.DataFrame]:
+    """Repoe cada janela invalida por outra DA MESMA FONTE E DO MESMO BIN DE AF.
+
+    Por que repor em vez de descartar: descartar encolhe o plano e desloca a mistura e a estratificacao, que sao
+    justamente o que a receita declara. Repor dentro do estrato mantem os dois exatos.
+
+    O VIES QUE ISSO INTRODUZ, declarado: variantes cuja janela de 4.096 bp contem base fora de ACGT ficam
+    sistematicamente de fora. E pequeno (42 em 50.000 na rodada de 21/09) e inevitavel -- o modelo nao consegue
+    ler essa janela de qualquer forma --, mas e vies, nao neutralidade.
+
+    Devolve (plano reparado, substituicoes por fonte, linhas que nao deu para repor).
+    """
+    substituicoes: dict[str, int] = {}
+    for _ in range(max_rodadas):
+        ruins = indices_invalidos(plano, fetch, window_bp=window_bp)
+        if not ruins:
+            return plano, substituicoes, plano.iloc[0:0].copy()
+        maus = plano.iloc[ruins].copy()
+        plano = plano.drop(plano.index[ruins]).reset_index(drop=True)
+        usados = set(plano["variant_id"]) | set(maus["variant_id"])
+        repostos: list[pd.DataFrame] = []
+        for (fonte, af_bin), grupo in maus.groupby(["fonte", "af_bin"], sort=True):
+            pool = pools[str(fonte)]
+            candidatos = pool[(pool["af_bin"] == af_bin) & (~pool["variant_id"].isin(usados))]
+            if candidatos.empty:
+                continue
+            quantidade = min(len(grupo), len(candidatos))
+            escolhidos = rng.choice(len(candidatos), size=quantidade, replace=False)
+            amostra = candidatos.iloc[np.sort(escolhidos)]
+            usados |= set(amostra["variant_id"])
+            repostos.append(montar_plano(amostra, fonte=str(fonte), rng=rng, window_bp=window_bp,
+                                         margem=margem, span_min=span_min, span_max=span_max,
+                                         spans_de_referencia=spans_de_referencia))
+            substituicoes[str(fonte)] = substituicoes.get(str(fonte), 0) + quantidade
+        if not repostos:
+            return plano, substituicoes, maus
+        plano = pd.concat([plano, *repostos], ignore_index=True)
+
+    restantes = plano.iloc[indices_invalidos(plano, fetch, window_bp=window_bp)].copy()
+    if len(restantes):
+        plano = plano.drop(restantes.index).reset_index(drop=True)
+    return plano, substituicoes, restantes
+
+
 def resumo_do_plano(plano: pd.DataFrame, *, window_bp: int) -> dict[str, Any]:
     if plano.empty:
         return {"n": 0}
@@ -216,6 +280,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--span-min", type=int, default=3)
     parser.add_argument("--span-max", type=int, default=10)
     parser.add_argument("--spans-de-referencia", type=int, default=1)
+    parser.add_argument("--fasta", type=Path,
+                        help="com ele, o plano confere cada janela e repoe a invalida dentro do mesmo estrato")
+    parser.add_argument("--max-rodadas-de-reparo", type=int, default=5)
     parser.add_argument("--seed", type=int, default=20260920)
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -248,6 +315,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # O amostrador entrega o que o pool tem, sem inventar: se um bin faltou, o TOTAL e a MISTURA saem diferentes
     # do pedido -- em silencio. Medimos as duas coisas nas linhas produzidas, nao nos numeros pedidos.
+    # (recalculado abaixo, depois do reparo contra o FASTA)
     produzido = int(len(plano))
     contagem = plano["fonte"].value_counts().to_dict() if produzido else {}
     n_global_produzido = int(contagem.get(FONTE_GLOBAL, 0))
@@ -263,10 +331,44 @@ def main(argv: list[str] | None = None) -> int:
         bloqueios.append(f"mistura efetiva {fracao_efetiva} fora de {args.fracao_global} "
                          f"+/- {TOLERANCIA_DA_MISTURA}: os pools tem capacidades diferentes")
 
+    substituicoes: dict[str, int] = {}
+    irrecuperaveis = plano.iloc[0:0].copy()
+    leitor = None
+    if args.fasta:
+        fetch, leitor = abrir_fasta(args.fasta.expanduser())
+        pools: dict[str, pd.DataFrame] = {}
+        for fonte, bruto in ((FONTE_ABRAOM, abraom), (FONTE_GLOBAL, glob if tem_global else None)):
+            if bruto is None:
+                continue
+            anotado = bruto.copy()
+            anotado["af_bin"] = rotular_bins(anotado[coluna_de_af(anotado)])
+            anotado["variant_id"] = [f"{c}:{int(pos)}:{str(r).upper()}:{str(a).upper()}" for c, pos, r, a in
+                                     zip(anotado["chrom"], anotado["pos"], anotado["ref"], anotado["alt"])]
+            pools[fonte] = anotado
+        plano, substituicoes, irrecuperaveis = reparar_plano(
+            plano, pools, fetch, rng=rng, window_bp=args.window_bp, margem=args.margem,
+            span_min=args.span_min, span_max=args.span_max,
+            spans_de_referencia=args.spans_de_referencia, max_rodadas=args.max_rodadas_de_reparo)
+
     out_dir = args.out_dir.expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
     plano_path = out_dir / "plano_de_janelas.parquet"
     plano.to_parquet(plano_path, index=False)
+
+    # Recontagem depois do reparo: e o plano PUBLICADO que tem de bater com o pedido.
+    produzido = int(len(plano))
+    contagem = plano["fonte"].value_counts().to_dict() if produzido else {}
+    n_global_produzido = int(contagem.get(FONTE_GLOBAL, 0))
+    fracao_efetiva = round(n_global_produzido / produzido, 4) if produzido else 0.0
+    bloqueios = [b for b in bloqueios if "plano com" not in b and "mistura efetiva" not in b]
+    if produzido != args.n_janelas:
+        bloqueios.append(f"plano com {produzido} janelas, {args.n_janelas} pedidas: algum bin de AF nao tinha "
+                         f"variantes suficientes")
+    if tem_global and abs(fracao_efetiva - args.fracao_global) > TOLERANCIA_DA_MISTURA:
+        bloqueios.append(f"mistura efetiva {fracao_efetiva} fora de {args.fracao_global} "
+                         f"+/- {TOLERANCIA_DA_MISTURA}: os pools tem capacidades diferentes")
+    if len(irrecuperaveis):
+        bloqueios.append(f"{len(irrecuperaveis)} janelas invalidas sem reposicao no estrato")
 
     manifesto: dict[str, Any] = {
         "receita": {
@@ -289,11 +391,19 @@ def main(argv: list[str] | None = None) -> int:
             "janelas_pedidas": args.n_janelas, "janelas_produzidas": produzido,
             "fracao_global_efetiva_nas_linhas": fracao_efetiva,
             "tolerancia_da_mistura": TOLERANCIA_DA_MISTURA,
+            "conferido_contra_o_fasta": str(args.fasta) if args.fasta else None,
+            "leitor_do_fasta": leitor,
+            "substituicoes_por_fonte": substituicoes,
+            "janelas_sem_reposicao": int(len(irrecuperaveis)),
+            "vies_da_reposicao": (
+                "variantes cuja janela contem base fora de ACGT ficam sistematicamente de fora; inevitavel, "
+                "porque o modelo nao le essa janela, mas e vies e nao neutralidade") if args.fasta else None,
         },
         "pronto_para_campanha": not bloqueios,
         "pendencias": bloqueios,
         "falta_antes_de_treinar": [
-            "auditar ESTE plano contra o FASTA (audit_variant_windows.py le focal_index, window_start e spans)",
+            "auditar ESTE plano contra o FASTA (audit_variant_windows.py le focal_index, window_start e spans)"
+            if not args.fasta else "reauditar o plano reparado, para confirmar que a reposicao fechou",
             "declarar a separacao populacional entre treino e validacao do adapter, por loci",
             "fixar o peso da loss entre posicoes de variante e de referencia",
         ],
