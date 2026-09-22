@@ -45,7 +45,10 @@ O LACO DE TREINO (`--treinar`) acrescenta, e nada disso e verificado pelo smoke:
 - scheduler contado por ATUALIZACOES do otimizador;
 - interrupcao em loss ou gradiente nao finito, com o motivo declarado;
 - retomada EXPLICITA (`--retomar`), com o aviso de que o estado do otimizador nao e restaurado;
-- reconferencia, no fim, de que o backbone congelado continua identico.
+- reconferencia, no fim, de que o backbone congelado continua identico;
+- **selecao por validacao**: `adapter_melhor.pt` guarda o melhor pelo criterio primario, e o relatorio avisa alto
+  quando o adapter FINAL ficou pior que a linha de base. Medido no piloto 5: a validacao tocou o fundo no passo
+  89 e depois degradou ate +0,26 acima da base -- salvar so o final entregaria o pior adapter da corrida.
 """
 
 from __future__ import annotations
@@ -521,6 +524,10 @@ def rodar_treino(config: argparse.Namespace) -> int:
     config.out_dir.expanduser().mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(config.seed)
     historico: list[dict[str, Any]] = []
+    # SELECAO POR VALIDACAO. O piloto 5 mostrou por que isto nao e opcional: a validacao tocou o fundo no passo
+    # 89 e depois degradou ate ficar PIOR que nao treinar. Salvar so o final entregaria o pior adapter da corrida.
+    melhor: dict[str, Any] | None = None
+    caminho_melhor = config.out_dir.expanduser() / "adapter_melhor.pt"
     atualizacoes = 0
     motivo_de_parada = "passos concluidos"
 
@@ -570,6 +577,16 @@ def rodar_treino(config: argparse.Namespace) -> int:
             linha["validacao"] = avaliar(adapter, validacao_exemplos, pesos=pesos, batch=config.batch,
                                          device=device)
         historico.append(linha)
+        if "validacao" in linha:
+            valor = linha["validacao"]["criterio_primario"]["valor"]
+            if melhor is None or valor < melhor["valor"]:
+                melhor = {"passo": passo, "valor": valor,
+                          "validacao": linha["validacao"], "caminho": str(caminho_melhor)}
+                treino.salvar_adapter(caminho_melhor, backbone=backbone, resumo_lora=resumo,
+                                      config={k: str(v) for k, v in vars(config).items()},
+                                      identidades={"checkpoint_r03": str(config.checkpoint),
+                                                   "revisao_do_codigo": proveniencia["revisao_do_codigo"]},
+                                      metricas=linha, passo=passo + 1)
         if config.salvar_a_cada and (passo + 1) % config.salvar_a_cada == 0:
             # Antes de uma corrida longa, salvar so no fim significa perder tudo se ela cair.
             parcial = config.out_dir.expanduser() / f"adapter_passo{passo + 1:06d}.pt"
@@ -636,9 +653,24 @@ def rodar_treino(config: argparse.Namespace) -> int:
                         "posicoes focais nao equivale ao numero de observacoes independentes: respeitar os locos"),
         }
 
+    if melhor and caminho_melhor.exists():
+        melhor["sha256"] = sha256_file(caminho_melhor)
+        if linha_de_base:
+            melhor["delta_contra_a_base"] = round(
+                melhor["valor"] - linha_de_base["criterio_primario"]["valor"], 6)
+    degradou = bool(linha_de_base and final
+                    and final["criterio_primario"]["valor"] > linha_de_base["criterio_primario"]["valor"])
+    if degradou:
+        print("\nATENCAO: o adapter FINAL e pior que a linha de base "
+              f"({final['criterio_primario']['valor']:.4f} contra "
+              f"{linha_de_base['criterio_primario']['valor']:.4f}). "
+              f"Use `adapter_melhor.pt` (passo {melhor['passo'] if melhor else '?'}), nao `adapter.pt`.")
+
     relatorio = {
         "proveniencia": proveniencia,
         "linha_de_base": linha_de_base,
+        "melhor_por_validacao": melhor,
+        "final_pior_que_a_base": degradou,
         "delta_da_validacao": delta,
         "entradas": {
             "plano_treino": str(config.plano_treino),
@@ -682,7 +714,8 @@ def rodar_treino(config: argparse.Namespace) -> int:
     (out_dir / "treino_do_adapter.json").write_text(
         json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True, default=str), encoding="utf-8")
     print(json.dumps({k: relatorio[k] for k in ("receita", "atualizacoes_do_otimizador", "motivo_de_parada",
-                                                "backbone_congelado_intacto", "saidas")},
+                                                "backbone_congelado_intacto", "melhor_por_validacao",
+                                                "final_pior_que_a_base", "saidas")},
                      ensure_ascii=False, indent=2, default=str))
     if delta:
         print(json.dumps({"delta_da_validacao": delta}, ensure_ascii=False, indent=2, default=str))

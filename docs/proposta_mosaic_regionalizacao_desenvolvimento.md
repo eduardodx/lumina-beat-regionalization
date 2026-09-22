@@ -817,6 +817,37 @@ que 0,5 seja inadequado.
 Entraram no diagnostico a **entropia** e a **decomposicao massa/escolha**, e no runner os **checkpoints
 periodicos** (`--salvar-a-cada`): salvar so no fim perde tudo se uma corrida longa cair.
 
+**Piloto 5 [22/09], 300 passos: SOBREAJUSTE claro, e a refutacao de uma hipotese minha.**
+300 atualizacoes em 8m55s (1,78 s/passo), backbone intacto. A validacao:
+
+| passo | base | 29 | 59 | **89** | 119 | 149 | 179 | 209 | 239 | 269 | 299 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `focal_val` | 1,7399 | 1,7204 | 1,7180 | **1,7079** | 1,7435 | 1,8001 | 1,8633 | 1,9275 | 1,9723 | 1,9942 | 1,9991 |
+
+A perda de treino caiu de ~1,5 para ~0,4-0,6 enquanto a de validacao subiu: **livro-texto**. O fundo foi no passo
+**89**; dali em diante piora, e o ponto final esta **+0,26 acima de nao treinar**. As tres categorias pioraram
+(focal +0,259, contexto +0,190, referencia +0,225).
+
+A causa e a amostra, nao o horizonte: 400 exemplos (277 distintos) vistos ~8 vezes cada. **O proximo passo nao e
+mais passos, e mais dados** -- as 44.645 janelas de treino ja existem e nao foram usadas.
+
+**[REFUTADO] Minha hipotese de achatamento.** A entropia caiu nas duas fontes (ABraOM −0,193; global −0,188): o
+modelo ficou **mais** confiante, nao menos. Eu havia afirmado o contrario por inferencia, no piloto 4, antes de a
+metrica existir. A medida diz o oposto, e e assim que tinha de ser resolvido.
+
+**Fato estrutural que sobrevive ao sobreajuste:** o grosso da perda focal esta no **termo de escolha**, nao no de
+massa -- 63% no ABraOM (1,336 de 2,131) e 61% no global (1,160 de 1,911). A dificuldade e QUAL alternativa, nao
+quanta massa sai da referencia. E ali que um ganho teria de aparecer.
+
+**[IMPLEMENTADO, e nao era opcional] Selecao por validacao.** O runner salvava o adapter FINAL, que aqui e o
+**pior da corrida**. Agora `adapter_melhor.pt` guarda o melhor pelo criterio primario, o relatorio publica
+`melhor_por_validacao` com passo, valor e delta contra a base, e avisa alto quando o final ficou pior que nao
+treinar.
+
+**Pendencia antes de escalar:** `carregar_exemplos` materializa TODOS os exemplos na memoria (cada um e uma tupla
+de 4.096 inteiros, ~32 KB; as 44.645 janelas passariam de 1,4 GB so nos ids, alem do tempo de reconstrucao contra
+o FASTA). Para a corrida com o plano inteiro isso precisa virar construcao preguicosa por lote.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
