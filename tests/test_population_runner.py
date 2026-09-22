@@ -45,5 +45,28 @@ class RunnerTests(unittest.TestCase):
             plan, quantos=160, seed=7))
 
 
+    def test_selecao_guarda_a_melhor_e_nao_a_ultima(self):
+        # piloto 5: a validacao tocou o fundo no passo 89 e degradou ate ficar pior que nao treinar.
+        melhor = None
+        for passo, valor in ((29, 1.7204), (59, 1.7180), (89, 1.7079), (119, 1.7435), (299, 1.9991)):
+            melhor, _ = runner.atualizar_melhor(melhor, passo, {"criterio_primario": {"valor": valor}})
+        self.assertEqual(melhor["passo"], 89)
+        self.assertAlmostEqual(melhor["valor"], 1.7079)
+
+    def test_selecao_aceita_a_avaliacao_final_fora_da_cadencia(self):
+        melhor = None
+        for passo, valor in ((29, 1.75), (59, 1.74)):
+            melhor, _ = runner.atualizar_melhor(melhor, passo, {"criterio_primario": {"valor": valor}})
+        melhor, trocou = runner.atualizar_melhor(melhor, 61, {"criterio_primario": {"valor": 1.70}})
+        self.assertTrue(trocou)
+        self.assertEqual(melhor["passo"], 61)
+
+    def test_selecao_nao_troca_em_empate(self):
+        melhor, _ = runner.atualizar_melhor(None, 10, {"criterio_primario": {"valor": 1.5}})
+        melhor, trocou = runner.atualizar_melhor(melhor, 20, {"criterio_primario": {"valor": 1.5}})
+        self.assertFalse(trocou)
+        self.assertEqual(melhor["passo"], 10)
+
+
 if __name__ == "__main__":
     unittest.main()

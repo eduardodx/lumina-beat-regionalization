@@ -385,6 +385,15 @@ def amostrar_preservando_a_mistura(plano: pd.DataFrame, *, quantos: int, seed: i
     return pd.concat(pedacos, ignore_index=True) if pedacos else plano.head(0)
 
 
+def atualizar_melhor(melhor: dict[str, Any] | None, passo: int,
+                     validacao: dict[str, Any]) -> tuple[dict[str, Any] | None, bool]:
+    """Devolve (melhor, trocou). Funcao pura, para a selecao ser testavel sem GPU."""
+    valor = validacao["criterio_primario"]["valor"]
+    if melhor is not None and valor >= melhor["valor"]:
+        return melhor, False
+    return {"passo": passo, "valor": valor, "validacao": validacao}, True
+
+
 def _mistura(exemplos: list) -> dict[str, Any]:
     """Fracao de cada fonte nos exemplos efetivamente carregados. Sem isto, treinar numa fonte so passa batido."""
     if not exemplos:
@@ -497,6 +506,16 @@ def rodar_treino(config: argparse.Namespace) -> int:
                   f"({len(resumo.module_names)} contra {len(esperados)})")
             return 2
 
+    # Calculadas UMA vez: os checkpoints parciais e o melhor tinham menos proveniencia que o final.
+    identidades_base = {
+        "checkpoint_r03": str(config.checkpoint),
+        "checkpoint_sha256": sha256_file(config.checkpoint.expanduser()),
+        "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
+        "plano_validacao_sha256": sha256_file(config.plano_validacao.expanduser())
+        if config.plano_validacao else None,
+        "revisao_do_codigo": proveniencia["revisao_do_codigo"],
+    }
+
     parametros = list(treino.parametros_do_adapter(backbone).values())
     otimizador = torch.optim.AdamW(parametros, lr=config.lr, weight_decay=config.weight_decay)
     impressao_inicial = treino.impressao_dos_congelados(backbone)
@@ -577,33 +596,38 @@ def rodar_treino(config: argparse.Namespace) -> int:
             linha["validacao"] = avaliar(adapter, validacao_exemplos, pesos=pesos, batch=config.batch,
                                          device=device)
         historico.append(linha)
+
+        def _salvar(caminho: Path, metricas: dict[str, Any]) -> None:
+            treino.salvar_adapter(caminho, backbone=backbone, resumo_lora=resumo,
+                                  config={k: str(v) for k, v in vars(config).items()},
+                                  identidades=identidades_base, metricas=metricas, passo=passo + 1)
+
         if "validacao" in linha:
-            valor = linha["validacao"]["criterio_primario"]["valor"]
-            if melhor is None or valor < melhor["valor"]:
-                melhor = {"passo": passo, "valor": valor,
-                          "validacao": linha["validacao"], "caminho": str(caminho_melhor)}
-                treino.salvar_adapter(caminho_melhor, backbone=backbone, resumo_lora=resumo,
-                                      config={k: str(v) for k, v in vars(config).items()},
-                                      identidades={"checkpoint_r03": str(config.checkpoint),
-                                                   "revisao_do_codigo": proveniencia["revisao_do_codigo"]},
-                                      metricas=linha, passo=passo + 1)
+            melhor, trocou = atualizar_melhor(melhor, passo, linha["validacao"])
+            if trocou:
+                melhor["caminho"] = str(caminho_melhor)
+                _salvar(caminho_melhor, linha)
         if config.salvar_a_cada and (passo + 1) % config.salvar_a_cada == 0:
             # Antes de uma corrida longa, salvar so no fim significa perder tudo se ela cair.
-            parcial = config.out_dir.expanduser() / f"adapter_passo{passo + 1:06d}.pt"
-            treino.salvar_adapter(parcial, backbone=backbone, resumo_lora=resumo,
-                                  config={k: str(v) for k, v in vars(config).items()},
-                                  identidades={"checkpoint_r03": str(config.checkpoint),
-                                               "revisao_do_codigo": proveniencia["revisao_do_codigo"]},
-                                  metricas=linha, passo=passo + 1)
+            _salvar(config.out_dir.expanduser() / f"adapter_passo{passo + 1:06d}.pt", linha)
         print(f"  passo {passo:>4}  lr={linha['lr']:.2e}  focal_treino="
               f"{linha['criterio_primario_treino']:.4f}"
               + (f"  focal_val={linha['validacao']['criterio_primario']['valor']:.4f}"
                  if "validacao" in linha else ""))
 
-    # O delta deve corresponder ao checkpoint final mesmo fora da cadencia de validacao.
+    # O delta deve corresponder ao checkpoint final mesmo fora da cadencia de validacao -- e essa avaliacao
+    # tambem PARTICIPA DA SELECAO. Antes ela era calculada depois do bloco do `melhor`: se o ultimo passo fosse o
+    # melhor e nao caisse na cadencia, o arquivo escolhido ficaria errado.
     if validacao_exemplos and historico and "validacao" not in historico[-1]:
         historico[-1]["validacao"] = avaliar(
             adapter, validacao_exemplos, pesos=pesos, batch=config.batch, device=device)
+        melhor, trocou = atualizar_melhor(melhor, historico[-1]["passo"], historico[-1]["validacao"])
+        if trocou:
+            melhor["caminho"] = str(caminho_melhor)
+            treino.salvar_adapter(caminho_melhor, backbone=backbone, resumo_lora=resumo,
+                                  config={k: str(v) for k, v in vars(config).items()},
+                                  identidades=identidades_base, metricas=historico[-1],
+                                  passo=historico[-1]["passo"] + 1)
     congelado_intacto = treino.impressao_dos_congelados(backbone) == impressao_inicial
     out_dir = config.out_dir.expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -629,7 +653,8 @@ def rodar_treino(config: argparse.Namespace) -> int:
 
         def _delta_diag(depois, antes):
             return {f: {c: round(depois[f][c] - antes[f][c], 6)
-                        for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref", "entropia")
+                        for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref", "entropia",
+                                  "termo_massa", "termo_escolha")
                         if c in depois[f] and c in antes[f]}
                     for f in sorted(set(depois) & set(antes))}
 
@@ -653,14 +678,22 @@ def rodar_treino(config: argparse.Namespace) -> int:
                         "posicoes focais nao equivale ao numero de observacoes independentes: respeitar os locos"),
         }
 
+    valor_da_base = linha_de_base["criterio_primario"]["valor"] if linha_de_base else None
     if melhor and caminho_melhor.exists():
         melhor["sha256"] = sha256_file(caminho_melhor)
-        if linha_de_base:
-            melhor["delta_contra_a_base"] = round(
-                melhor["valor"] - linha_de_base["criterio_primario"]["valor"], 6)
+        if valor_da_base is not None:
+            melhor["delta_contra_a_base"] = round(melhor["valor"] - valor_da_base, 6)
+            melhor["supera_a_base"] = melhor["valor"] < valor_da_base
+            melhor["recomendacao"] = (
+                "usar este adapter" if melhor["supera_a_base"] else
+                "NAO usar: nenhum checkpoint superou a linha de base. Manter o R03 sem adapter")
     degradou = bool(linha_de_base and final
                     and final["criterio_primario"]["valor"] > linha_de_base["criterio_primario"]["valor"])
-    if degradou:
+    if melhor and valor_da_base is not None and not melhor["supera_a_base"]:
+        print(f"\nATENCAO: NENHUM checkpoint superou a linha de base "
+              f"({melhor['valor']:.4f} contra {valor_da_base:.4f}). "
+              f"A recomendacao e manter o R03 SEM adapter.")
+    elif degradou:
         print("\nATENCAO: o adapter FINAL e pior que a linha de base "
               f"({final['criterio_primario']['valor']:.4f} contra "
               f"{linha_de_base['criterio_primario']['valor']:.4f}). "

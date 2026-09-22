@@ -828,25 +828,51 @@ A perda de treino caiu de ~1,5 para ~0,4-0,6 enquanto a de validacao subiu: **li
 **89**; dali em diante piora, e o ponto final esta **+0,26 acima de nao treinar**. As tres categorias pioraram
 (focal +0,259, contexto +0,190, referencia +0,225).
 
-A causa e a amostra, nao o horizonte: 400 exemplos (277 distintos) vistos ~8 vezes cada. **O proximo passo nao e
-mais passos, e mais dados** -- as 44.645 janelas de treino ja existem e nao foram usadas.
+**Contagem corrigida:** foram 2.400 apresentacoes de **400 exemplos distintos** -- todos apareceram, de 1 a 13
+vezes, media 6. Os 277 distintos eram do piloto de 60 passos, e eu atribui ao de 300.
 
-**[REFUTADO] Minha hipotese de achatamento.** A entropia caiu nas duas fontes (ABraOM −0,193; global −0,188): o
-modelo ficou **mais** confiante, nao menos. Eu havia afirmado o contrario por inferencia, no piloto 4, antes de a
-metrica existir. A medida diz o oposto, e e assim que tinha de ser resolvido.
+E **"a causa e a amostra, nao o horizonte" nao se sustenta**: tamanho da amostra, duracao, taxa de aprendizado e
+regularizacao participam todos do sobreajuste. Alem disso, aumentar `--passos` **alongou o cosseno**: na
+atualizacao 90 do piloto 5 a taxa ainda estava em ~8 × 10⁻⁵, enquanto no piloto de 60 passos ela ja havia caido a
+quase zero. Os dois nao sao a mesma trajetoria com horizontes diferentes.
 
-**Fato estrutural que sobrevive ao sobreajuste:** o grosso da perda focal esta no **termo de escolha**, nao no de
-massa -- 63% no ABraOM (1,336 de 2,131) e 61% no global (1,160 de 1,911). A dificuldade e QUAL alternativa, nao
-quanta massa sai da referencia. E ali que um ganho teria de aparecer.
+O que se pode dizer: **houve degradacao com treino prolongado nesta amostra pequena**. Ampliar os dados e o
+proximo passo razoavel; nao esta demonstrado que basta.
+
+**Sobre a minha hipotese de achatamento.** A entropia caiu nas duas fontes (ABraOM −0,193; global −0,188): ao
+**fim do piloto 5** o modelo esta mais confiante, nao menos. Isso **nao refuta retroativamente** o piloto 4, que
+tinha outro horizonte e outra trajetoria de taxa de aprendizado -- e onde a entropia nem estava sendo medida. O
+que fica: eu afirmei um mecanismo por inferencia, sem a metrica, e isso e que estava errado.
+
+**Composicao da perda no fim desta corrida:** 63% no ABraOM (1,336 de 2,131) e 61% no global (1,160 de 1,911)
+estao no **termo de escolha**. Isso descreve **este modelo sobreajustado nesta amostra** -- nao demonstra gargalo
+estrutural nem obriga um ganho futuro a vir desse termo.
 
 **[IMPLEMENTADO, e nao era opcional] Selecao por validacao.** O runner salvava o adapter FINAL, que aqui e o
 **pior da corrida**. Agora `adapter_melhor.pt` guarda o melhor pelo criterio primario, o relatorio publica
 `melhor_por_validacao` com passo, valor e delta contra a base, e avisa alto quando o final ficou pior que nao
 treinar.
 
-**Pendencia antes de escalar:** `carregar_exemplos` materializa TODOS os exemplos na memoria (cada um e uma tupla
-de 4.096 inteiros, ~32 KB; as 44.645 janelas passariam de 1,4 GB so nos ids, alem do tempo de reconstrucao contra
-o FASTA). Para a corrida com o plano inteiro isso precisa virar construcao preguicosa por lote.
+**Correcoes na selecao de checkpoints, antes de escalar:** a avaliacao final fora da cadencia era calculada
+**depois** do bloco que atualiza o melhor -- se o ultimo passo fosse o melhor e nao caisse na cadencia, o arquivo
+escolhido ficava errado. Agora ela participa da selecao. Os checkpoints melhor e periodicos tinham **menos
+proveniencia que o final** (faltavam os sha256 do R03 e dos planos): as identidades passaram a ser calculadas uma
+vez e usadas em todos. E o aviso distingue "o final e pior que a base" de **"NENHUM checkpoint superou a base"**,
+caso em que a recomendacao e **manter o R03 sem adapter**. A selecao virou funcao pura (`atualizar_melhor`) com
+tres testes sem GPU.
+
+Os termos `termo_massa` e `termo_escolha` faltavam no `delta_da_validacao` -- justamente a leitura antes/depois
+que motivou implementa-los. E passaram a ser calculados por **`logsumexp` sobre os logits**, em vez de `1 − P(REF)`:
+subtrair probabilidades perto de 1 perde precisao onde o modelo esta confiante na referencia, que e o caso comum.
+
+**Nao recupera o checkpoint da atualizacao 90 do piloto 5:** a selecao nao existia naquela corrida, e os
+periodicos eram a cada 100.
+
+**A dimensionar, nao supor.** `carregar_exemplos` materializa todos os exemplos na memoria (~32 KB cada; as
+44.645 janelas dariam ~1,4 GB so nos ids). E estimativa plausivel, **nao prova de que a maquina ficara sem
+memoria** -- medir RAM e tempo numa corrida curta com o conjunto ampliado antes de decidir por construcao
+preguicosa. Os "90 minutos" que citei tambem sao extrapolacao dos 8m55s, que incluem validacoes. E **3.000 passos
+× 8 = 24.000 apresentacoes visitariam ~18,6 mil exemplos distintos (41,6%)**, nao o conjunto inteiro.
 
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,

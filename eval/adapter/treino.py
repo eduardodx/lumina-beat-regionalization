@@ -327,9 +327,15 @@ def diagnostico_do_focal(logits: Tensor, lote: Lote) -> dict[str, Any]:
         # derruba a perda focal (levanta o piso dos casos em que p_alt era minusculo), sobe a das posicoes de
         # referencia, e empurra p_ref, p_alt e a fracao todos na direcao do uniforme -- foi o padrao do piloto 4.
         entropia = -(probabilidades.clamp_min(1e-9).log() * probabilidades).sum(dim=-1)
-        nao_ref = (1.0 - p_ref).clamp_min(1e-9)
-        termo_massa = -nao_ref.log()
-        termo_escolha = -fracao.clamp_min(1e-9).log()
+        # Pelos LOGITS, nao por `1 - p_ref`: subtrair probabilidades perto de 1 perde precisao justamente onde o
+        # modelo esta confiante na referencia, que e o caso comum. log(1-P(REF)) = logsumexp(nao-ref) - logsumexp(tudo).
+        selecionados = logits[lote.focal_no_lote, lote.focal_posicao]
+        sem_ref = selecionados.scatter(1, lote.focal_ref[:, None], float("-inf"))
+        log_nao_ref = torch.logsumexp(sem_ref, dim=-1) - torch.logsumexp(selecionados, dim=-1)
+        log_alt = selecionados.gather(1, lote.focal_alvo[:, None]).squeeze(1) - torch.logsumexp(
+            selecionados, dim=-1)
+        termo_massa = -log_nao_ref
+        termo_escolha = -(log_alt - log_nao_ref)
     por_fonte: dict[str, list[list[float]]] = {}
     for indice, fonte in enumerate(lote.fontes):
         alvo = por_fonte.setdefault(fonte, [[], [], [], [], [], []])
