@@ -1,10 +1,11 @@
 # HANDOFF — Regionalização do R03 com o estudo brasileiro do Mosaic
 
 > **Para quem pega num chat novo: este doc é auto-contido.** Leia inteiro antes de tocar em código.
-> Datado **2026-09-16**. Autor: Gabriel (dev, TCC). Gestor: Eduardo (mantém o Mosaic).
+> Datado **2026-09-16**, atualizado em **2026-09-22** (§14). Autor: Gabriel (dev, TCC). Gestor: Eduardo (mantém o Mosaic).
 > Branch: **`new_regionalization`**.
-> Nada está treinando. Decisões A–D fechadas pelo Eduardo (§4). **G1 e G2 concluídos, G3 e G4 em curso** —
-> o estado atual está na §13, que é por onde começar.
+> Decisões A–D fechadas pelo Eduardo (§4). **G1 e G2 concluídos; o adapter do G4 treina no R03 real e foi
+> medido; G3 não começou.** O estado atual está na **§14**, que é por onde começar — a §13 vira histórico
+> de 20/09.
 
 ---
 
@@ -26,6 +27,8 @@ Pergunta da campanha (proposta): a adaptação populacional com ABraOM produz ga
 | `docs/contrato_v2_regionalizacao_r03.md` | Contrato v2 (rascunho). Tem o aviso de que o plano acima substitui §4, §5, §7, §10 e a pendência 9 se o Eduardo aprovar |
 | PDF de regionalização do Eduardo (28 páginas, fora do repo) | Protocolo de referência: M0–M4, T_BR/T_nonBR, DiD, chr8, BRCA/TP53, critérios A–I |
 | `docs/decisoes_eduardo_fase0.md`, `docs/justificativa_endpoint_auroc.md` | Endpoint AUROC (decisão de 29/07) e a proposta da margem 0,02 (C1), ainda não confirmada |
+| `docs/diagnostico_do_adapter_regional.md` | **Por que o adapter regional está fraco** — sete achados cruzando o documento do Eduardo, a v11, a arquitetura do R03 e o nosso desenho. Resumido na §14.5 |
+| `RESULTADOS_REGIONALIZACAO_V11.md` (processo anterior) | O que a iteração passada mediu: sinal sequência→AF real, **sem especificidade regional** (IC cruzando zero), e o resíduo como próximo passo |
 | `HANDOFF_EXTRACAO_EMBEDDINGS_R03.md` (branch `embedding-probe-mosaic`) | Pesquisa de extração de embeddings, fechada |
 | `HANDOFF_R03_CONTINUACAO.md` | Campanha M0–M4 antiga (com adapter ClinVar e fusion), **superada** |
 | `lumina-mosaic/PROTOCOLO.md` + `docs/GUIA_OPERACIONAL_DE_SCORING_DOS_ESPECIALISTAS.md` | Regras do benchmark; a seção "Estudo brasileiro" é a que vale aqui |
@@ -379,3 +382,133 @@ treinador MLM em si.
   das cabeças nativas do R03. rsLoRA está implementado nativo, default desligado, e entra no manifesto.
 - Política para `N`: soft-mask normalizado, janela com base fora de ACGT descartada. Custo medido: **zero**, porque
   o `sequence_eligible` do release já garantiu ACGT na janela de 32 kb.
+
+---
+
+## 14. Estado em 22/09 (ler primeiro — substitui a §13 como ponto de partida)
+
+O adapter **existe, treina no R03 real e foi medido**. E a primeira leitura séria do resultado apontou um erro
+nosso de receita, que foi corrigido e confirmado. Esta seção é o estado atual.
+
+### 14.1 O adapter está provado no modelo real
+
+`scripts/train_population_adapter.py --smoke` → **17/17, `passou: true`**, sobre o R03 de verdade:
+`checkpoint_sha256 = f2983560f8f965…` (bate com o contrato), logits `(1, 4096, 4)`, loss em tensores igual à do
+núcleo sem torch, **backbone congelado idêntico por hash** depois de um passo, e uma **instância nova** construída
+da base com o adapter carregado reproduzindo as predições com diferença **0,00e+00**.
+
+Superfície congelada em `configs/adapter_r03_superficie.json`: **99 módulos**. As **camadas 8 e 17 ficam de fora**
+— são as de atenção esparsa, e o LoRA nelas é **inerte**, porque `nn.MultiheadAttention` passa `out_proj.weight`
+para `F.multi_head_attention_forward` em vez de chamar o módulo. Defeito real, achado pelo smoke.
+
+**Custo medido** com as 44.645 janelas de treino: carga 21,5 s, pico **3,9 GB**, **0,140 s/exemplo** de treino e
+**0,088 s/exemplo** de validação → 1,12 s por passo de 8. Construção preguiçosa **não** é necessária.
+
+### 14.2 A decomposição que guia a leitura
+
+A perda focal se reparte **exatamente**, sem hipótese:
+
+```
+−log P(ALT) = −log(1 − P(REF))  +  −log( P(ALT) / (1 − P(REF)) )
+              └── termo_massa ──┘    └────── termo_escolha ──────┘
+```
+
+**Massa** = o modelo abriu espaço contra a base de referência. **Escolha** = ele soube *qual* das três
+alternativas está ali. Calculados por `logsumexp` sobre os logits, em `treino.diagnostico_do_focal`.
+
+Linha de base útil: o R03 **já** põe **~41,5%** da massa não-referência no alelo verdadeiro (acaso 33,3%).
+
+### 14.3 O erro de receita: a taxa de aprendizado era 20× a da v11 — CONFIRMADO
+
+A v11 (`train_abraom_frequency_adapter.py`) usava `lr_lora = 5e-6` sobre a **mesma superfície LoRA**, mesmo rank 8
+e alpha 16. Nós usávamos `1e-4`.
+
+| corrida | `focal_val` | delta contra a base (1,7399) |
+|---|---:|---:|
+| `lr 1e-4`, 20 passos | 1,7305 | −0,0093 |
+| `lr 1e-4`, 300 passos | 1,9991 | **+0,2592** (sobreajustou no passo 89) |
+| **`lr 5e-6`, 1.000 passos** | **1,6932** | **−0,0467**, melhor no **último** passo |
+
+E a mudança é **qualitativa** — o `termo_escolha` trocou de sinal:
+
+| | massa (1e-4) | escolha (1e-4) | massa (5e-6) | escolha (5e-6) |
+|---|---:|---:|---:|---:|
+| ABraOM | −0,0113 | **+0,0017** | −0,0441 | **−0,0087** |
+| global | −0,0101 | **+0,0009** | −0,0412 | **−0,0015** |
+
+Antes o adapter só abria espaço e **piorava** na escolha. Agora melhora nas duas fontes, **5,9× mais no ABraOM**.
+A taxa alta levava o otimizador ao mínimo mais barato — um viés global contra a referência — antes de aprender
+qualquer coisa sutil.
+
+**Três ressalvas que os próprios números impõem.** A massa ainda domina (5,1× a escolha no ABraOM). A fração média
+**caiu** (−0,0037 / −0,0027) enquanto o termo de escolha melhorou: são agregações diferentes, e o que houve foi
+**levantar o piso dos piores casos**, não subir a média. E o 5,9× vinha de 64 × 96 posições, **sem IC**.
+
+### 14.4 O que decide a próxima leitura: `bootstrap_do_delta`
+
+Implementado no runner. Reamostra **LOCOS**, não janelas — duas janelas do mesmo loco compartilham a maior parte
+da sequência, e reamostrá-las daria IC otimista. Publica o delta por fonte com IC e a diferença
+`abraom_menos_global` com IC. Recusa com menos de 2 locos ou conjuntos diferentes entre as avaliações.
+
+**Mesmo um IC que exclua zero não é atribuição causal ao componente brasileiro**: as fontes diferem em folga
+inicial, contexto e grade de AF, e o comparador que separaria isso (MG) continua ausente.
+
+### 14.5 O diagnóstico completo
+
+`docs/diagnostico_do_adapter_regional.md` é o documento canônico — sete achados cruzando o documento do Eduardo,
+os resultados da v11, a arquitetura do R03 e o nosso desenho. Além da taxa de aprendizado (§14.3), os que exigem
+decisão:
+
+**(a) O experimento que a v11 chamou de decisivo não está sendo feito.** Treinar no **resíduo**
+`af_abraom − f(gnomad_af_pred)`, usando a `population_af_head` nativa (`Linear(448, 4)`, supervisionada no
+pré-treino com peso 256), isola **exatamente** o componente regional. O MLM não isola nada. E a v11 já mediu que
+`A_BR − A_gnomAD` tem **IC cruzando zero**: treinar na AF brasileira não bate treinar na global.
+
+**(b) O desenho M0 × MR não responde à pergunta principal.** O contraste confirmatório do documento é **M2 × M1**
+(ABraOM contra global, mesmo orçamento). Com um único adapter misto contra nenhum adapter, mesmo um resultado
+perfeito responde "adaptação populacional ajuda?" e não "adaptação *brasileira* ajuda mais?". O braço global puro
+(**MG**, mistura 100/0) é a mesma receita com outra mistura — uma execução, sem código novo.
+
+**(c) Falta a avaliação representacional da §11.1**, que o Eduardo marcou como indispensável:
+`Spearman(score populacional, log10(AF + ε))` por fonte, no chr8 reservado (o pool do ABraOM tem 61.737 variantes
+lá). É o que distingue regionalização de calibração — e o **Cenário F** do documento antecipa exatamente o nosso
+risco.
+
+**(d) O MLM tem solução degenerada** (toda janela tem a focal não-referência por construção), **(e) contexto longo
+não carrega sinal populacional** (v11: ctx 4096 ≈ ctx 1024) e nós pagamos 0,14 s/exemplo por janelas de 4.096, e
+**(f) as camadas 8 e 17 estão fora do laço** pelos dois motivos: o caminho de âncora só ativa com
+`variant_edit_mask` (que em MLM seria vazamento) e o LoRA ali é inerte.
+
+### 14.6 Próxima corrida
+
+```
+--lr 5e-6 --passos 3000 --exemplos-por-passo 8 --validar-a-cada 250 --limite-validacao 800 --backbone-em-eval
+```
+
+Três mudanças deliberadas: **3.000 passos**, porque a corrida de 1.000 ainda descia no fim; **800 exemplos de
+validação** em vez de 160, porque o IC depende disso e 64 posições focais por fonte é pouco; e `--validar-a-cada
+250` para a validação maior não dominar o custo. ~90 min.
+
+**O que decide está em `delta_da_validacao.bootstrap_por_loco.abraom_menos_global.termo_escolha`.** Se o IC
+excluir zero, é a primeira vez que o contraste entre as fontes se distingue do ruído. Se cruzar, o 5,9× era
+amostra pequena.
+
+### 14.7 Abertos em 22/09
+
+1. **Para o Eduardo, duas de desenho:** o **resíduo** (§14.5a) — rodar os dois ou trocar? — e o **MG** (§14.5b),
+   sem o qual nenhum resultado é atribuível ao componente brasileiro.
+2. **A avaliação representacional do chr8** (§14.5c), que é barata e usa cabeça que já existe.
+3. **G3 continua não começado:** cache de embeddings por sistema e smoke real do M0. **Sem G3 não existe o
+   contraste M0 × MR** — o que temos hoje mede o adapter pela própria perda de MLM, não por classificação.
+4. **Piso de AF** (a reextração com piso é a quarta opção, não a filtragem posterior dos 98,5%), **geografia**,
+   **procedência do `SABE1171.Abraom.clean.tsv`** (448 var/Mb ⇒ subconjunto filtrado), **peso da loss** e a
+   **decisão E** (chr8, BRCA/TP53).
+5. **Assimetria de presença no ABraOM** (casos 10,4% × controles 2,3%, 4,6×), com a sensibilidade pelos pares em
+   que as duas pontas estão ausentes.
+
+### 14.8 O padrão de erro a não repetir
+
+As revisões pegaram, mais de uma vez, **afirmação de mecanismo antes da medição** ("achatou a saída", "REFUTADO"),
+além de: `grad is None` ≠ gradiente zero (AdamW **pula** quem não tem grad); a regra "a fração fica em 1/3" só vale
+para redistribuição **uniforme**; e extrapolações (90 min, 1,4 GB) apresentadas como fato quando o medido era
+63 min e 3,9 GB. **Medir antes de concluir.**
