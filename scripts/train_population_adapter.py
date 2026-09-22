@@ -503,6 +503,8 @@ def bootstrap_do_delta(antes: list[dict[str, Any]], depois: list[dict[str, Any]]
             janelas_por_fonte[registro["fonte"]] = janelas_por_fonte.get(registro["fonte"], 0) + 1
             locos_por_fonte.setdefault(registro["fonte"], set()).add(loco)
     saida: dict[str, Any] = {
+        # Decisao de 22/09: IC de desenvolvimento, nunca criterio de avanco nem de parada.
+        "natureza": "exploratoria",
         "unidade_de_reamostragem": "loco",
         "chave_do_pareamento": "fonte|variant_id|focal_index",
         "locos": len(locos), "janelas": len(antes), "replicas": replicas, "campos": campos,
