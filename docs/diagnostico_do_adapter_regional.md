@@ -1,201 +1,202 @@
-# Por que o adapter regional está com desempenho fraco — diagnóstico
+# Adapter regional no R03: o que os pilotos mostram e o que ainda não mostram
 
-Escrito em 2026-09-22, depois dos pilotos 1–5 e da medição de escala. Cruza quatro fontes: o **documento de
-regionalização do Eduardo**, os **resultados da v11** (`RESULTADOS_REGIONALIZACAO_V11.md`), a **arquitetura do
-R03** (`lumina/models/`) e o **nosso desenho atual** (`eval/adapter/`, `scripts/train_population_adapter.py`).
+Escrito em 2026-09-22, depois dos pilotos 1–5 e da corrida de 1.000 passos. **Revisto no mesmo dia** depois de
+duas revisões externas, que acharam um bug no bootstrap e afirmações fortes demais. Cruza quatro fontes: o
+**documento de regionalização do Eduardo**, os **resultados da v11**, a **arquitetura do R03**
+(`lumina/models/`) e o **nosso desenho atual** (`eval/adapter/`, `scripts/train_population_adapter.py`).
 
-O que medimos até aqui: com o conjunto de treino inteiro, a perda focal melhora **−0,0093**, e a decomposição
-mostra que a melhora vem **inteira do termo de massa** (−0,011) enquanto o **termo de escolha piora** (+0,002).
-Ou seja, o adapter aprendeu a desconfiar da base de referência e **não** aprendeu qual variante está ali.
-
-Abaixo, sete achados, do mais acionável ao mais estrutural. Três deles são problemas nossos; quatro são
-limitações de desenho que precisam de decisão.
+**A v11 é referência, não evidência sobre o R03.** Outro backbone, outro objetivo (regressão de AF), cabeça
+treinável e lote diferente. O que vem de lá serve como hipótese a testar ou lição de método.
 
 ---
 
-## 1. A taxa de aprendizado é 20× a da receita que funcionou [ACIONÁVEL, testável numa corrida]
+## Três perguntas diferentes
 
-A v11 treinou adapters de frequência sobre o mesmo tipo de backbone congelado, com **a mesma superfície LoRA**
-(o doc diz "105 lineares LoRA-ados: mamba `in/out_proj` + attn `q/k/v/out_proj` + `up_stages.gate` +
-`stem.purity`; zero cabeças" — exatamente os 105 que encontramos antes de remover os 6 inertes) e o mesmo rank 8
-/ alpha 16.
-
-| | v11 (`train_abraom_frequency_adapter.py`) | nós |
+| Pergunta | Comparação que responde | Onde estamos |
 |---|---|---|
-| LR dos parâmetros LoRA | **5 × 10⁻⁶** | **1 × 10⁻⁴** |
-| LR da cabeça | 5 × 10⁻⁴ | não há cabeça |
-| lote efetivo | 2 × 8 = 16 | 8 |
-| passos | 1.000 | 300 (piloto) |
+| O adapter melhora a reconstrução mascarada? | R03 antes × depois, na validação populacional separada por loco | **avançamos aqui** |
+| A adaptação mista melhora a classificação nos estudos brasileiros? | **M0 × MR**, com avaliação clínica congelada | depende do G3 |
+| O componente ABraOM acrescenta algo ao global? | **MG × MR**, mesma receita, orçamento e avaliação | adiada |
 
-**Estamos empurrando o delta do backbone 20 vezes mais forte do que a receita que produziu sinal
-sequência→frequência real.** E o que observamos — ganho todo no termo de massa, sobreajuste em 89 passos — é
-exatamente o que uma taxa alta demais produz: o otimizador chega ao mínimo mais barato (um viés global contra a
-base de referência) antes de aprender qualquer coisa sutil.
+Este documento trata da primeira. Melhora de MLM mede reconstrução na distribuição de janelas que construímos: pode
+vir de contexto de sequência, de probabilidades mais bem calibradas ou de adaptação à própria receita. **Não
+identifica, sozinha, aprendizado populacional**, nem diz se a representação ajuda a cabeça clínica.
 
-**Custo de testar:** uma corrida (~60 min). É a primeira coisa a fazer.
+---
 
-### CONFIRMADO em 22/09 — e a mudança é qualitativa
+## O que foi corrigido nesta revisão
 
-1.000 passos com `lr = 5 × 10⁻⁶`, tudo o mais igual. 24 minutos, 1,45 s/atualização.
+| Afirmação anterior | Correção |
+|---|---|
+| "a taxa 20× maior causava o mínimo barato — CONFIRMADO" | a comparação mudou taxa, número de atualizações e repetição de dados ao mesmo tempo; **a causa não foi isolada** |
+| "sem sobreajuste; a curva ainda descia" | **não houve degradação relatada e o melhor ponto avaliado foi o último**; a curva não foi vista (está em `treino_do_adapter.json` no notebook) |
+| a troca de sinal do termo de escolha mostra que o adapter "soube qual alelo" | é **compatível com suavização** e o termo **não** é invariante a temperatura; a ordem do ALT entre as alternativas passou a ser medida |
+| "o experimento decisivo da v11 (resíduo) não está sendo feito" | a v11 **fez** um resíduo, com AF **observada**: sinal fraco. A versão com a cabeça nativa é outra proposta, nunca rodada, e "isola exatamente" era forte demais |
+| a cabeça populacional foi "supervisionada com peso 256" | **256 é `_DEFAULT_MIN_VALID`** (contagem mínima para o normalizador EMA), não peso. O pacote de inferência não traz as perdas de treino |
+| "as camadas 8 e 17 estão inteiramente fora do laço" | a `strided_attn` **roda sempre**, alimentada por camadas adaptadas; faltam só LoRA direto nessas projeções e o caminho de âncoras |
+| "contexto longo não ajuda; 1.024 dariam 4× mais passos" | evidência de **regressão de AF** na v11, sem garantia de aceleração; não transfere automaticamente ao MLM do R03 |
+| o chr8 como diagnóstico do adapter | depende da **decisão E**; se o chr8 for teste final, não pode ser consultado repetidamente para escolher a receita |
+| `bootstrap_do_delta` pronto para ler | **tinha um bug de pareamento**, e o detalhe final era descartado quando o último passo caía na cadência (corrigidos) |
 
-| corrida | `focal_val` | delta contra a base |
-|---|---:|---:|
-| `lr 1e-4`, 20 passos | 1,7305 | −0,0093 |
-| `lr 1e-4`, 300 passos | 1,9991 | **+0,2592** (sobreajustou) |
-| **`lr 5e-6`, 1.000 passos** | **1,6932** | **−0,0467** |
+---
 
-O melhor ficou no **último passo**: com a taxa da v11 não houve sobreajuste em 1.000 atualizações, e a curva
-ainda descia.
+## 1. A receita da v11 melhorou o MLM; a causa não foi isolada
 
-**E o termo de escolha trocou de sinal:**
-
-| | massa (`lr 1e-4`) | escolha (`lr 1e-4`) | massa (`lr 5e-6`) | escolha (`lr 5e-6`) |
+| Corrida | Treino disponível | Atualizações | LR | `focal_val` |
 |---|---:|---:|---:|---:|
-| ABraOM | −0,0113 | **+0,0017** | −0,0441 | **−0,0087** |
-| global | −0,0101 | **+0,0009** | −0,0412 | **−0,0015** |
+| linha de base (R03 sem delta) | — | 0 | — | 1,7399 |
+| `escala` | plano completo | 20 | `1e-4` | 1,7305 |
+| piloto 5 | **400 exemplos** (mediana de 6 visitas) | 300 | `1e-4` | melhor 1,7079 no passo 89; final 1,9991 |
+| `g4_lr5e6` | plano completo | **1.000** | **`5e-6`** | **1,6932** (melhor = último avaliado) |
 
-Antes o termo de escolha **piorava** nas duas fontes — o modelo só abria espaço contra a referência. Agora
-**melhora** nas duas, e **5,9× mais no ABraOM** que no global. O diagnóstico do item 1 estava certo: a taxa alta
-levava o otimizador ao mínimo mais barato antes de qualquer coisa sutil.
+Todas na mesma validação de 160 janelas (64 ABraOM + 96 global).
 
-**Três ressalvas que os próprios números impõem.** A massa ainda domina (5,1× o tamanho da escolha no ABraOM),
-então o grosso do ganho continua sendo "abrir espaço". A fração média **caiu** (−0,0037 / −0,0027) enquanto o
-termo de escolha melhorou — são agregações diferentes (média da razão × média do `−log` da razão), e o que
-aconteceu foi o modelo **levantar o piso dos piores casos**, não subir a média. E o "5,9× mais no ABraOM" vem de
-64 contra 96 posições agrupadas em locos, **sem intervalo de confiança** — que por isso foi implementado
-(`bootstrap_do_delta`, reamostrando **locos**, com a diferença `abraom − global` e seu IC).
+**O que se sustenta:** a receita com `5e-6`, 1.000 atualizações e dados sem repetição reduziu a perda focal em
+**−0,0467** sem degradação relatada. Pelo critério primário declarado (`focal_alt`), é resultado positivo de
+reconstrução mascarada nessa validação.
 
-Mesmo com IC, uma diferença entre as fontes **não** seria atribuição causal ao componente brasileiro: elas
-diferem em folga inicial, contexto e grade de AF, e o comparador que separaria isso (MG) continua ausente
-(item 3).
+**O que não se sustenta:** atribuir a diferença à taxa. Contra o `escala`, mudaram taxa (20×) e atualizações (50×);
+contra o piloto 5, mudaram também os dados (400 exemplos repetidos contra o plano inteiro). E a v11 justifica
+**testar** `5e-6`, não fixá-la: lá eram outro backbone, regressão de AF, cabeça treinável e lote efetivo 16.
+`5e-6` fica como **configuração candidata**.
 
----
+### Os diagnósticos da mesma corrida
 
-## 2. O experimento que a iteração anterior identificou como DECISIVO não está sendo feito [DESENHO]
+| | ABraOM | global |
+|---|---:|---:|
+| termo de massa | −0,0441 | −0,0412 |
+| termo de escolha | −0,0087 | −0,0015 |
+| entropia no focal | **+0,025** | **+0,018** |
+| fração média do ALT entre as não-referência | **−0,0037** | **−0,0027** |
+| `p_alt` médio | −0,0001 | +0,0005 |
+| perda nas posições de referência | **+0,0013** | **+0,0030** |
 
-`RESULTADOS_REGIONALIZACAO_V11.md`, seção "próximos passos", item 1:
+Com `1e-4 × 20` o termo de escolha **subia** (+0,0017 / +0,0009); aqui ele **cai**. Mas a saída ficou mais plana, a
+fração média caiu e a referência piorou — e suavizar uma distribuição confiante demais **baixa o termo de escolha
+sem mudar a ordem entre as alternativas**. Exemplo conferido: frações 0,90 e 0,02 com temperatura 1,5 viram 0,77
+e 0,06; a fração média cai de 0,46 para 0,42, o `−log` médio de 2,01 para 1,52, e a alternativa preferida não
+muda em nenhuma das duas.
 
-> Treinar o adapter no **resíduo** `af_abraom − f(gnomad_af_pred)`, usando a cabeça de população nativa
-> (`population_af_head`, que já prediz AF gnomAD por posição). Isola **exatamente** o componente regional — mais
-> limpo que o A_BR-vs-A_gnomAD indireto. (…) é o experimento que **decide** a pergunta regional.
+Então o termo de escolha não separa "discriminou melhor" de "suavizou". O runner agora mede também a **ordem** do
+ALT entre as três não-referência (`alt_em_primeiro_entre_nao_ref`, `posto_do_alt_entre_nao_ref`), que temperatura
+e massa tirada da referência não mexem. São **diagnósticos, não portões**:
 
-Nós trocamos isso por MLM, que **não isola nada**. E a razão de o resíduo ser decisivo está medida na própria
-v11: `A_BR − A_gnomAD` = +0,016 / +0,010 com **IC cruzando zero**. Treinar na AF brasileira **não** bate treinar
-na AF global, quando as duas são avaliadas na AF brasileira. O componente regional, se existe, é o que sobra
-depois de descontar o global — e é isso que o resíduo isola.
+- a ordem também muda por alteração genérica ou prejudicial, então mudança de ordem não prova aprendizado
+  populacional;
+- probabilidade melhor sem mudar a ordem é ganho legítimo de uma regra de pontuação própria;
+- e nada disso diz o que aconteceu com a representação que a cabeça clínica vai ler.
 
-O R03 tem a peça necessária pronta: `population_af_head = Linear(d_full, 4)`, saída `[B, L, 4]`, uma AF prevista
-por base alternativa e por posição. Foi supervisionada no pré-treino com peso **256** (`losses.py`).
+Um **controle de temperatura** (um escalar ajustado no R03 congelado, com dados de desenvolvimento separados da
+validação) diria quanto do −0,047 um ajuste trivial reproduz **nessa métrica**. Não provaria que o adapter mudou
+só por calibração. Fica como diagnóstico opcional.
 
----
-
-## 3. O desenho atual não pode responder à pergunta principal do documento [DESENHO]
-
-O documento do Eduardo define a pergunta assim:
-
-> Um adapter treinado com variação populacional brasileira (…) melhora a classificação (…) **mais do que um
-> adapter de variação humana global com a mesma arquitetura e o mesmo orçamento**?
-
-E o contraste confirmatório é **M2 × M1** — ABraOM contra global. Não M0 × MR.
-
-Nossa campanha tem **um único adapter misto 60/40** contra nenhum adapter. Mesmo um resultado perfeito responde
-"adaptação populacional ajuda?" e **não** "adaptação *brasileira* ajuda mais que a global?". Separar H0 (efeito
-genérico) de H1 (efeito regional) exige o braço global puro — o **MG**, mistura 100/0 — que foi adiado.
-
-Isso foi decisão do Eduardo ("vamos tentar pular etapas") e o custo foi declarado na época. Mas agora que o sinal
-está fraco, vale reencarar: **sem MG não existe o comparador que torna o resultado interpretável.** E o MG é a
-mesma receita com outra mistura — uma execução, sem código novo.
+Também: o "5,9× mais no ABraOM" vinha de 64 × 96 posições, sem IC. Mesmo com IC, a diferença entre as fontes
+compara amostras distintas e **não substitui o MG × MR**; e um IC cruzando zero não prova que o efeito era ruído.
 
 ---
 
-## 4. Falta a avaliação representacional, que é o que o protocolo manda medir [LACUNA]
+## 2. O resíduo: hipótese para depois, não bloqueio
 
-Seção 11.1 do documento, marcada por ele como **"o componente adicional que considero indispensável"**:
+`RESULTADOS_REGIONALIZACAO_V11.md` (10/07) propôs treinar no resíduo `af_abraom − f(gnomad_af_pred)`. **Dois dias
+depois a v11 rodou uma versão dele** (Experimento B, `TCC_REGIONALIZACAO_V11.md` e §7.3 do
+`HANDOFF_CONTINUACAO_V11_POS_FASE4.md`), com AF **observada** dos dois lados:
 
-> Score: usar o score escalar produzido pela **interface populacional** do Lumina ou do adapter. (…) Métrica
-> representacional mínima: `Spearman(score, log10(AF + ε))`.
+- alvo `logit(af_abraom) − logit(af_gnomad)`, perda huber;
+- ganho contra o controle embaralhado **+0,026 [+0,001; +0,050]** no teste; na validação o IC cruza zero;
+- a seleção de checkpoint por NLL era degenerada para esse alvo ilimitado;
+- leitura da época: sinal regional **fraco**.
 
-Nosso critério primário é **entropia cruzada de reconstrução mascarada**. É outra coisa. A avaliação
-representacional pergunta "o adapter ordena variantes por frequência melhor do que antes, e mais na fonte em que
-foi treinado?" — que é a pergunta da regionalização.
+A versão com a **previsão nativa** do modelo nunca foi rodada, e não é o mesmo experimento. Três cuidados antes de
+propô-la:
 
-E o documento antecipa exatamente o nosso risco, no **Cenário F**:
-
-> M2/M4 melhoram ClinVar mas não melhoram ABraOM-chr8 → o ganho pode vir de regularização, calibração ou
-> compatibilidade com a distribuição do ClinVar, e **não de regionalização representacional demonstrada**.
-
-Sem essa métrica não temos como distinguir os dois, e ela é barata: o chr8 está reservado, o pool do ABraOM tem
-61.737 variantes lá, e o score sai de uma cabeça que já existe.
-
----
-
-## 5. O objetivo MLM tem uma solução degenerada, e nossos números mostram o modelo a tomando [NOSSO]
-
-**Toda janela de treino tem a base focal não-referência, por construção.** Então existe uma política que reduz a
-perda focal sem aprender nada sobre populações: baixar globalmente a probabilidade da base de referência em
-posições mascaradas.
-
-Os spans de referência existem como guarda, e têm 3,3× mais peso agregado que o focal (1.055 × 0,5 contra
-160 × 1,0). Mesmo assim o modelo fez a troca — porque o ganho **por posição** no focal é muito maior: ali se pede
-justamente aquilo que o modelo pré-treinado em referência considera improvável.
-
-A decomposição confirma: **termo de massa −0,011, termo de escolha +0,002**. A guarda está funcionando como
-**detector**, não como impedimento.
+- a `population_af_head` prevê **log-AF** ("observed + log-AF", `model.py:171`): subtrair a saída dela de AF bruta
+  exige definir transformação e calibração;
+- o resíduo não isola "exatamente" o componente regional: carrega também erro do preditor global, cobertura,
+  filtragem e ruído de frequência;
+- é **outra tarefa de treino**. Trocar o MLM por ela agora adiaria a pergunta da campanha.
 
 ---
 
-## 6. Contexto longo não ajuda sinal populacional, e nós pagamos por ele [EFICIÊNCIA]
+## 3. M0 × MR responde uma pergunta; MG × MR, outra
 
-Achado 5 da v11:
+O documento do Eduardo define o contraste confirmatório como M2 × M1 (ABraOM contra global, mesmo orçamento). A
+campanha, por decisão dele em 15/09, é M0 × MR com um adapter misto. Isso **não torna o desenho errado; limita a
+conclusão**: um ganho sustenta "a adaptação mista ajuda", não "o ABraOM ajuda além do global".
 
-> ctx 4096 ≈ ctx 1024 (test 0,1273 vs 0,1274), a custo ~zero. (…) é **ausência de sinal de longo alcance** para
-> frequência — biologicamente plausível: AF é local (constraint / conservação / mutabilidade).
-
-Nossas janelas são de 4.096 bp e custam **0,140 s por exemplo**. Se o sinal populacional é local, janelas de
-1.024 dariam aproximadamente **4× mais passos pelo mesmo tempo** — o que importa quando o suspeito número 1 é
-treino insuficiente ou mal dimensionado.
-
-Ressalva: o objetivo da v11 era regressão de AF e o nosso é MLM; a transferência do achado não é automática. Mas
-é barato testar.
+"Se der certo a gente volta e tenta explicar" define a **prioridade**. Não autoriza a execução nem o orçamento do
+MG, que continua sendo a **ablação de atribuição proposta**.
 
 ---
 
-## 7. O caminho de variante da arquitetura fica completamente fora do treino [ESTRUTURAL]
+## 4. Avaliação representacional: depende da decisão E
 
-O R03 tem uma via dedicada a "aqui foi aplicada uma variante": o `variant_edit_mask`, o `conservation_delta` (só
-existe com edição declarada) e, nas camadas **8 e 17**, as `anchor_query_attn` / `anchor_key_attn`, cujo papel é
-**difundir o efeito de uma edição ao longo da sequência**.
+A §11.1 do documento chama de indispensável `Spearman(score populacional, log10 AF)` no chr8, e o **Cenário F**
+(ganho em ClinVar sem ganho representacional = calibração, não regionalização) continua sendo o aviso certo.
 
-Sem `edit_mid_mask`, `backbone.py` pula esse caminho e só toca os parâmetros com magnitude zero para o DDP ver um
-conjunto constante. Foi o que medimos: gradiente exatamente zero ali.
-
-Some-se a isso que o LoRA nessas camadas é **inerte** (elas usam `nn.MultiheadAttention`, que lê `out_proj.weight`
-em vez de chamar o módulo) e o quadro fecha: **as camadas 8 e 17 estão inteiramente fora do nosso laço de
-treino**, pelos dois motivos ao mesmo tempo.
-
-Isso **não** é um erro a corrigir sem pensar: em MLM não se pode dizer ao modelo onde está a variante — seria
-vazamento, já que é exatamente o que se pergunta. Mas registra uma incompatibilidade real entre o objetivo
-escolhido e a arquitetura: o R03 tem maquinário de efeito-de-variante que o MLM não aciona, e o adapter não pode
-ajustá-lo.
+Mas como adaptar isso a esta campanha está na **decisão E, ainda aberta**. Se o chr8 continuar reservado como teste
+final, **não pode ser consultado repetidamente para escolher a receita**. Os diagnósticos de desenvolvimento usam a
+validação do próprio adapter, separada por loco.
 
 ---
 
-## O que eu faria, em ordem
+## 5. O objetivo tem um atalho, e os números mostram parte dele
 
-**Primeiro, o barato e decisivo sobre a dinâmica:** uma corrida com `--lr 5e-6` (a receita da v11) em vez de
-`1e-4`. Se a solução degenerada sumir e o termo de escolha começar a se mover, o problema era otimização, não
-desenho. Uma hora de GPU.
+Toda janela tem o focal não-referência por construção, e na entrada todas as posições mascaradas são iguais
+(`MASK`). Reduzir a confiança em todas elas derruba a perda focal a custo pequeno nas posições de referência.
 
-**Segundo, a métrica que falta:** Spearman entre o score populacional e a AF observada, por fonte, nas variantes
-de chr8 que nenhum treino viu. É o que o protocolo manda medir, distingue regionalização de calibração, e usa
-uma cabeça que já existe no modelo.
+Com `1e-4` o ganho veio todo do termo de massa. Com `5e-6` as posições de referência pioraram (+0,0023) e a
+entropia subiu: **parte** do ganho é compatível com esse atalho. Os spans de referência funcionam como detector,
+não como impedimento. É propriedade do objetivo a monitorar, não falha demonstrada.
 
-**Terceiro, para o Eduardo, duas perguntas de desenho:**
+---
 
-1. **O resíduo.** A iteração anterior apontou `af_abraom − f(gnomad_af_pred)` como o experimento que decide a
-   pergunta regional, e o MLM não o substitui. Vale rodar os dois, ou trocar?
-2. **O comparador.** Sem o braço global puro (MG, mistura 100/0), M0 × MR não separa "adaptação populacional
-   ajuda" de "adaptação brasileira ajuda mais". É uma execução com a receita que já existe.
+## 6. Contexto de 4.096 bp: hipótese de custo, sem prioridade
 
-**O que NÃO mudaria agora:** os pesos da loss. O piloto não isolou problema neles, e mexer junto com a taxa de
-aprendizado impediria saber qual mudança fez efeito.
+Na v11, contexto 4.096 ≈ 1.024 em Spearman **e em custo** (carga dominada por overhead) — na regressão de AF. Isso
+não mostra que contexto longo é inútil no MLM do R03, nem garante aceleração com janelas menores. Só vale testar se
+o custo virar gargalo.
+
+---
+
+## 7. Camadas 8 e 17: participam do cálculo, sem adaptação direta
+
+Nas duas camadas de atenção esparsa, a `strided_attn` **executa em todo forward**, antes da condição que pula as
+âncoras (`backbone.py`, `SparseGlobalAttention.forward`), e recebe entradas de camadas adaptadas. O que falta:
+
+- LoRA direto nas projeções dela (o embrulho em `nn.MultiheadAttention` é inerte e foi removido da superfície);
+- o caminho de âncoras (`anchor_query_attn` / `anchor_key_attn`), que só liga com `edit_mid_mask`.
+
+Isso **não demonstra incompatibilidade entre o R03 e o MLM**. Declarar a variante na entrada mudaria a tarefa (é o
+que o modelo deveria inferir) e exigiria definição cuidadosa.
+
+---
+
+## 8. O bootstrap: dois defeitos corrigidos antes de qualquer leitura
+
+1. **Pareamento.** `variant_id` é `chrom:pos:ref:alt`, sem a fonte, e o mesmo alelo pode estar nas duas metades da
+   mistura com janelas diferentes. Parear só por ele fazia um registro sobrescrever o outro: com antes e depois
+   **idênticos**, o delta do ABraOM saía +0,25. Agora a chave é `fonte|variant_id|focal_index`; janela repetida,
+   loco ausente ou janela que muda de loco **recusam** o bootstrap; e a saída informa **janelas e locos por
+   fonte**. Loco ausente não cai mais para o `variant_id`: a validação sem `locus_id` para antes de carregar o
+   modelo.
+2. **Detalhe final descartado.** O detalhe por janela era removido em toda validação da cadência, inclusive na
+   última. Com `--passos` múltiplo de `--validar-a-cada` (a corrida de 3.000/250), o bootstrap do final sairia
+   "indisponível". Agora o detalhe do final e o do melhor são guardados, há bootstrap também para o **melhor** (o
+   adapter que se usa), e os três conjuntos vão para `detalhe_da_validacao.json`.
+
+O IC continua **condicional ao modelo escolhido nessa mesma validação** e não inclui variação entre sementes.
+
+---
+
+## O que fazer, em ordem
+
+1. **Feito:** bootstrap corrigido, ordem do ALT medida, textos de leitura corrigidos.
+2. **A corrida de 3.000 passos com `5e-6`**, como desenvolvimento do adapter candidato. Critério primário
+   inalterado; termo de escolha, ordem e contraste entre fontes como diagnósticos, sem perseguir significância.
+3. **Completar o G3 para medir M0 × MR.** Não é preciso resolver o mecanismo do MLM antes de medir se o adapter
+   ajuda na tarefa clínica. Antes de comparar sistemas, **declarar a regra que congela o adapter**, para a
+   comparação clínica não virar seleção de adapter.
+4. **Para o Eduardo:** o MG como ablação de atribuição proposta; a decisão E (chr8); o resíduo como hipótese
+   posterior, distinguindo AF observada de previsão nativa.
+
+**O que não mudaria agora:** os pesos da loss e o critério primário.
