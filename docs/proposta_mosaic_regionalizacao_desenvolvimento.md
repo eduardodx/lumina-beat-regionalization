@@ -623,7 +623,22 @@ exatamente zero mesmo se o embrulho funcionasse.
 `apply_lora` passa a pular esses `Linear` e a declara-los em `modulos_inertes_ignorados`. **Numericamente nao
 muda nada** — eles nunca participaram do forward —, mas tira 6 tensores mortos do otimizador e corrige o
 manifesto, onde "105 modulos adaptados" superestimava a superficie real. A superficie efetiva do adapter no R03
-e de **99 modulos**, a congelar com `--modulos-esperados` depois de revista.
+e de **99 modulos**, e ela foi **congelada** em `configs/adapter_r03_superficie.json`.
+
+**Smoke aprovado na segunda rodada [22/09]: 17/17 checagens, `passou: true`.** 99 modulos, 198 tensores do
+adapter, `sem_gradiente` vazio. O quadro de gradientes saiu como a teoria previa: **99 `lora_b` com gradiente nao
+nulo e 99 `lora_a` com gradiente zero** -- `lora_b` nasce em zeros, entao no primeiro passo `lora_a` nao recebe
+sinal por construcao. Backbone congelado identico por hash; instancia nova com o adapter reproduz as predicoes
+com diferenca 0,00.
+
+**A superficie declarada tem uma consequencia de desenho:** as camadas **8 e 17** ficam sem adapter. Sao as de
+atencao esparsa (`strided_attn` + `anchor_*`), construidas sobre `nn.MultiheadAttention`, cujo `out_proj` nao e
+chamado como modulo. O adapter portanto **nao alcanca o caminho de longo alcance** do R03 -- adapta as 20 camadas
+Mamba (fwd/bwd), as 4 de atencao local (q/k/v/out), o `stem.purity` e os dois `gate` das etapas de subida.
+Isso e limitacao declarada, nao escolha: adapta-las exigiria embrulhar a propria `MultiheadAttention`.
+
+**Nao ler nada do `por_fonte` desta rodada.** Ele saiu com 2 posicoes focais por fonte -- ABraOM 1,296 contra
+global 1,067 -- e com esse n a diferenca nao distingue nada. O campo existe para o piloto, nao para o smoke.
 
 O diagnostico tambem ficou mais fino: `sem_gradiente` (nem entrou no grafo) passou a ser separado de
 `com_gradiente_zero` (entrou e nao recebeu sinal, como `lora_a` no primeiro passo). Estavam juntos e sao

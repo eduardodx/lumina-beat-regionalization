@@ -158,7 +158,7 @@ def test_no_primeiro_passo_lora_a_pode_ter_gradiente_zero():
     adapter, modelo, _ = _monta()
     for nome, parametro in modelo.named_parameters():
         if nome.endswith("lora_b"):
-            assert float(parametro.abs().sum()) == 0.0, nome
+            assert float(parametro.detach().abs().sum()) == 0.0, nome
     lote = treino.montar_lote(_exemplos())
     perda, _ = treino.perda_do_lote(treino.logits_mlm(adapter, lote.input_ids), lote, mlm.PESOS_INICIAIS)
     perda.backward()
