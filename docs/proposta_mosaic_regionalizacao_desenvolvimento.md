@@ -283,9 +283,9 @@ Não por argumento: por medição que **não toca o estudo brasileiro**. Papéis
 | Conjunto | Papel |
 |---|---|
 | treino de cada candidato | ajusta os pesos da cabeça |
-| **seleção comum reservada** | compara extrações **e políticas**, com critério declarado antes |
+| **seleção comum reservada** | compara extrações **e políticas** (só M0), com critério declarado antes; **depois disso**, comparação **exploratória** M0 × MR, com o adapter já congelado (22/09) |
 | fold 1 gold | calibração (Platt e limiar) e diagnóstico complementar; **early stopping acontece aqui**, declarado |
-| fold 0 gold | avaliação só depois do congelamento |
+| fold 0 gold | avaliação só depois do congelamento — **nunca no desenvolvimento** (22/09) |
 | estudos brasileiros | comparação final, congelada |
 
 A comparação entre as três políticas usa o **conjunto de seleção comum**, não o fold 1 — foi justamente a fragilidade
@@ -1056,6 +1056,13 @@ do Eduardo:
 | Congelamento | só o LoRA do adapter recebe gradiente; cabeças nativas congeladas (`freeze_native_feature_heads`) |
 | Orçamento e seeds | idênticos em qualquer braço comparado; registrar seed por execução |
 
+**Regra que congela o adapter do MR [DECLARADO em 22/09, antes de qualquer comparação M0 × MR]:** receita
+candidata `lr 5e-6`, 3.000 passos, 8 exemplos por passo, validação de 800 janelas a cada 250 passos, superfície de
+99 módulos, rsLoRA rank 8 / alpha 16; de cada semente usa-se o `adapter_melhor.pt` (menor `focal_alt` na validação
+do adapter, o critério primário declarado). Se nenhum checkpoint superar a base, não há MR com esta receita: parar e
+rediscutir. **Proibido** escolher adapter, receita ou checkpoint por métrica clínica ou por diagnóstico do MLM.
+Registro legível por máquina: `configs/campanha_r03_desenvolvimento.json`.
+
 Ordem: smoke sintético, depois piloto pequeno com uma seed, depois a execução da campanha.
 
 ### 5.2 Extração [PROPOSTO]
@@ -1105,6 +1112,19 @@ Mesma arquitetura e procedimento em H0 e HR; padronização ajustada só no trei
 `core_locus` (fold 1); Platt e limiar de MCC ajustados na mesma validação, congelados por sistema e iguais para
 casos e controles. A escolha de extração e de política acontece no conjunto de seleção comum, não aqui. A campanha usa repetições de adapter e cabeça (PDF §10: pelo menos três), com predição final pela média
 das probabilidades calibradas e métricas também por seed.
+
+**Sementes [DECLARADO em 22/09, em `configs/campanha_r03_desenvolvimento.json`]:** adapter a₁ = 20260921,
+a₂ = 20260922, a₃ = 20260923; cabeça h₁ = 11, h₂ = 12, h₃ = 13 (arbitrárias, fixadas antes de qualquer uso).
+**Pareadas:** MR_i = adapter a_i + cabeça h_i e M0_i = R03 sem adapter + cabeça h_i — as mesmas sementes de cabeça
+nos dois sistemas, para cada par compartilhar inicialização e ordem dos dados. Cruzar 3 × 3 daria 9 cabeças ao MR e
+3 ao M0, e ensembles de tamanhos diferentes não se comparam. No desenvolvimento, enquanto só existir a₁, MR usa a₁
+com h₁, h₂ e h₃: a variação entre sementes de adapter não entra, e os intervalos não a incluem.
+
+**Recortes de desenvolvimento [DECLARADO em 22/09]:** treino da cabeça = papel `train` do snapshot da política; parada
+e calibração = papel `validation` (fold 1 gold); comparação de desenvolvimento = conjunto de seleção comum
+(`693eb234…`). O papel `test` (fold 0) e os estudos brasileiros **não entram em nenhuma etapa de desenvolvimento**.
+Esses recortes excluem membros dos estudos e a regra ampla brasileira, então **não medem a interação regional**:
+M0 × MR ali mede classificação geral. Todo intervalo de desenvolvimento é **exploratório**.
 
 ---
 

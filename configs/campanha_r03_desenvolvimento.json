@@ -1,0 +1,84 @@
+{
+  "formato": "campanha_r03_desenvolvimento_v1",
+  "declarado_em": "2026-09-22",
+  "aprovado_por": "Gabriel, na conversa de 22/09, antes de qualquer comparacao M0 x MR",
+  "principios": [
+    "Desenvolvimento nunca toca o fold 0 nem os estudos brasileiros.",
+    "Diagnosticos do MLM (termo de escolha, ordem do ALT, contraste entre fontes) sao descricao, nao portao.",
+    "Todo intervalo de desenvolvimento e exploratorio: condicional aos modelos escolhidos, nunca criterio de avanco."
+  ],
+  "recortes": {
+    "treino_da_cabeca": {
+      "arquivo": "g2_final_<politica>/core_head_snapshot.parquet",
+      "papel": "train",
+      "uso": "ajusta os pesos da cabeca. As tres politicas sao aninhadas: extrair o treino de `nenhum` cobre as tres"
+    },
+    "parada_e_calibracao": {
+      "arquivo": "g2_final_<politica>/core_head_snapshot.parquet",
+      "papel": "validation",
+      "descricao": "fold 1 gold, 1.575 variantes, identico nas tres politicas",
+      "uso": "early stopping, Platt e limiar de MCC de cada cabeca. Comparar sistemas aqui e so descritivo: as cabecas pararam e foram calibradas nele"
+    },
+    "comparacao_de_desenvolvimento": {
+      "arquivo": "g5_comum/selecao_comum.parquet",
+      "sha256_prefixo": "693eb234",
+      "variantes": 2799,
+      "clusters": 156,
+      "uso": "(1) escolha de extracao e politica, so com M0, pela regra da secao 4.2 do plano; (2) comparacao EXPLORATORIA M0 x MR, depois dessa escolha e com o adapter ja congelado pela regra abaixo"
+    },
+    "proibidos_no_desenvolvimento": [
+      {
+        "arquivo": "g2_final_<politica>/core_head_snapshot.parquet",
+        "papel": "test",
+        "descricao": "fold 0 gold, 1.250 variantes",
+        "uso_permitido": "sanidade do core, so depois do congelamento (G6)"
+      },
+      {
+        "arquivo": "g1_brazil_studies/brazil_study_variants.parquet",
+        "descricao": "8.875 membros de br_clinical_evidence e br_population_observed",
+        "uso_permitido": "avaliacao unica e congelada (G7)"
+      }
+    ],
+    "o_que_o_desenvolvimento_nao_mede": "a interacao regional. Os recortes de desenvolvimento excluem membros dos estudos e a regra ampla brasileira, entao nao ha casos de participacao brasileira neles: M0 x MR aqui mede classificacao geral, nao o efeito regional"
+  },
+  "sementes": {
+    "adapter": [20260921, 20260922, 20260923],
+    "cabeca": [11, 12, 13],
+    "combinacoes": [
+      {"indice": 1, "adapter": 20260921, "cabeca": 11},
+      {"indice": 2, "adapter": 20260922, "cabeca": 12},
+      {"indice": 3, "adapter": 20260923, "cabeca": 13}
+    ],
+    "regra": "MR_i = adapter de semente a_i + cabeca de semente h_i. M0_i = R03 sem adapter + cabeca h_i: as MESMAS sementes de cabeca nos dois sistemas, para o par (M0_i, MR_i) compartilhar inicializacao e ordem dos dados. Predicao de cada sistema = media das 3 probabilidades calibradas; metricas tambem por combinacao. Cruzar 3 x 3 daria 9 cabecas ao MR e 3 ao M0, e ensembles de tamanhos diferentes nao se comparam",
+    "desenvolvimento": "enquanto so houver o adapter a_1, MR_dev = a_1 com h_1, h_2 e h_3: a variacao entre sementes de adapter nao entra, e os intervalos nao a incluem",
+    "subamostra_da_validacao_do_adapter": "semente 20260922 para as tres sementes de adapter (a corrida a_1 ja usa: e seed + 1). Antes de a_2, o runner precisa de uma flag que desacople essa semente da do adapter",
+    "origem": "sementes de cabeca arbitrarias, fixadas aqui antes de qualquer uso"
+  },
+  "adapter_do_mr": {
+    "receita": {
+      "lr": 5e-6,
+      "passos": 3000,
+      "exemplos_por_passo": 8,
+      "batch": 1,
+      "aquecimento": 2,
+      "weight_decay": 0.01,
+      "clip_norma": 1.0,
+      "pesos": {"focal_alt": 1.0, "contexto_da_variante": 0.5, "referencia": 0.5},
+      "limite_validacao": 800,
+      "validar_a_cada": 250,
+      "backbone_em_eval": true,
+      "lora": {"rank": 8, "alpha": 16, "rslora": true}
+    },
+    "superficie": "configs/adapter_r03_superficie.json",
+    "planos_sha256_prefixo": {"treino": "c76d08d4", "validacao": "034eca34"},
+    "checkpoint": "adapter_melhor.pt de cada semente: o de menor focal_alt na validacao do adapter (criterio primario declarado)",
+    "se_nenhum_checkpoint_supera_a_base": "nao ha MR com esta receita: parar e rediscutir, sem trocar de receita olhando metrica clinica",
+    "proibido": "escolher adapter, receita ou checkpoint por metrica clinica ou por diagnostico do MLM",
+    "estado": "receita candidata de desenvolvimento; a corrida a_1 (g4_corrida2) e a primeira execucao dela"
+  },
+  "intervalos": {
+    "natureza": "exploratoria",
+    "clinico_de_desenvolvimento": "bootstrap por overlap_cluster_id no conjunto de selecao, com os mesmos sorteios para M0 e MR",
+    "adapter": "bootstrap por loco na validacao do adapter"
+  }
+}

@@ -493,27 +493,34 @@ MG × MR**.
 - **MG:** "se der certo a gente volta e tenta explicar" define a **prioridade**, não autoriza execução nem
   orçamento. O MG é a ablação de atribuição **proposta**.
 
-### 14.6 Próximos passos propostos
+### 14.6 Decisões de 22/09 e próximos passos
 
-1. **Push e testes no notebook** — o runner sem GPU e os testes torch com `REQUIRE_NO_SKIP=1` (mudou
-   `eval/adapter/treino.py`).
-2. **A corrida de 3.000 passos com `5e-6`**, como desenvolvimento do adapter candidato. `--limite-validacao 800`
-   (IC com mais locos) e `--validar-a-cada 250`. ~90 min.
-   ```
-   --lr 5e-6 --passos 3000 --exemplos-por-passo 8 --batch 1 --validar-a-cada 250 --salvar-a-cada 500 \
-   --limite-validacao 800 --backbone-em-eval --out-dir ~/artifacts/redesenho/g4_corrida2
-   ```
-   Com `| tee`, conferir `${PIPESTATUS[0]}` (ou `set -o pipefail`): `$?` sozinho mostra o código do `tee`.
-   **Leitura:** critério primário declarado; termo de escolha, ordem e contraste entre fontes como diagnósticos,
-   sem perseguir significância.
-3. **G3, em paralelo — é o caminho até a pergunta da campanha.** Antes de comparar sistemas, **declarar a regra
-   que congela o adapter** (receita, semente, critério), para a comparação clínica não virar seleção de adapter.
-   A campanha final pede ≥ 3 sementes de adapter e de cabeça (plano §5.3).
-4. **Para o Eduardo:** o MG como ablação proposta (execução e orçamento); a decisão E; o resíduo como hipótese
-   posterior, distinguindo AF observada de previsão nativa.
+**Aprovado pelo Gabriel em 22/09:** a corrida de 3.000 passos segue como **desenvolvimento**; o próximo objetivo é
+**viabilizar a comparação clínica M0 × MR**, sem portões novos baseados nos diagnósticos do MLM; ICs exploratórios;
+recortes de desenvolvimento explícitos, sem o fold 0; combinação de sementes declarada. Tudo registrado em
+`configs/campanha_r03_desenvolvimento.json` e nas §4.2, §5.1 e §5.3 do plano:
 
-Opcional, se a seleção na própria validação preocupar: medir o adapter congelado nas janelas de validação que não
-entraram na seleção (a validação tem 5.355; a seleção usa 800).
+| Declaração | Conteúdo |
+|---|---|
+| recortes | treino = `train` do snapshot; parada e calibração = `validation` (fold 1); comparação de desenvolvimento = seleção comum (`693eb234…`); **fold 0 e estudos brasileiros fora de todo o desenvolvimento** |
+| o que o desenvolvimento não mede | a interação regional: os recortes excluem membros e a regra ampla brasileira. M0 × MR ali é classificação geral |
+| sementes | adapter 20260921 / 20260922 / 20260923; cabeça 11 / 12 / 13; **pareadas** (MR_i = a_i + h_i; M0_i = h_i) |
+| adapter do MR | receita candidata (`5e-6`, 3.000 passos, validação de 800 a cada 250); `adapter_melhor.pt` pelo `focal_alt`; nunca escolhido por métrica clínica ou diagnóstico |
+| intervalos | exploratórios: condicionais aos modelos escolhidos, sem variação entre sementes de adapter enquanto só houver a₁ |
+
+**Corrida a₁** (`~/artifacts/redesenho/g4_corrida2`): lançada com `nohup` e saída sem buffer, para sobreviver ao
+fechamento do terminal. Log completo em `~/artifacts/redesenho/g4_corrida2.log`; relatório com a curva inteira em
+`treino_do_adapter.json`, escrito só no fim; checkpoints a cada 500 passos. Para colar na conversa:
+`python3 scripts/resumir_treino_do_adapter.py ~/artifacts/redesenho/g4_corrida2` (funciona também na corrida
+`g4_lr5e6`, cuja curva nunca foi vista).
+
+**Próximos passos:**
+1. **G3, extração e cache por sistema** (M0 agora; MR quando a₁ terminar), cobrindo o treino de `nenhum` (as três
+   políticas são aninhadas), o fold 1 e a seleção comum — e recusando o papel `test` e os estudos por construção.
+2. **Cabeça sobre o cache**, com as sementes declaradas, parada e calibração no fold 1.
+3. **G5 só com M0**: extração e política pela regra da §4.2.
+4. **M0 × MR exploratório** na seleção comum, com o adapter a₁ congelado.
+5. **Para o Eduardo:** o MG como ablação proposta, a decisão E e o resíduo como hipótese posterior.
 
 ### 14.7 G3: o que já existe e o que falta
 
