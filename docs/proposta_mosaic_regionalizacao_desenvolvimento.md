@@ -690,11 +690,12 @@ sobre 4 bases e `ln 4 = 1,3863`. Medido no inicio:
 | `contexto_da_variante` | 1,052 | abaixo |
 | `referencia` | 1,123 | abaixo |
 
-E exatamente o esperado e confirma que a montagem mede o que se pretende: o R03 foi pre-treinado em **genoma de
-referencia**, e no focal se pede justamente a base **nao** referencia. Acertar melhor que o acaso nas posicoes de
-referencia e ficar pior que o acaso na focal e a assinatura de um modelo que ainda nao viu variacao populacional.
-O que o adapter tem de fazer e mover massa de probabilidade para o alelo que a populacao carrega. Essa referencia
-entrou no relatorio para nao depender de quem lembre de calcular `ln 4`.
+**O que `ln 4` significa, com precisao:** acima dela, a **media geometrica da probabilidade atribuida ao alvo**
+ficou abaixo de 25%; abaixo dela, acima de 25%. **Nao e acuracia**, e ficar acima **nao demonstra** que o modelo
+"nunca viu variacao populacional" -- eu havia escrito isso e nao se sustenta. O padrao e compativel com um modelo
+pre-treinado em genoma de referencia ao qual se pede a base nao referencia, e serve como **ancora de escala**
+para o delta, nao como diagnostico do pre-treino. Entrou no relatorio para nao depender de quem lembre de
+calcular `ln 4`.
 
 **Nao ler a queda de `focal_val`** (1,7047 → 1,6962 em 20 passos): sao 0,008 sobre 64 posicoes focais, com a loss
 de treino oscilando entre 1,32 e 2,78. Nao distingue aprendizado de ruido, e o piloto e tecnico.
@@ -702,9 +703,11 @@ de treino oscilando entre 1,32 e 2,78. Nao distingue aprendizado de ruido, e o p
 **Piloto 2 [22/09], com a mistura certa: 60 passos, 40/60 exato na validacao.** 64 posicoes focais do ABraOM e
 96 do global, `backbone_congelado_intacto: true`, parada limpa. A dinamica do treino esta provada.
 
-`focal_val` caiu nos **seis** pontos de validacao: 1,7353 → 1,7313 → 1,7276 → 1,7238 → 1,7233 → 1,7230. A
-monotonia em 6 de 6 nao e coincidencia obvia, mas a magnitude e **0,012** sobre um valor de 1,72 (0,7%), sem
-intervalo de confianca, e a desaceleracao acompanha o decaimento do cosseno. Nao se conclui nada dai.
+`focal_val` caiu nos seis pontos de validacao: 1,7353 → 1,7313 → 1,7276 → 1,7238 → 1,7233 → 1,7230. **Nao sao
+seis confirmacoes independentes**: e o mesmo conjunto avaliado por modelos sucessivos de uma unica trajetoria, e
+a desaceleracao acompanha o decaimento do cosseno. A magnitude e 0,012 sobre 1,72 (0,7%), sem intervalo de
+confianca, e os 160 exemplos nao garantem precisao: qualquer incerteza teria de **respeitar os locos**, porque as
+janelas vem agrupadas. Nao se conclui nada dai.
 
 **Faltava o numero que torna isso legivel, e ele foi acrescentado: a validacao ANTES do primeiro passo.** Como
 `lora_b` nasce em zeros, o adapter comeca como um **no-op exato** — a linha de base e, literalmente, o R03 puro
@@ -712,9 +715,27 @@ sobre a mesma amostra. Sem ela, "1,7230 no fim" nao tem contra o que ser compara
 piloto vinha depois de 10 passos. O relatorio passa a publicar `linha_de_base` e `delta_da_validacao` por
 categoria e por fonte, medidos na **mesma** amostra (sem ruido de amostragem entre os dois lados).
 
-**O numero a vigiar, e que ainda nao se le:** `focal_alt` do ABraOM (1,781) contra o do global (1,685). O R03
-preve pior o alelo brasileiro que o global. E exatamente o contraste que a campanha quer mover, mas com 64 contra
-96 posicoes e sem IC nao distingue nada — fica como a quantidade a acompanhar no piloto longo, nao como achado.
+**O numero a vigiar, e que ainda nao se le:** `focal_alt` do ABraOM (1,781) contra o do global (1,685). Isso
+**nao** demonstra dificuldade especificamente brasileira: sao exemplos diferentes, com contextos, variantes e
+distribuicoes diferentes -- e as grades de AF ja sao reconhecidamente incomparaveis entre as fontes. Alem disso
+esses valores sao do modelo **depois** do piloto, nao da linha de base, que so agora passou a ser medida. Fica
+como quantidade a acompanhar, com o contraste correto sendo entre a linha de base e o fim **na mesma fonte**.
+
+E mesmo que o ABraOM melhore mais no delta, isso sera **diferenca descritiva de reconstrucao nestas amostras**,
+nao atribuicao causal ao componente brasileiro. A atribuicao exigiria a ablacao MG, que o Eduardo adiou.
+
+**Bug meu, corrigido na revisao [22/09]: o commit `aaa9d40` quebrava o smoke.** O bloco que calcula o delta foi
+inserido com `str.replace` sobre uma ancora (`relatorio = {\n "proveniencia": ...`) que existia em **duas**
+funcoes, e o Python substitui todas as ocorrencias: `rodar_smoke` passou a referenciar `historico` e
+`linha_de_base`, que la nao existem. Estouraria `NameError` **depois** de toda a execucao em GPU -- o pior lugar
+possivel. `tests/test_population_runner.py` fecha a classe do erro por `symtable`: reprova qualquer global
+referenciado em `rodar_smoke` que nao exista no modulo, sem precisar de GPU.
+
+Junto vieram quatro correcoes: `--seed` passou a semear tambem o **torch**, que e quem sorteia a inicializacao do
+`lora_a` (sem isso o adapter comecava diferente a cada execucao, e o delta nao era reprodutivel); na **retomada**
+a linha de base nao e o R03 puro, entao ela passou a ser rotulada (`r03_sem_delta` × `adapter_retomado`); o delta
+sumia quando o ultimo passo nao caia na cadencia de validacao, e agora ha avaliacao final; e entraram o sha256 do
+plano de validacao e a recusa de loss de validacao nao finita.
 
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,

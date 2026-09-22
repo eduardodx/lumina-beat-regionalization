@@ -110,6 +110,15 @@ def escala_cosseno(passo: int, *, total: int, aquecimento: int, minimo: float = 
     return minimo + (1 - minimo) * 0.5 * (1 + math.cos(math.pi * progresso))
 
 
+def inicializar_aleatoriedade(seed: int) -> None:
+    """Controla a inicializacao LoRA; nao promete determinismo dos kernels CUDA."""
+    import random
+    import torch
+
+    random.seed(seed)
+    torch.manual_seed(seed)  # CPU e dispositivos CUDA; os geradores NumPy usam seed explicitamente.
+
+
 def montar(config: argparse.Namespace, device: Any) -> tuple[Any, Any, dict[str, Any]]:
     """Carrega o R03, congela TUDO e so entao insere o rsLoRA. A ordem nao e negociavel."""
     from eval.adapter import treino
@@ -141,6 +150,7 @@ def montar(config: argparse.Namespace, device: Any) -> tuple[Any, Any, dict[str,
         "use_rslora": resumo.use_rslora,
         "rank": resumo.rank, "alpha": resumo.alpha, "dropout": resumo.dropout,
         "modo_do_backbone": "eval" if config.backbone_em_eval else "train",
+        "seed_torch": config.seed,
     }
     return adapter, resumo, proveniencia
 
@@ -165,6 +175,7 @@ def rodar_smoke(config: argparse.Namespace) -> int:
 
     from eval.adapter import mlm, treino
 
+    inicializar_aleatoriedade(config.seed)
     device = torch.device(config.device)
     fetch, leitor = abrir_fasta(config.fasta.expanduser())
     plano = pd.read_parquet(config.plano_treino.expanduser())
@@ -308,29 +319,8 @@ def rodar_smoke(config: argparse.Namespace) -> int:
                    f"maior diferenca {float((depois - antes).abs().max()):.2e}")
     tudo &= checar("6c. receita do rsLoRA conferida no carregamento", carga.get("formato") == treino.FORMATO)
 
-    final = historico[-1].get("validacao") if historico else None
-    delta = None
-    if linha_de_base and final:
-        from eval.adapter import mlm as _mlm
-
-        def _delta(depois, antes):
-            return {c: round(depois[c]["media"] - antes[c]["media"], 6)
-                    for c in _mlm.CATEGORIAS
-                    if depois.get(c, {}).get("posicoes") and antes.get(c, {}).get("posicoes")}
-
-        delta = {
-            "por_categoria": _delta(final["por_categoria"], linha_de_base["por_categoria"]),
-            "por_fonte": {f: _delta(final["por_fonte"][f], linha_de_base["por_fonte"][f])
-                          for f in sorted(set(final["por_fonte"]) & set(linha_de_base["por_fonte"]))},
-            "leitura": ("negativo = melhorou. Mede a MESMA amostra de validacao antes e depois, entao nao ha "
-                        "ruido de amostragem entre os dois; continua sem intervalo de confianca, e o numero de "
-                        "posicoes focais e o tamanho que importa"),
-        }
-
     relatorio = {
         "proveniencia": proveniencia,
-        "linha_de_base": linha_de_base,
-        "delta_da_validacao": delta,
         "entradas": {
             "plano_treino": str(config.plano_treino),
             "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
@@ -353,7 +343,7 @@ def rodar_smoke(config: argparse.Namespace) -> int:
         "o_que_nao_prova": [
             "nao demonstra ganho de regionalizacao nem aprendizado de estrutura populacional",
             "mede reconstrucao mascarada em poucos exemplos, com um unico passo",
-            "o laco de treino e a validacao por soma/contagem AINDA NAO EXISTEM: nada aqui os verifica",
+            "o smoke nao verifica o laco de treino nem a agregacao da validacao",
         ],
         "saidas": {"adapter": str(caminho), "adapter_sha256": sha256_file(caminho)},
     }
@@ -454,6 +444,8 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
         adapter.backbone.train(modo_anterior)
 
     agregado = mlm.agregar(parciais)
+    if any(v["posicoes"] and not math.isfinite(v["media"]) for v in agregado.values()):
+        raise RuntimeError("validacao com perda nao finita")
     return {
         "criterio_primario": {"categoria": mlm.CRITERIO_PRIMARIO,
                               "valor": agregado[mlm.CRITERIO_PRIMARIO]["media"],
@@ -469,6 +461,7 @@ def rodar_treino(config: argparse.Namespace) -> int:
 
     from eval.adapter import mlm, treino
 
+    inicializar_aleatoriedade(config.seed)
     device = torch.device(config.device)
     fetch, leitor = abrir_fasta(config.fasta.expanduser())
     pesos = {mlm.CATEGORIA_FOCAL: config.peso_focal, mlm.CATEGORIA_CONTEXTO: config.peso_contexto,
@@ -513,13 +506,14 @@ def rodar_treino(config: argparse.Namespace) -> int:
         print(f"[retomada] adapter de {config.retomar} no passo {passo_inicial}")
 
     # LINHA DE BASE, antes de qualquer passo. `lora_b` nasce em zeros, entao o adapter comeca como um no-op
-    # EXATO: esta medida e a do R03 puro sobre esta amostra de validacao. Sem ela, um valor final de 1,72 nao
+    # EXATO em execucao nova. Na retomada, a base e o adapter carregado, nao o R03 puro. Sem ela, um valor final de 1,72 nao
     # tem contra o que ser comparado -- a primeira validacao do piloto de 22/09 ja vinha depois de 10 passos.
     linha_de_base = None
     if validacao_exemplos:
         linha_de_base = avaliar(adapter, validacao_exemplos, pesos=pesos, batch=config.batch, device=device)
+        linha_de_base["sistema"] = "adapter_retomado" if config.retomar else "r03_sem_delta"
         print(f"  [base]        focal_val={linha_de_base['criterio_primario']['valor']:.4f}  "
-              f"(adapter em no-op: lora_b=0)")
+              f"({linha_de_base['sistema']})")
 
     rng = np.random.default_rng(config.seed)
     historico: list[dict[str, Any]] = []
@@ -577,6 +571,10 @@ def rodar_treino(config: argparse.Namespace) -> int:
               + (f"  focal_val={linha['validacao']['criterio_primario']['valor']:.4f}"
                  if "validacao" in linha else ""))
 
+    # O delta deve corresponder ao checkpoint final mesmo fora da cadencia de validacao.
+    if validacao_exemplos and historico and "validacao" not in historico[-1]:
+        historico[-1]["validacao"] = avaliar(
+            adapter, validacao_exemplos, pesos=pesos, batch=config.batch, device=device)
     congelado_intacto = treino.impressao_dos_congelados(backbone) == impressao_inicial
     out_dir = config.out_dir.expanduser()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -606,7 +604,7 @@ def rodar_treino(config: argparse.Namespace) -> int:
                           for f in sorted(set(final["por_fonte"]) & set(linha_de_base["por_fonte"]))},
             "leitura": ("negativo = melhorou. Mede a MESMA amostra de validacao antes e depois, entao nao ha "
                         "ruido de amostragem entre os dois; continua sem intervalo de confianca, e o numero de "
-                        "posicoes focais e o tamanho que importa"),
+                        "posicoes focais nao equivale ao numero de observacoes independentes: respeitar os locos"),
         }
 
     relatorio = {
@@ -617,6 +615,8 @@ def rodar_treino(config: argparse.Namespace) -> int:
             "plano_treino": str(config.plano_treino),
             "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
             "plano_validacao": str(config.plano_validacao) if config.plano_validacao else None,
+            "plano_validacao_sha256": sha256_file(config.plano_validacao.expanduser())
+            if config.plano_validacao else None,
             "exemplos_de_treino": len(treino_exemplos), "exemplos_de_validacao": len(validacao_exemplos),
             "mistura_do_treino": _mistura(treino_exemplos),
             "mistura_da_validacao": _mistura(validacao_exemplos),
@@ -632,8 +632,9 @@ def rodar_treino(config: argparse.Namespace) -> int:
                     "referencia_uniforme": {
                         "valor": round(math.log(4), 4),
                         "leitura": ("entropia cruzada de uma previsao uniforme sobre as 4 bases. ACIMA dela, o "
-                                    "modelo da ao alvo menos de 25% -- o esperado no focal, onde se pede o ALT a "
-                                    "um modelo pre-treinado em referencia. ABAIXO, ele acerta mais que o acaso")},
+                                    "modelo tem media geometrica da probabilidade do alvo inferior a 25%. "
+                                    "ABAIXO, a media geometrica e superior a 25%. Nao mede acuracia nem "
+                                    "demonstra exposicao ou ausencia de variacao no pre-treino")},
                     "agregacao_da_validacao": "soma e contagem de posicoes, nunca media de medias"},
         "retomada": retomada or None,
         "historico": historico,
@@ -696,7 +697,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--clip-norma", type=float, default=1.0)
     parser.add_argument("--validar-a-cada", type=int, default=5)
-    parser.add_argument("--limite-treino", type=int, help="usa so as N primeiras linhas do plano (piloto)")
+    parser.add_argument("--limite-treino", type=int, help="subamostra N linhas preservando a proporcao por fonte (piloto)")
     parser.add_argument("--limite-validacao", type=int)
     parser.add_argument("--retomar", type=Path, help="adapter.pt de onde continuar; o otimizador NAO e restaurado")
     parser.add_argument("--smoke-exemplos", type=int, default=8)
