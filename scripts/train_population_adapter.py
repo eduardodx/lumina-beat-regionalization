@@ -396,46 +396,88 @@ def amostrar_preservando_a_mistura(plano: pd.DataFrame, *, quantos: int, seed: i
     return pd.concat(pedacos, ignore_index=True) if pedacos else plano.head(0)
 
 
+#: O que o bootstrap exige de cada registro do detalhe. `locus_id` e a unidade de reamostragem: cair para o
+#: `variant_id` quando ele falta viraria, em silencio, reamostragem por janela.
+CAMPOS_DO_DETALHE = ("fonte", "variant_id", "focal_index", "locus_id")
+#: Medidas com delta e IC, quando os dois lados as trazem. As duas ultimas sao de ORDEM entre as tres
+#: nao-referencia: temperatura e massa tirada da referencia nao as mexem.
+CAMPOS_DO_BOOTSTRAP = ("focal_ce", "termo_massa", "termo_escolha", "alt_em_primeiro", "posto_do_alt")
+
+
+def chave_do_exemplo(registro: dict[str, Any]) -> tuple[str, str, int]:
+    """Identifica UMA janela do plano.
+
+    `variant_id` sozinho nao basta: ele e `chrom:pos:ref:alt`, sem a fonte, e o mesmo alelo pode ter sido
+    sorteado nas duas metades da mistura, com janelas diferentes. Parear so por ele sobrescrevia um registro com o
+    outro -- com antes e depois IDENTICOS, o delta do ABraOM saia diferente de zero (revisao de 22/09).
+    """
+    return (str(registro["fonte"]), str(registro["variant_id"]), int(registro["focal_index"]))
+
+
+def problemas_do_detalhe(registros: list[dict[str, Any]], lado: str) -> list[str]:
+    """O que impede de parear: campo ausente, loco ausente ou janela repetida. Recusar, nunca escolher um."""
+    problemas: list[str] = []
+    vistas: set[tuple[str, str, int]] = set()
+    for posicao, registro in enumerate(registros):
+        ausentes = [c for c in CAMPOS_DO_DETALHE if registro.get(c) in (None, "")]
+        if ausentes:
+            problemas.append(f"{lado}[{posicao}] sem {ausentes}")
+            continue
+        chave = chave_do_exemplo(registro)
+        if chave in vistas:
+            problemas.append(f"{lado}: janela repetida {chave}")
+        vistas.add(chave)
+    return problemas
+
+
 def bootstrap_do_delta(antes: list[dict[str, Any]], depois: list[dict[str, Any]], *,
                        replicas: int = 2000, seed: int = 20260922) -> dict[str, Any]:
     """IC do delta reamostrando LOCOS, nao janelas.
 
     Janelas do mesmo loco se sobrepoem e nao sao observacoes independentes -- reamostrar janela a janela daria um
     intervalo otimista. Aqui a unidade e o loco: sorteiam-se locos com reposicao e o delta e recalculado sobre
-    todas as janelas dos locos sorteados. Como antes e depois sao os MESMOS exemplos, o delta e pareado.
+    todas as janelas dos locos sorteados. O pareamento e janela a janela, pela `chave_do_exemplo`, e qualquer
+    ambiguidade RECUSA o bootstrap em vez de escolher um dos registros.
 
-    Devolve o delta por fonte e a DIFERENCA entre fontes, que e o contraste que a campanha quer ler.
+    Devolve o delta por fonte e a diferenca entre as fontes. Essa diferenca e DIAGNOSTICO: compara amostras
+    distintas e nao substitui o MG x MR.
     """
-    if not antes or not depois or len(antes) != len(depois):
-        return {"indisponivel": "detalhe ausente ou de tamanhos diferentes"}
-    chave = {registro["variant_id"] for registro in antes}
-    if chave != {registro["variant_id"] for registro in depois}:
-        return {"indisponivel": "os dois lados nao cobrem as mesmas variantes"}
+    if not antes or not depois:
+        return {"indisponivel": "detalhe ausente em um dos lados"}
+    problemas = problemas_do_detalhe(antes, "antes") + problemas_do_detalhe(depois, "depois")
+    if problemas:
+        return {"indisponivel": "detalhe nao pareavel", "problemas": problemas[:10],
+                "total_de_problemas": len(problemas)}
+    por_chave_depois = {chave_do_exemplo(registro): registro for registro in depois}
+    if {chave_do_exemplo(registro) for registro in antes} != set(por_chave_depois):
+        return {"indisponivel": "os dois lados nao cobrem as mesmas janelas"}
 
     por_loco: dict[str, list[tuple[dict, dict]]] = {}
-    ordem_depois = {registro["variant_id"]: registro for registro in depois}
     for registro in antes:
-        par = (registro, ordem_depois[registro["variant_id"]])
-        por_loco.setdefault(registro["locus_id"], []).append(par)
+        par = por_chave_depois[chave_do_exemplo(registro)]
+        if str(par["locus_id"]) != str(registro["locus_id"]):
+            return {"indisponivel": f"a janela {chave_do_exemplo(registro)} mudou de loco entre antes e depois"}
+        por_loco.setdefault(str(registro["locus_id"]), []).append((registro, par))
     locos = sorted(por_loco)
     if len(locos) < 2:
         return {"indisponivel": f"{len(locos)} loco(s): sem unidade de reamostragem"}
+    campos = [c for c in CAMPOS_DO_BOOTSTRAP
+              if all(c in registro for registro in antes) and all(c in registro for registro in depois)]
 
     def _medias(amostra: list[str]) -> dict[str, dict[str, float]]:
         acumulado: dict[str, dict[str, list[float]]] = {}
         for loco in amostra:
             for antes_i, depois_i in por_loco[loco]:
-                alvo = acumulado.setdefault(antes_i["fonte"], {"focal_ce": [], "termo_massa": [],
-                                                               "termo_escolha": []})
-                for campo in alvo:
-                    alvo[campo].append(depois_i[campo] - antes_i[campo])
+                alvo = acumulado.setdefault(antes_i["fonte"], {campo: [] for campo in campos})
+                for campo in campos:
+                    alvo[campo].append(float(depois_i[campo]) - float(antes_i[campo]))
         return {fonte: {campo: sum(v) / len(v) for campo, v in dados.items() if v}
                 for fonte, dados in acumulado.items()}
 
     observado = _medias(locos)
     rng = np.random.default_rng(seed)
     replicas_por_fonte: dict[str, dict[str, list[float]]] = {}
-    diferencas: dict[str, list[float]] = {"focal_ce": [], "termo_massa": [], "termo_escolha": []}
+    diferencas: dict[str, list[float]] = {campo: [] for campo in campos}
     for _ in range(replicas):
         amostra = [locos[i] for i in rng.integers(0, len(locos), size=len(locos))]
         medias = _medias(amostra)
@@ -453,22 +495,37 @@ def bootstrap_do_delta(antes: list[dict[str, Any]], depois: list[dict[str, Any]]
         return {"p2_5": round(float(np.percentile(vetor, 2.5)), 6),
                 "p97_5": round(float(np.percentile(vetor, 97.5)), 6)}
 
+    # Quantos locos sustentam CADA fonte: o total esconde que uma fonte pode estar em poucos locos grandes.
+    janelas_por_fonte: dict[str, int] = {}
+    locos_por_fonte: dict[str, set[str]] = {}
+    for loco, pares in por_loco.items():
+        for registro, _ in pares:
+            janelas_por_fonte[registro["fonte"]] = janelas_por_fonte.get(registro["fonte"], 0) + 1
+            locos_por_fonte.setdefault(registro["fonte"], set()).add(loco)
     saida: dict[str, Any] = {
         "unidade_de_reamostragem": "loco",
-        "locos": len(locos), "janelas": len(antes), "replicas": replicas,
+        "chave_do_pareamento": "fonte|variant_id|focal_index",
+        "locos": len(locos), "janelas": len(antes), "replicas": replicas, "campos": campos,
+        "janelas_por_fonte": dict(sorted(janelas_por_fonte.items())),
+        "locos_por_fonte": {f: len(v) for f, v in sorted(locos_por_fonte.items())},
+        "locos_com_mais_de_uma_fonte": sum(1 for pares in por_loco.values()
+                                           if len({r["fonte"] for r, _ in pares}) > 1),
         "por_fonte": {fonte: {campo: {"delta": round(observado[fonte][campo], 6), **_ic(valores)}
-                              for campo, valores in campos.items()}
-                      for fonte, campos in sorted(replicas_por_fonte.items())},
+                              for campo, valores in campos_da_fonte.items()}
+                      for fonte, campos_da_fonte in sorted(replicas_por_fonte.items())},
     }
-    if all(diferencas.values()):
+    if campos and all(diferencas.values()):
         saida["abraom_menos_global"] = {
             campo: {"diferenca": round(observado["abraom"][campo] - observado["global"][campo], 6),
                     **_ic(valores)}
             for campo, valores in diferencas.items()}
-        saida["como_ler"] = ("`abraom_menos_global` negativo = o ABraOM melhorou MAIS. O IC cruzando zero "
-                             "significa que a diferenca entre as fontes nao se distingue do ruido de "
-                             "reamostragem dos locos. E isso NAO seria, por si, atribuicao causal ao "
-                             "componente brasileiro: as fontes diferem em folga inicial, contexto e grade de AF")
+    saida["como_ler"] = (
+        "negativo = melhorou, exceto em `alt_em_primeiro`, onde POSITIVO = o ALT passou a liderar as tres "
+        "nao-referencia mais vezes. `abraom_menos_global` e DIAGNOSTICO: compara amostras distintas (folga "
+        "inicial, contexto, grade de AF) e nao substitui o MG x MR. O IC e condicional ao modelo escolhido nesta "
+        "mesma validacao e nao inclui variacao entre sementes; cruzar zero nao prova ausencia de efeito, pode "
+        "faltar precisao. `alt_em_primeiro` e `posto_do_alt` medem ORDEM, que temperatura e massa tirada da "
+        "referencia nao mexem: ajudam a separar discriminacao de suavizacao, sem provar mecanismo")
     return saida
 
 
@@ -479,6 +536,22 @@ def atualizar_melhor(melhor: dict[str, Any] | None, passo: int,
     if melhor is not None and valor >= melhor["valor"]:
         return melhor, False
     return {"passo": passo, "valor": valor, "validacao": validacao}, True
+
+
+def registrar_validacao(passo: int, validacao: dict[str, Any], melhor: dict[str, Any] | None,
+                        detalhes: dict[str, Any]) -> tuple[dict[str, Any] | None, bool]:
+    """Seleciona por validacao e guarda FORA do historico o detalhe da validacao mais recente e o da melhor.
+
+    O detalhe (um registro por janela) nao cabe no historico. Antes ele era descartado em TODA validacao da
+    cadencia -- inclusive na ultima, quando `--passos` e multiplo de `--validar-a-cada` --, e o bootstrap do final
+    saia "indisponivel": a corrida de 3.000 passos validando a cada 250 cairia exatamente nisso.
+    """
+    registro = {"passo": passo, "detalhe": validacao.pop("detalhe", [])}
+    detalhes["final"] = registro
+    melhor, trocou = atualizar_melhor(melhor, passo, validacao)
+    if trocou:
+        detalhes["melhor"] = registro
+    return melhor, trocou
 
 
 def _mistura(exemplos: list) -> dict[str, Any]:
@@ -533,7 +606,6 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
     por_fonte: list = []
     diagnosticos: list = []
     detalhe: list = []
-    consumidos = 0
     try:
         with torch.no_grad():
             for comeco in range(0, len(exemplos), batch):
@@ -543,11 +615,13 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
                 parciais.append(decomposicao)
                 por_fonte.extend(treino.decomposicao_por_fonte(logits, lote).items())
                 diagnosticos.append(treino.diagnostico_do_focal(logits, lote))
-                for registro, exemplo in zip(treino.detalhe_do_focal(logits, lote),
-                                             exemplos[consumidos:consumidos + batch]):
+                for registro in treino.detalhe_do_focal(logits, lote):
+                    exemplo = exemplos[comeco + registro.pop("indice_no_lote")]
+                    if exemplo.fonte != registro["fonte"]:
+                        raise RuntimeError("detalhe desalinhado do lote: a fonte do registro nao e a do exemplo")
+                    # SEM cair para o variant_id: o bootstrap recusa loco ausente em vez de reamostrar janelas.
                     detalhe.append({**registro, "variant_id": exemplo.variant_id,
-                                    "locus_id": exemplo.locus_id or exemplo.variant_id})
-                consumidos += batch
+                                    "focal_index": exemplo.focal_index, "locus_id": exemplo.locus_id})
     finally:
         adapter.backbone.train(modo_anterior)
 
@@ -594,6 +668,13 @@ def rodar_treino(config: argparse.Namespace) -> int:
             config.plano_validacao, fetch, window_bp=config.window_bp, limite=config.limite_validacao,
             seed=config.seed + 1)
 
+    sem_loco = sum(1 for exemplo in validacao_exemplos if not exemplo.locus_id)
+    if sem_loco:
+        # Antes do modelo e da GPU: descobrir isto depois de 90 minutos seria perder a corrida inteira.
+        print(f"FALHOU: {sem_loco} exemplos de validacao sem `locus_id`. O bootstrap reamostra LOCOS; use o plano "
+              f"produzido por `split_adapter_plan_by_locus.py`")
+        return 2
+
     relogio["exemplos_prontos"] = time.monotonic()
     print(f"  [carga] {len(treino_exemplos)} exemplos de treino e {len(validacao_exemplos)} de validacao em "
           f"{relogio['exemplos_prontos'] - relogio['inicio']:.0f}s  "
@@ -637,9 +718,13 @@ def rodar_treino(config: argparse.Namespace) -> int:
     # EXATO em execucao nova. Na retomada, a base e o adapter carregado, nao o R03 puro. Sem ela, um valor final de 1,72 nao
     # tem contra o que ser comparado -- a primeira validacao do piloto de 22/09 ja vinha depois de 10 passos.
     linha_de_base = None
+    detalhe_base: list = []
+    #: Detalhe da validacao mais recente ("final") e da melhor ("melhor"), guardado por `registrar_validacao`.
+    detalhes: dict[str, Any] = {}
     if validacao_exemplos:
         linha_de_base = avaliar(adapter, validacao_exemplos, pesos=pesos, batch=config.batch, device=device)
         linha_de_base["sistema"] = "adapter_retomado" if config.retomar else "r03_sem_delta"
+        detalhe_base = linha_de_base.pop("detalhe", [])
         print(f"  [base]        focal_val={linha_de_base['criterio_primario']['valor']:.4f}  "
               f"({linha_de_base['sistema']})")
 
@@ -707,8 +792,7 @@ def rodar_treino(config: argparse.Namespace) -> int:
                                   identidades=identidades_base, metricas=metricas, passo=passo + 1)
 
         if "validacao" in linha:
-            linha["validacao"].pop("detalhe", None)  # so a linha de base e a final precisam do detalhe
-            melhor, trocou = atualizar_melhor(melhor, passo, linha["validacao"])
+            melhor, trocou = registrar_validacao(passo, linha["validacao"], melhor, detalhes)
             if trocou:
                 melhor["caminho"] = str(caminho_melhor)
                 _salvar(caminho_melhor, linha)
@@ -726,7 +810,8 @@ def rodar_treino(config: argparse.Namespace) -> int:
     if validacao_exemplos and historico and "validacao" not in historico[-1]:
         historico[-1]["validacao"] = avaliar(
             adapter, validacao_exemplos, pesos=pesos, batch=config.batch, device=device)
-        melhor, trocou = atualizar_melhor(melhor, historico[-1]["passo"], historico[-1]["validacao"])
+        melhor, trocou = registrar_validacao(historico[-1]["passo"], historico[-1]["validacao"], melhor,
+                                             detalhes)
         if trocou:
             melhor["caminho"] = str(caminho_melhor)
             treino.salvar_adapter(caminho_melhor, backbone=backbone, resumo_lora=resumo,
@@ -758,28 +843,33 @@ def rodar_treino(config: argparse.Namespace) -> int:
 
         def _delta_diag(depois, antes):
             return {f: {c: round(depois[f][c] - antes[f][c], 6)
-                        for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref", "entropia",
-                                  "termo_massa", "termo_escolha")
+                        for c in treino.METRICAS_DO_FOCAL
                         if c in depois[f] and c in antes[f]}
                     for f in sorted(set(depois) & set(antes))}
 
+        do_final, do_melhor = detalhes.get("final"), detalhes.get("melhor")
         delta = {
-            "bootstrap_por_loco": bootstrap_do_delta(linha_de_base.get("detalhe", []),
-                                                     final.get("detalhe", []),
+            "bootstrap_por_loco": bootstrap_do_delta(detalhe_base, (do_final or {}).get("detalhe", []),
                                                      replicas=config.replicas_do_bootstrap,
                                                      seed=config.seed),
+            # O adapter que se USA e o melhor. Escolhido nesta mesma validacao, entao o delta dele e otimista.
+            "bootstrap_do_melhor": (
+                "o melhor e o final" if do_melhor and do_final and do_melhor["passo"] == do_final["passo"]
+                else bootstrap_do_delta(detalhe_base, do_melhor["detalhe"], replicas=config.replicas_do_bootstrap,
+                                        seed=config.seed) if do_melhor else None),
             "por_categoria": _delta(final["por_categoria"], linha_de_base["por_categoria"]),
             "diagnostico_do_focal": _delta_diag(final.get("diagnostico_do_focal", {}),
                                                 linha_de_base.get("diagnostico_do_focal", {})),
             "como_ler_o_diagnostico": (
                 "ATRIBUICAO, nao identificacao de causa. `termo_massa + termo_escolha` e EXATAMENTE a perda "
                 "focal, entao o delta se reparte sem hipotese: massa = quanto custa a probabilidade total das "
-                "nao-referencia; escolha = quanto custa acertar QUAL delas. Uma queda so no termo de massa diz "
-                "que o modelo abriu espaco para as alternativas; uma queda no de escolha diz que ele discriminou "
-                "melhor entre elas. NENHUM dos dois, sozinho, demonstra adaptacao populacional -- discriminar "
-                "melhor pode vir de contexto de sequencia. `entropia`, `p_ref` e a fracao sao descricao; a "
-                "fracao NAO fica presa em 1/3 quando se tira massa da referencia (so se a redistribuicao for "
-                "uniforme), entao nao sirva dela como regra de decisao"),
+                "nao-referencia; escolha = quanto custa o ALT entre elas. Uma queda no termo de escolha pode vir "
+                "de discriminar melhor OU de suavizar uma distribuicao confiante demais: amolecer baixa a media "
+                "de -log(fracao) e tambem a media da fracao, sem mudar a ordem entre as tres. "
+                "`alt_em_primeiro_entre_nao_ref` e `posto_do_alt_entre_nao_ref` medem essa ORDEM, que "
+                "temperatura e massa tirada da referencia nao mexem; ajudam a separar as leituras sem provar "
+                "mecanismo. NENHUMA destas medidas demonstra adaptacao populacional -- mudar a ordem pode vir de "
+                "contexto de sequencia. `entropia`, `p_ref` e a fracao sao descricao, nao regra de decisao"),
             "por_fonte": {f: _delta(final["por_fonte"][f], linha_de_base["por_fonte"][f])
                           for f in sorted(set(final["por_fonte"]) & set(linha_de_base["por_fonte"]))},
             "leitura": ("negativo = melhorou. Mede a MESMA amostra de validacao antes e depois, entao nao ha "
@@ -872,6 +962,12 @@ def rodar_treino(config: argparse.Namespace) -> int:
     }
     (out_dir / "treino_do_adapter.json").write_text(
         json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    if detalhe_base or detalhes:
+        # Um registro por janela: base, melhor e final. Refazer o bootstrap ou outra conta nao pede GPU.
+        (out_dir / "detalhe_da_validacao.json").write_text(json.dumps(
+            {"chave": "fonte|variant_id|focal_index", "linha_de_base": detalhe_base,
+             "melhor": detalhes.get("melhor"), "final": detalhes.get("final")},
+            ensure_ascii=False, default=str), encoding="utf-8")
     print(json.dumps({k: relatorio[k] for k in ("receita", "atualizacoes_do_otimizador", "motivo_de_parada",
                                                 "backbone_congelado_intacto", "custo",
                                                 "melhor_por_validacao", "final_pior_que_a_base", "saidas")},

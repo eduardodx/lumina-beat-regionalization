@@ -73,7 +73,8 @@ class RunnerTests(unittest.TestCase):
         antes, depois = [], []
         for indice, (fonte, ganho) in enumerate(ganhos):
             base = 1.0 + 0.001 * indice
-            comum = {"variant_id": f"v{indice}", "locus_id": locos[indice], "fonte": fonte}
+            comum = {"variant_id": f"v{indice}", "locus_id": locos[indice], "fonte": fonte,
+                     "focal_index": 100 + indice}
             antes.append({**comum, "focal_ce": base, "termo_massa": base / 2, "termo_escolha": base / 2})
             depois.append({**comum, "focal_ce": base + ganho, "termo_massa": base / 2,
                            "termo_escolha": base / 2 + ganho})
@@ -105,6 +106,112 @@ class RunnerTests(unittest.TestCase):
         antes, depois = self._detalhe([("abraom", -0.05), ("global", -0.01)], ["L0", "L1"])
         depois[0]["variant_id"] = "outro"
         self.assertIn("indisponivel", runner.bootstrap_do_delta(antes, depois, replicas=10))
+
+    # ------------------------------------------------------------------ pareamento (revisao de 22/09)
+
+    @staticmethod
+    def _registro(fonte, variant_id, focal, loco, ce, massa, escolha):
+        return {"fonte": fonte, "variant_id": variant_id, "focal_index": focal, "locus_id": loco,
+                "focal_ce": ce, "termo_massa": massa, "termo_escolha": escolha}
+
+    def test_bootstrap_com_antes_e_depois_identicos_da_delta_zero_mesmo_com_alelo_nas_duas_fontes(self):
+        # O contraexemplo da revisao: `variant_id` e chrom:pos:ref:alt, SEM a fonte. Parear so por ele fazia o
+        # registro global sobrescrever o do ABraOM, e o delta do ABraOM saia +0,25 com entradas identicas.
+        registros = [
+            self._registro("abraom", "chr1:100:A:G", 1500, "L0", 1.0, 0.5, 0.5),
+            self._registro("global", "chr1:100:A:G", 2100, "L0", 1.5, 0.7, 0.8),
+            self._registro("abraom", "chr2:200:C:T", 900, "L1", 2.0, 1.0, 1.0),
+            self._registro("global", "chr3:300:G:A", 3000, "L2", 1.2, 0.6, 0.6),
+        ]
+        saida = runner.bootstrap_do_delta([dict(r) for r in registros], [dict(r) for r in registros],
+                                          replicas=50, seed=1)
+        self.assertNotIn("indisponivel", saida)
+        for fonte, campos in saida["por_fonte"].items():
+            for campo, faixa in campos.items():
+                self.assertEqual(faixa["delta"], 0.0, (fonte, campo))
+                self.assertEqual((faixa["p2_5"], faixa["p97_5"]), (0.0, 0.0), (fonte, campo))
+
+    def test_bootstrap_pareia_janela_a_janela_mesmo_embaralhado(self):
+        antes = [self._registro("abraom", "chr1:100:A:G", 1500, "L0", 1.0, 0.5, 0.5),
+                 self._registro("global", "chr1:100:A:G", 2100, "L0", 1.5, 0.7, 0.8),
+                 self._registro("global", "chr3:300:G:A", 3000, "L1", 1.2, 0.6, 0.6)]
+        depois = [dict(r, focal_ce=r["focal_ce"] - (0.3 if r["fonte"] == "abraom" else 0.1)) for r in antes]
+        saida = runner.bootstrap_do_delta(antes, list(reversed(depois)), replicas=50, seed=1)
+        self.assertAlmostEqual(saida["por_fonte"]["abraom"]["focal_ce"]["delta"], -0.3)
+        self.assertAlmostEqual(saida["por_fonte"]["global"]["focal_ce"]["delta"], -0.1)
+
+    def test_bootstrap_recusa_janela_repetida(self):
+        antes = [self._registro("abraom", "chr1:100:A:G", 1500, "L0", 1.0, 0.5, 0.5),
+                 self._registro("abraom", "chr1:100:A:G", 1500, "L1", 1.1, 0.5, 0.6)]
+        saida = runner.bootstrap_do_delta(antes, [dict(r) for r in antes], replicas=10)
+        self.assertIn("indisponivel", saida)
+        self.assertTrue(any("repetida" in problema for problema in saida["problemas"]), saida)
+
+    def test_bootstrap_recusa_loco_ausente_em_vez_de_cair_para_o_variant_id(self):
+        antes = [self._registro("abraom", "chr1:100:A:G", 1500, None, 1.0, 0.5, 0.5),
+                 self._registro("global", "chr3:300:G:A", 3000, "L1", 1.2, 0.6, 0.6)]
+        saida = runner.bootstrap_do_delta(antes, [dict(r) for r in antes], replicas=10)
+        self.assertIn("indisponivel", saida)
+        self.assertTrue(any("locus_id" in problema for problema in saida["problemas"]), saida)
+
+    def test_bootstrap_recusa_janela_que_muda_de_loco(self):
+        antes = [self._registro("abraom", "chr1:100:A:G", 1500, "L0", 1.0, 0.5, 0.5),
+                 self._registro("global", "chr3:300:G:A", 3000, "L1", 1.2, 0.6, 0.6)]
+        depois = [dict(antes[0], locus_id="L9"), dict(antes[1])]
+        self.assertIn("indisponivel", runner.bootstrap_do_delta(antes, depois, replicas=10))
+
+    def test_bootstrap_informa_locos_por_fonte(self):
+        antes = [self._registro("abraom", "chr1:100:A:G", 1500, "L0", 1.0, 0.5, 0.5),
+                 self._registro("global", "chr1:100:A:G", 2100, "L0", 1.5, 0.7, 0.8),
+                 self._registro("global", "chr1:900:C:T", 2500, "L0", 1.4, 0.7, 0.7),
+                 self._registro("abraom", "chr2:200:C:T", 900, "L1", 2.0, 1.0, 1.0),
+                 self._registro("global", "chr3:300:G:A", 3000, "L2", 1.2, 0.6, 0.6)]
+        saida = runner.bootstrap_do_delta(antes, [dict(r) for r in antes], replicas=10)
+        self.assertEqual(saida["janelas_por_fonte"], {"abraom": 2, "global": 3})
+        self.assertEqual(saida["locos_por_fonte"], {"abraom": 2, "global": 2})
+        self.assertEqual(saida["locos_com_mais_de_uma_fonte"], 1)
+        self.assertEqual(saida["locos"], 3)
+
+    def test_bootstrap_inclui_a_ordem_quando_os_dois_lados_a_trazem(self):
+        antes = [dict(self._registro("abraom", f"chr1:{i}:A:G", 100 + i, f"L{i}", 1.0, 0.5, 0.5),
+                      alt_em_primeiro=0.0, posto_do_alt=2.0) for i in range(4)]
+        depois = [dict(r, alt_em_primeiro=1.0 if i % 2 else 0.0, posto_do_alt=1.0 if i % 2 else 2.0)
+                  for i, r in enumerate(antes)]
+        saida = runner.bootstrap_do_delta(antes, depois, replicas=20, seed=2)
+        self.assertIn("alt_em_primeiro", saida["campos"])
+        self.assertAlmostEqual(saida["por_fonte"]["abraom"]["alt_em_primeiro"]["delta"], 0.5)
+        self.assertAlmostEqual(saida["por_fonte"]["abraom"]["posto_do_alt"]["delta"], -0.5)
+
+    # ------------------------------------------------------------------ detalhe do final e do melhor
+
+    def test_detalhe_do_final_sobrevive_quando_o_ultimo_passo_cai_na_cadencia(self):
+        # 3.000 passos validando a cada 250: o ultimo passo (2999) valida DENTRO do laco. Antes o detalhe dele
+        # era descartado ali, e o bootstrap do final saia "indisponivel".
+        melhor, detalhes, historico = None, {}, []
+        valores = {249: 1.70, 499: 1.69, 749: 1.68, 999: 1.67, 1249: 1.66, 1499: 1.655, 1749: 1.65,
+                   1999: 1.649, 2249: 1.66, 2499: 1.67, 2749: 1.675, 2999: 1.68}
+        for passo in range(3000):
+            if (passo + 1) % 250 == 0:
+                validacao = {"criterio_primario": {"valor": valores[passo]},
+                             "detalhe": [{"passo": passo}]}
+                melhor, _ = runner.registrar_validacao(passo, validacao, melhor, detalhes)
+                historico.append({"passo": passo, "validacao": validacao})
+        self.assertEqual(detalhes["final"]["passo"], 2999)
+        self.assertEqual(detalhes["final"]["detalhe"], [{"passo": 2999}])
+        self.assertEqual(detalhes["melhor"]["passo"], 1999)
+        self.assertEqual(melhor["passo"], 1999)
+        self.assertTrue(all("detalhe" not in linha["validacao"] for linha in historico),
+                        "o detalhe nao pode inchar o historico")
+
+    def test_rodar_treino_seleciona_sempre_por_registrar_validacao(self):
+        # A regressao era de FLUXO: um `pop` do detalhe fora de lugar. A selecao no treino passa toda por
+        # `registrar_validacao`, que guarda o detalhe do final e do melhor.
+        path = Path(runner.__file__)
+        table = symtable.symtable(path.read_text(encoding="utf-8"), str(path), "exec")
+        treino_fn = next(c for c in table.get_children() if c.get_name() == "rodar_treino")
+        referenciados = {s.get_name() for s in treino_fn.get_symbols() if s.is_referenced()}
+        self.assertIn("registrar_validacao", referenciados)
+        self.assertNotIn("atualizar_melhor", referenciados)
 
 
 if __name__ == "__main__":

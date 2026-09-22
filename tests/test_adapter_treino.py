@@ -525,6 +525,69 @@ def test_fracao_nao_fica_presa_em_um_terco_ao_tirar_massa_da_referencia():
     assert depois["termo_massa"] < antes["termo_massa"]
 
 
+def _dois_focais(nao_ref_1, nao_ref_2, *, p_ref=0.5):
+    """Dois exemplos com REF=A e ALT=C no focal 5, e logits cuja distribuicao entre as NAO-referencia e dada."""
+    exemplos = [mlm.montar_exemplo("ACGT" * 4, [(4, 7, mlm.TIPO_VARIANTE)], variant_id=f"v{i}",
+                                   fonte="global", focal_index=5, ref="A") for i in range(2)]
+    lote = treino.montar_lote(exemplos)
+    logits = torch.zeros(2, 16, 4)
+    for linha, nao_ref in enumerate((nao_ref_1, nao_ref_2)):
+        # classes 0..3 = A, C, G, T; A e a referencia, C e o ALT.
+        logits[linha, 5] = torch.tensor([p_ref] + [(1 - p_ref) * q for q in nao_ref]).log()
+    return logits, lote
+
+
+def test_suavizar_baixa_o_termo_de_escolha_sem_mudar_o_posto():
+    """O padrao da corrida de 1.000 passos com lr 5e-6: termo de escolha e fracao media CAEM juntos quando uma
+    distribuicao confiante demais e amolecida -- sem o modelo ordenar melhor as alternativas.
+
+    Fracoes 0,90 e 0,02 com temperatura 1,5 viram 0,77 e 0,06.
+    """
+    _exige_torch()
+    logits, lote = _dois_focais((0.90, 0.05, 0.05), (0.02, 0.90, 0.08))
+    antes = treino.diagnostico_do_focal(logits, lote)["global"]
+    depois = treino.diagnostico_do_focal(logits / 1.5, lote)["global"]
+    assert abs(antes["fracao_do_alt_entre_as_nao_ref"] - 0.46) < 1e-4, antes
+    assert abs(depois["fracao_do_alt_entre_as_nao_ref"] - 0.4182) < 1e-3, depois
+    assert depois["termo_escolha"] < antes["termo_escolha"] - 0.4, (antes, depois)
+    assert depois["entropia"] > antes["entropia"]
+    # A ORDEM nao muda: um exemplo com o ALT na frente (posto 1), outro com o ALT em ultimo (posto 3).
+    assert antes["alt_em_primeiro_entre_nao_ref"] == depois["alt_em_primeiro_entre_nao_ref"] == 0.5
+    assert antes["posto_do_alt_entre_nao_ref"] == depois["posto_do_alt_entre_nao_ref"] == 2.0
+
+
+def test_aprender_o_alelo_muda_o_posto():
+    _exige_torch()
+    logits, lote = _dois_focais((0.90, 0.05, 0.05), (0.02, 0.90, 0.08))
+    antes = treino.diagnostico_do_focal(logits, lote)["global"]
+    aprendeu, _ = _dois_focais((0.90, 0.05, 0.05), (0.60, 0.30, 0.10))
+    depois = treino.diagnostico_do_focal(aprendeu, lote)["global"]
+    assert depois["alt_em_primeiro_entre_nao_ref"] == 1.0 > antes["alt_em_primeiro_entre_nao_ref"]
+    assert depois["posto_do_alt_entre_nao_ref"] == 1.0
+
+
+def test_tirar_massa_da_referencia_nao_muda_o_posto():
+    _exige_torch()
+    confiante, lote = _dois_focais((0.20, 0.50, 0.30), (0.40, 0.35, 0.25), p_ref=0.95)
+    aberto, _ = _dois_focais((0.20, 0.50, 0.30), (0.40, 0.35, 0.25), p_ref=0.40)
+    antes = treino.diagnostico_do_focal(confiante, lote)["global"]
+    depois = treino.diagnostico_do_focal(aberto, lote)["global"]
+    assert depois["termo_massa"] < antes["termo_massa"]
+    assert abs(depois["termo_escolha"] - antes["termo_escolha"]) < 1e-5
+    assert depois["posto_do_alt_entre_nao_ref"] == antes["posto_do_alt_entre_nao_ref"] == 2.0
+
+
+def test_detalhe_traz_indice_no_lote_e_a_ordem():
+    _exige_torch()
+    logits, lote = _dois_focais((0.90, 0.05, 0.05), (0.02, 0.90, 0.08))
+    registros = treino.detalhe_do_focal(logits, lote)
+    assert [r["indice_no_lote"] for r in registros] == [0, 1]
+    assert [r["posto_do_alt"] for r in registros] == [1.0, 3.0]
+    assert [r["alt_em_primeiro"] for r in registros] == [1.0, 0.0]
+    for registro in registros:
+        assert abs(registro["focal_ce"] - registro["termo_massa"] - registro["termo_escolha"]) < 1e-6
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

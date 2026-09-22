@@ -294,6 +294,22 @@ def gradientes_do_adapter(modulo: nn.Module) -> dict[str, Any]:
     }
 
 
+#: Medidas do focal agregadas por fonte. As duas ultimas sao de ORDEM entre as tres nao-referencia.
+METRICAS_DO_FOCAL = ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref", "entropia", "termo_massa",
+                     "termo_escolha", "alt_em_primeiro_entre_nao_ref", "posto_do_alt_entre_nao_ref")
+
+
+def _posto_do_alt(selecionados: Tensor, lote: Lote) -> Tensor:
+    """1 + quantas nao-referencia tem logit ESTRITAMENTE maior que o do ALT (1 = o ALT lidera as tres).
+
+    Temperatura (dividir os logits por T) e massa tirada da referencia nao mudam este posto. Ele separa
+    "discriminou melhor" de "suavizou", sem provar mecanismo: a ordem tambem muda por alteracao generica.
+    """
+    sem_ref = selecionados.scatter(1, lote.focal_ref[:, None], float("-inf"))
+    logit_alt = selecionados.gather(1, lote.focal_alvo[:, None])
+    return 1 + (sem_ref > logit_alt).sum(dim=-1)
+
+
 def diagnostico_do_focal(logits: Tensor, lote: Lote) -> dict[str, Any]:
     r"""Atribui a queda da perda focal, em vez de adivinhar o mecanismo.
 
@@ -307,9 +323,17 @@ def diagnostico_do_focal(logits: Tensor, lote: Lote) -> dict[str, Any]:
         -log P(ALT) = -log(1 - P(REF))  +  -log( P(ALT) / (1 - P(REF)) )
                       \_ termo_massa _/     \_____ termo_escolha _____/
 
-    `termo_massa` e quanto custa a probabilidade TOTAL das alternativas; `termo_escolha`, quanto custa escolher
-    o ALT entre elas. Uma queda vinda so do primeiro significa "abriu espaco para as nao-referencia"; vinda do
-    segundo, "soube QUAL alternativa". Como a soma e exatamente a perda focal, o delta se atribui sem hipotese.
+    `termo_massa` e quanto custa a probabilidade TOTAL das alternativas; `termo_escolha`, quanto custa o ALT
+    entre elas. Como a soma e exatamente a perda focal, o delta se ATRIBUI sem hipotese -- mas atribuir nao e
+    identificar mecanismo. Uma queda no termo de escolha pode vir de discriminar melhor OU de suavizar uma
+    distribuicao confiante demais: amolecer baixa a media de `-log(fracao)` e TAMBEM a media da fracao, sem
+    mudar a ordem entre as tres (fracoes 0,90 e 0,02 com temperatura 1,5 viram 0,77 e 0,06: fracao media
+    0,46 -> 0,42, `-log` medio 2,01 -> 1,52). Foi o padrao da corrida de 1.000 passos com `lr 5e-6`: entropia
+    subiu, fracao media caiu e o termo de escolha caiu.
+
+    `alt_em_primeiro_entre_nao_ref` e `posto_do_alt_entre_nao_ref` medem essa ORDEM, que temperatura e massa
+    tirada da referencia nao mexem. Ajudam a separar as duas leituras; nao provam mecanismo -- a ordem tambem muda
+    por alteracao generica ou prejudicial, e probabilidade melhor sem mudar a ordem e ganho legitimo.
 
     `fracao_do_alt_entre_as_nao_ref` (= exp(-termo_escolha)) e `entropia` acompanham como descricao. CUIDADO: a
     fracao NAO fica presa em 1/3 quando se tira massa da referencia -- isso so valeria se a redistribuicao fosse
@@ -336,22 +360,18 @@ def diagnostico_do_focal(logits: Tensor, lote: Lote) -> dict[str, Any]:
             selecionados, dim=-1)
         termo_massa = -log_nao_ref
         termo_escolha = -(log_alt - log_nao_ref)
+        posto = _posto_do_alt(selecionados, lote)
+    colunas = (p_ref, p_alt, fracao, entropia, termo_massa, termo_escolha, (posto == 1).float(), posto.float())
     por_fonte: dict[str, list[list[float]]] = {}
-    for indice, fonte in enumerate(lote.fontes):
-        alvo = por_fonte.setdefault(fonte, [[], [], [], [], [], []])
-        alvo[0].append(float(p_ref[indice]))
-        alvo[1].append(float(p_alt[indice]))
-        alvo[2].append(float(fracao[indice]))
-        alvo[3].append(float(entropia[indice]))
-        alvo[4].append(float(termo_massa[indice]))
-        alvo[5].append(float(termo_escolha[indice]))
-    return {fonte: {"p_ref": sum(v[0]) / len(v[0]), "p_alt": sum(v[1]) / len(v[1]),
-                    "fracao_do_alt_entre_as_nao_ref": sum(v[2]) / len(v[2]),
-                    "entropia": sum(v[3]) / len(v[3]),
-                    "termo_massa": sum(v[4]) / len(v[4]),
-                    "termo_escolha": sum(v[5]) / len(v[5]),
+    # `focal_no_lote[k]` e o exemplo da k-esima linha de `selecionados`: a fonte vem dele, nao da posicao k.
+    for k, indice in enumerate(lote.focal_no_lote.detach().cpu().tolist()):
+        alvo = por_fonte.setdefault(lote.fontes[indice], [[] for _ in METRICAS_DO_FOCAL])
+        for coluna, valores in zip(colunas, alvo):
+            valores.append(float(coluna[k]))
+    return {fonte: {**{nome: sum(valores) / len(valores) for nome, valores in zip(METRICAS_DO_FOCAL, v)},
                     "identidade": "termo_massa + termo_escolha = perda focal (-log P(ALT))",
                     "entropia_do_uniforme": round(math.log(4), 6),
+                    "acaso": {"alt_em_primeiro_entre_nao_ref": round(1 / 3, 6), "posto_do_alt_entre_nao_ref": 2.0},
                     "n": len(v[0])}
             for fonte, v in sorted(por_fonte.items())}
 
@@ -368,9 +388,12 @@ def detalhe_do_focal(logits: Tensor, lote: Lote) -> list[dict[str, Any]]:
         log_alt = selecionados.gather(1, lote.focal_alvo[:, None]).squeeze(1) - total
         massa = (-log_nao_ref).float().cpu().tolist()
         escolha = (-(log_alt - log_nao_ref)).float().cpu().tolist()
+        postos = _posto_do_alt(selecionados, lote).cpu().tolist()
     indices = lote.focal_no_lote.detach().cpu().tolist()
-    return [{"fonte": lote.fontes[indice], "termo_massa": m, "termo_escolha": e, "focal_ce": m + e}
-            for indice, m, e in zip(indices, massa, escolha)]
+    # `indice_no_lote` deixa quem chama achar o Exemplo certo sem supor que todo exemplo do lote tem focal.
+    return [{"indice_no_lote": indice, "fonte": lote.fontes[indice], "termo_massa": m, "termo_escolha": e,
+             "focal_ce": m + e, "alt_em_primeiro": float(posto == 1), "posto_do_alt": float(posto)}
+            for indice, m, e, posto in zip(indices, massa, escolha, postos)]
 
 
 def juntar_diagnosticos(partes: Sequence[dict[str, Any]]) -> dict[str, Any]:
@@ -380,13 +403,15 @@ def juntar_diagnosticos(partes: Sequence[dict[str, Any]]) -> dict[str, Any]:
         for fonte, dados in parte.items():
             if not isinstance(dados, dict) or "n" not in dados:
                 continue
-            alvo = acumulado.setdefault(fonte, {c: 0.0 for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref", "entropia", "termo_massa", "termo_escolha")} | {"n": 0})
-            for chave in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref", "entropia", "termo_massa", "termo_escolha"):
+            alvo = acumulado.setdefault(fonte, {c: 0.0 for c in METRICAS_DO_FOCAL} | {"n": 0})
+            for chave in METRICAS_DO_FOCAL:
                 alvo[chave] += dados.get(chave, 0.0) * dados["n"]
             alvo["n"] += dados["n"]
-    return {fonte: {**{c: v[c] / v["n"] for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref", "entropia", "termo_massa", "termo_escolha")},
+    return {fonte: {**{c: v[c] / v["n"] for c in METRICAS_DO_FOCAL},
                     "identidade": "termo_massa + termo_escolha = perda focal (-log P(ALT))",
-                    "entropia_do_uniforme": round(math.log(4), 6), "n": int(v["n"])}
+                    "entropia_do_uniforme": round(math.log(4), 6),
+                    "acaso": {"alt_em_primeiro_entre_nao_ref": round(1 / 3, 6), "posto_do_alt_entre_nao_ref": 2.0},
+                    "n": int(v["n"])}
             for fonte, v in sorted(acumulado.items()) if v["n"]}
 
 
