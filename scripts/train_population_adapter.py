@@ -308,8 +308,29 @@ def rodar_smoke(config: argparse.Namespace) -> int:
                    f"maior diferenca {float((depois - antes).abs().max()):.2e}")
     tudo &= checar("6c. receita do rsLoRA conferida no carregamento", carga.get("formato") == treino.FORMATO)
 
+    final = historico[-1].get("validacao") if historico else None
+    delta = None
+    if linha_de_base and final:
+        from eval.adapter import mlm as _mlm
+
+        def _delta(depois, antes):
+            return {c: round(depois[c]["media"] - antes[c]["media"], 6)
+                    for c in _mlm.CATEGORIAS
+                    if depois.get(c, {}).get("posicoes") and antes.get(c, {}).get("posicoes")}
+
+        delta = {
+            "por_categoria": _delta(final["por_categoria"], linha_de_base["por_categoria"]),
+            "por_fonte": {f: _delta(final["por_fonte"][f], linha_de_base["por_fonte"][f])
+                          for f in sorted(set(final["por_fonte"]) & set(linha_de_base["por_fonte"]))},
+            "leitura": ("negativo = melhorou. Mede a MESMA amostra de validacao antes e depois, entao nao ha "
+                        "ruido de amostragem entre os dois; continua sem intervalo de confianca, e o numero de "
+                        "posicoes focais e o tamanho que importa"),
+        }
+
     relatorio = {
         "proveniencia": proveniencia,
+        "linha_de_base": linha_de_base,
+        "delta_da_validacao": delta,
         "entradas": {
             "plano_treino": str(config.plano_treino),
             "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
@@ -491,6 +512,15 @@ def rodar_treino(config: argparse.Namespace) -> int:
         retomada["aviso"] = "o estado do otimizador NAO e restaurado: os momentos do AdamW recomecam do zero"
         print(f"[retomada] adapter de {config.retomar} no passo {passo_inicial}")
 
+    # LINHA DE BASE, antes de qualquer passo. `lora_b` nasce em zeros, entao o adapter comeca como um no-op
+    # EXATO: esta medida e a do R03 puro sobre esta amostra de validacao. Sem ela, um valor final de 1,72 nao
+    # tem contra o que ser comparado -- a primeira validacao do piloto de 22/09 ja vinha depois de 10 passos.
+    linha_de_base = None
+    if validacao_exemplos:
+        linha_de_base = avaliar(adapter, validacao_exemplos, pesos=pesos, batch=config.batch, device=device)
+        print(f"  [base]        focal_val={linha_de_base['criterio_primario']['valor']:.4f}  "
+              f"(adapter em no-op: lora_b=0)")
+
     rng = np.random.default_rng(config.seed)
     historico: list[dict[str, Any]] = []
     atualizacoes = 0
@@ -560,8 +590,29 @@ def rodar_treino(config: argparse.Namespace) -> int:
                                            "revisao_do_codigo": proveniencia["revisao_do_codigo"]},
                               metricas=historico[-1], passo=historico[-1]["passo"] + 1)
 
+    final = historico[-1].get("validacao") if historico else None
+    delta = None
+    if linha_de_base and final:
+        from eval.adapter import mlm as _mlm
+
+        def _delta(depois, antes):
+            return {c: round(depois[c]["media"] - antes[c]["media"], 6)
+                    for c in _mlm.CATEGORIAS
+                    if depois.get(c, {}).get("posicoes") and antes.get(c, {}).get("posicoes")}
+
+        delta = {
+            "por_categoria": _delta(final["por_categoria"], linha_de_base["por_categoria"]),
+            "por_fonte": {f: _delta(final["por_fonte"][f], linha_de_base["por_fonte"][f])
+                          for f in sorted(set(final["por_fonte"]) & set(linha_de_base["por_fonte"]))},
+            "leitura": ("negativo = melhorou. Mede a MESMA amostra de validacao antes e depois, entao nao ha "
+                        "ruido de amostragem entre os dois; continua sem intervalo de confianca, e o numero de "
+                        "posicoes focais e o tamanho que importa"),
+        }
+
     relatorio = {
         "proveniencia": proveniencia,
+        "linha_de_base": linha_de_base,
+        "delta_da_validacao": delta,
         "entradas": {
             "plano_treino": str(config.plano_treino),
             "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
@@ -603,8 +654,10 @@ def rodar_treino(config: argparse.Namespace) -> int:
     print(json.dumps({k: relatorio[k] for k in ("receita", "atualizacoes_do_otimizador", "motivo_de_parada",
                                                 "backbone_congelado_intacto", "saidas")},
                      ensure_ascii=False, indent=2, default=str))
-    if historico and "validacao" in historico[-1]:
-        print(json.dumps(historico[-1]["validacao"], ensure_ascii=False, indent=2, default=str))
+    if delta:
+        print(json.dumps({"delta_da_validacao": delta}, ensure_ascii=False, indent=2, default=str))
+    if final:
+        print(json.dumps(final, ensure_ascii=False, indent=2, default=str))
 
     if not congelado_intacto:
         print("\nFALHOU: o backbone congelado MUDOU durante o treino.")

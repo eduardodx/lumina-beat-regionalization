@@ -699,6 +699,23 @@ entrou no relatorio para nao depender de quem lembre de calcular `ln 4`.
 **Nao ler a queda de `focal_val`** (1,7047 → 1,6962 em 20 passos): sao 0,008 sobre 64 posicoes focais, com a loss
 de treino oscilando entre 1,32 e 2,78. Nao distingue aprendizado de ruido, e o piloto e tecnico.
 
+**Piloto 2 [22/09], com a mistura certa: 60 passos, 40/60 exato na validacao.** 64 posicoes focais do ABraOM e
+96 do global, `backbone_congelado_intacto: true`, parada limpa. A dinamica do treino esta provada.
+
+`focal_val` caiu nos **seis** pontos de validacao: 1,7353 → 1,7313 → 1,7276 → 1,7238 → 1,7233 → 1,7230. A
+monotonia em 6 de 6 nao e coincidencia obvia, mas a magnitude e **0,012** sobre um valor de 1,72 (0,7%), sem
+intervalo de confianca, e a desaceleracao acompanha o decaimento do cosseno. Nao se conclui nada dai.
+
+**Faltava o numero que torna isso legivel, e ele foi acrescentado: a validacao ANTES do primeiro passo.** Como
+`lora_b` nasce em zeros, o adapter comeca como um **no-op exato** — a linha de base e, literalmente, o R03 puro
+sobre a mesma amostra. Sem ela, "1,7230 no fim" nao tem contra o que ser comparado: a primeira validacao do
+piloto vinha depois de 10 passos. O relatorio passa a publicar `linha_de_base` e `delta_da_validacao` por
+categoria e por fonte, medidos na **mesma** amostra (sem ruido de amostragem entre os dois lados).
+
+**O numero a vigiar, e que ainda nao se le:** `focal_alt` do ABraOM (1,781) contra o do global (1,685). O R03
+preve pior o alelo brasileiro que o global. E exatamente o contraste que a campanha quer mover, mas com 64 contra
+96 posicoes e sem IC nao distingue nada — fica como a quantidade a acompanhar no piloto longo, nao como achado.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
