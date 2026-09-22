@@ -98,7 +98,7 @@ def exemplos_do_plano(plano: pd.DataFrame, fetch, *, window_bp: int) -> Iterator
             continue
         yield ("ok", mlm.montar_exemplo(
             janela.alt_seq, mlm.spans_do_plano(linha.spans), variant_id=str(linha.variant_id),
-            fonte=str(linha.fonte), focal_index=janela.focal_index), None)
+            fonte=str(linha.fonte), focal_index=janela.focal_index, ref=janela.ref), None)
 
 
 def escala_cosseno(passo: int, *, total: int, aquecimento: int, minimo: float = 0.01) -> float:
@@ -432,6 +432,7 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
     adapter.backbone.eval()
     parciais: list = []
     por_fonte: list = []
+    diagnosticos: list = []
     try:
         with torch.no_grad():
             for comeco in range(0, len(exemplos), batch):
@@ -440,6 +441,7 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
                 _, _, decomposicao = treino.perda_somada_do_lote(logits, lote, pesos)
                 parciais.append(decomposicao)
                 por_fonte.extend(treino.decomposicao_por_fonte(logits, lote).items())
+                diagnosticos.append(treino.diagnostico_do_focal(logits, lote))
     finally:
         adapter.backbone.train(modo_anterior)
 
@@ -452,6 +454,7 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
                               "posicoes": agregado[mlm.CRITERIO_PRIMARIO]["posicoes"]},
         "por_categoria": agregado,
         "por_fonte": mlm.agregar_por_fonte(por_fonte),
+        "diagnostico_do_focal": treino.juntar_diagnosticos(diagnosticos),
         "exemplos": len(exemplos),
     }
 
@@ -598,8 +601,19 @@ def rodar_treino(config: argparse.Namespace) -> int:
                     for c in _mlm.CATEGORIAS
                     if depois.get(c, {}).get("posicoes") and antes.get(c, {}).get("posicoes")}
 
+        def _delta_diag(depois, antes):
+            return {f: {c: round(depois[f][c] - antes[f][c], 6)
+                        for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref")}
+                    for f in sorted(set(depois) & set(antes))}
+
         delta = {
             "por_categoria": _delta(final["por_categoria"], linha_de_base["por_categoria"]),
+            "diagnostico_do_focal": _delta_diag(final.get("diagnostico_do_focal", {}),
+                                                linha_de_base.get("diagnostico_do_focal", {})),
+            "como_ler_o_diagnostico": (
+                "p_ref caindo com fracao_do_alt_entre_as_nao_ref PARADA (~1/3) = o adapter so tirou massa da "
+                "base de referencia, o que derruba a perda focal sem aprender nada sobre o alelo. A fracao "
+                "SUBINDO = ele aprendeu qual alelo a populacao carrega"),
             "por_fonte": {f: _delta(final["por_fonte"][f], linha_de_base["por_fonte"][f])
                           for f in sorted(set(final["por_fonte"]) & set(linha_de_base["por_fonte"]))},
             "leitura": ("negativo = melhorou. Mede a MESMA amostra de validacao antes e depois, entao nao ha "

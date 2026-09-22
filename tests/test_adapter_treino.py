@@ -432,6 +432,52 @@ def test_perda_somada_e_a_media_vezes_o_peso_total():
     assert abs(float(media.detach()) - mlm.perda_ponderada(decomposicao, mlm.PESOS_INICIAIS)) < 1e-5
 
 
+def test_diagnostico_separa_tirar_da_referencia_de_aprender_o_alelo():
+    """A fracao `P(ALT)/(1-P(REF))` fica em ~1/3 quando so se tira massa da referencia, e sobe quando o modelo
+    sabe qual alelo e. E o que desempata as duas explicacoes para uma queda da perda focal."""
+    _exige_torch()
+    exemplo = mlm.montar_exemplo("ACGT" * 4, [(4, 7, mlm.TIPO_VARIANTE)], variant_id="v", fonte="global",
+                                 focal_index=5, ref="A")   # alt_seq[5] = "C" -> alvo 1; ref "A" -> 0
+    lote = treino.montar_lote([exemplo])
+    assert int(lote.focal_alvo[0]) == mlm.SNV_ALT_TO_INDEX["C"]
+    assert int(lote.focal_ref[0]) == mlm.SNV_ALT_TO_INDEX["A"]
+
+    def _logits(valores):
+        saida = torch.zeros(1, 16, 4)
+        saida[0, 5] = torch.tensor(valores)
+        return saida
+
+    # (a) massa toda na referencia: fracao entre as nao-ref e 1/3 (as tres empatadas)
+    so_ref = treino.diagnostico_do_focal(_logits([4.0, 0.0, 0.0, 0.0]), lote)["global"]
+    assert so_ref["p_ref"] > 0.9
+    assert abs(so_ref["fracao_do_alt_entre_as_nao_ref"] - 1 / 3) < 1e-4, so_ref
+
+    # (b) tirou da referencia SEM saber o alelo: p_ref cai, fracao continua em 1/3
+    tirou = treino.diagnostico_do_focal(_logits([0.0, 0.0, 0.0, 0.0]), lote)["global"]
+    assert tirou["p_ref"] < so_ref["p_ref"]
+    assert abs(tirou["fracao_do_alt_entre_as_nao_ref"] - 1 / 3) < 1e-4, tirou
+
+    # (c) aprendeu o alelo: a fracao SOBE
+    aprendeu = treino.diagnostico_do_focal(_logits([0.0, 3.0, 0.0, 0.0]), lote)["global"]
+    assert aprendeu["fracao_do_alt_entre_as_nao_ref"] > 0.9, aprendeu
+
+
+def test_diagnostico_ausente_quando_o_exemplo_nao_traz_a_referencia():
+    _exige_torch()
+    lote = treino.montar_lote(_exemplos())          # montados sem `ref=`
+    assert lote.focal_ref is None
+    assert "indisponivel" in treino.diagnostico_do_focal(torch.zeros(2, 16, 4), lote)
+
+
+def test_juntar_diagnosticos_pondera_por_n():
+    _exige_torch()
+    um = {"global": {"p_ref": 0.4, "p_alt": 0.3, "fracao_do_alt_entre_as_nao_ref": 0.5, "n": 1}}
+    outro = {"global": {"p_ref": 0.6, "p_alt": 0.1, "fracao_do_alt_entre_as_nao_ref": 0.25, "n": 3}}
+    junto = treino.juntar_diagnosticos([um, outro])["global"]
+    assert junto["n"] == 4
+    assert abs(junto["p_ref"] - (0.4 + 0.6 * 3) / 4) < 1e-9
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

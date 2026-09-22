@@ -123,6 +123,10 @@ class Lote:
     alvo: Tensor            # [N] long, 0..3
     categoria: Tensor       # [N] long, indice em mlm.CATEGORIAS
     fontes: tuple[str, ...] = ()
+    focal_no_lote: Tensor | None = None   # [B] long
+    focal_posicao: Tensor | None = None   # [B] long
+    focal_alvo: Tensor | None = None      # [B] long, a classe do ALT
+    focal_ref: Tensor | None = None       # [B] long, a classe da REFERENCIA
 
 
 def montar_lote(exemplos: Sequence[mlm.Exemplo], *, device: torch.device | str = "cpu") -> Lote:
@@ -143,7 +147,18 @@ def montar_lote(exemplos: Sequence[mlm.Exemplo], *, device: torch.device | str =
             alvos.append(int(alvo))
             categorias.append(indice_da_categoria[categoria])
 
+    focais_lote, focais_pos, focais_alvo, focais_ref = [], [], [], []
+    for indice, exemplo in enumerate(exemplos):
+        if exemplo.ref_focal is None:
+            focais_lote = focais_pos = focais_alvo = focais_ref = None
+            break
+        focais_lote.append(indice)
+        focais_pos.append(int(exemplo.focal_index))
+        focais_alvo.append(int(exemplo.alvos[exemplo.categorias.index(mlm.CATEGORIA_FOCAL)]))
+        focais_ref.append(int(exemplo.ref_focal))
+
     longo = dict(dtype=torch.long, device=device)
+    tensor_ou_none = (lambda v: torch.tensor(v, **longo)) if focais_lote is not None else (lambda v: None)
     return Lote(
         input_ids=torch.tensor(entradas, **longo),
         indice_no_lote=torch.tensor(no_lote, **longo),
@@ -151,6 +166,10 @@ def montar_lote(exemplos: Sequence[mlm.Exemplo], *, device: torch.device | str =
         alvo=torch.tensor(alvos, **longo),
         categoria=torch.tensor(categorias, **longo),
         fontes=tuple(e.fonte for e in exemplos),
+        focal_no_lote=tensor_ou_none(focais_lote),
+        focal_posicao=tensor_ou_none(focais_pos),
+        focal_alvo=tensor_ou_none(focais_alvo),
+        focal_ref=tensor_ou_none(focais_ref),
     )
 
 
@@ -272,6 +291,54 @@ def gradientes_do_adapter(modulo: nn.Module) -> dict[str, Any]:
         "nota": ("lora_b nasce em zeros, entao no primeiro passo o gradiente de lora_a e zero por construcao: "
                  "exigir nao nulo em TODOS reprovaria um treino correto"),
     }
+
+
+def diagnostico_do_focal(logits: Tensor, lote: Lote) -> dict[str, Any]:
+    """Separa DUAS explicacoes que a queda da perda focal nao distingue sozinha.
+
+    O modelo nao ve, na entrada, diferenca entre a posicao focal e uma posicao de contexto: todas sao `MASK`.
+    Entao "tirar massa da base de REFERENCIA em toda posicao mascarada" derruba a perda focal (onde o alvo nunca
+    e a referencia) e sobe a das posicoes de referencia -- foi o padrao do piloto 3. A outra explicacao e que o
+    adapter aprendeu QUAL alelo a populacao carrega.
+
+    O que separa as duas e a **fracao do alelo entre as nao-referencia**: `P(ALT) / (1 - P(REF))`. Tirar massa da
+    referencia sem saber nada sobre o alelo redistribui entre as tres restantes e deixa essa fracao PARADA em
+    ~1/3. Aprender o alelo a faz SUBIR. `P(REF)` cair com a fracao parada e o atalho; a fracao subir e o sinal.
+    """
+    if lote.focal_no_lote is None:
+        return {"indisponivel": "o Exemplo nao carrega ref_focal"}
+    with torch.no_grad():
+        probabilidades = logits[lote.focal_no_lote, lote.focal_posicao].softmax(dim=-1)
+        p_alt = probabilidades.gather(1, lote.focal_alvo[:, None]).squeeze(1)
+        p_ref = probabilidades.gather(1, lote.focal_ref[:, None]).squeeze(1)
+        fracao = p_alt / (1.0 - p_ref).clamp_min(1e-9)
+    por_fonte: dict[str, list[list[float]]] = {}
+    for indice, fonte in enumerate(lote.fontes):
+        alvo = por_fonte.setdefault(fonte, [[], [], []])
+        alvo[0].append(float(p_ref[indice]))
+        alvo[1].append(float(p_alt[indice]))
+        alvo[2].append(float(fracao[indice]))
+    return {fonte: {"p_ref": sum(v[0]) / len(v[0]), "p_alt": sum(v[1]) / len(v[1]),
+                    "fracao_do_alt_entre_as_nao_ref": sum(v[2]) / len(v[2]),
+                    "acaso_se_so_tirasse_da_ref": 1 / 3, "n": len(v[0])}
+            for fonte, v in sorted(por_fonte.items())}
+
+
+def juntar_diagnosticos(partes: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Junta diagnosticos de varios lotes, ponderando por `n`."""
+    acumulado: dict[str, dict[str, float]] = {}
+    for parte in partes:
+        for fonte, dados in parte.items():
+            if not isinstance(dados, dict) or "n" not in dados:
+                continue
+            alvo = acumulado.setdefault(fonte, {"p_ref": 0.0, "p_alt": 0.0,
+                                                "fracao_do_alt_entre_as_nao_ref": 0.0, "n": 0})
+            for chave in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref"):
+                alvo[chave] += dados[chave] * dados["n"]
+            alvo["n"] += dados["n"]
+    return {fonte: {**{c: v[c] / v["n"] for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref")},
+                    "acaso_se_so_tirasse_da_ref": 1 / 3, "n": int(v["n"])}
+            for fonte, v in sorted(acumulado.items()) if v["n"]}
 
 
 # --------------------------------------------------------------------------- checkpoint

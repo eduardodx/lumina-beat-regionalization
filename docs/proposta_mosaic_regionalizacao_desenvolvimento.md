@@ -737,6 +737,39 @@ a linha de base nao e o R03 puro, entao ela passou a ser rotulada (`r03_sem_delt
 sumia quando o ultimo passo nao caia na cadencia de validacao, e agora ha avaliacao final; e entraram o sha256 do
 plano de validacao e a recusa de loss de validacao nao finita.
 
+**Piloto 3 [22/09]: o delta contra a linha de base, e a ambiguidade que ele expoe.** 60 atualizacoes,
+backbone intacto, `linha_de_base.sistema = r03_sem_delta`, as duas fontes presentes. Delta da validacao (negativo
+= melhorou), medido na MESMA amostra antes e depois:
+
+| categoria | delta | ABraOM | global |
+|---|---:|---:|---:|
+| `focal_alt` | **−0,0213** | **−0,0282** | −0,0168 |
+| `contexto_da_variante` | +0,0007 | +0,0014 | +0,0002 |
+| `referencia` | +0,0031 | +0,0018 | +0,0040 |
+
+Linha de base por fonte: ABraOM 1,8025 → 1,7743; global 1,6981 → 1,6813.
+
+**O padrao e limpo e ambiguo ao mesmo tempo.** O focal melhorou e as posicoes de REFERENCIA pioraram. Na moeda da
+loss de treino (delta × posicoes × peso) o ganho focal e +3,41 e o custo nas outras e −1,96: liquido +1,46, entao
+o treino de fato desceu. Mas o modelo **nao ve diferenca, na entrada, entre a posicao focal e uma de contexto** —
+todas sao `MASK`. Entao "tirar massa da base de REFERENCIA em toda posicao mascarada" produz exatamente esse
+padrao: derruba a perda focal (onde o alvo nunca e a referencia) e sobe a das posicoes de referencia. **Sem
+aprender nada sobre qual alelo a populacao carrega.**
+
+**E por isso que "o ABraOM melhorou mais" nao se le ainda.** Alem de ABraOM e global serem amostras diferentes, o
+ABraOM **comecou pior** (1,8025 contra 1,6981): ha mais folga para melhorar. Em termos relativos sao −1,56% e
+−0,99%, uma diferenca bem menor que a absoluta sugere.
+
+**[IMPLEMENTADO] O diagnostico que desempata: `P(ALT) / (1 − P(REF))` no focal.** Tirar massa da referencia sem
+saber nada sobre o alelo redistribui entre as **tres** bases restantes e deixa essa fracao parada em ~1/3.
+Aprender qual alelo a populacao carrega a faz **subir**. O `Exemplo` passou a carregar a base de referencia do
+focal, e a validacao publica `diagnostico_do_focal` com `p_ref`, `p_alt` e a fracao, por fonte — com o delta
+entre a linha de base e o fim. Ha teste que exibe os tres regimes: massa na referencia, massa tirada sem saber o
+alelo (fracao em 1/3), e alelo aprendido (fracao > 0,9).
+
+**Sem esse numero, o piloto nao distingue adaptacao populacional de um atalho.** Com ele, a pergunta vira
+verificavel sem esperar a avaliacao clinica.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
