@@ -874,6 +874,42 @@ memoria** -- medir RAM e tempo numa corrida curta com o conjunto ampliado antes 
 preguicosa. Os "90 minutos" que citei tambem sao extrapolacao dos 8m55s, que incluem validacoes. E **3.000 passos
 × 8 = 24.000 apresentacoes visitariam ~18,6 mil exemplos distintos (41,6%)**, nao o conjunto inteiro.
 
+**Medicao de escala [22/09]: as duas suposicoes que eu tinha feito caem.** 20 passos com o conjunto de treino
+INTEIRO (44.645 janelas):
+
+| | medido |
+|---|---:|
+| carga dos exemplos | **21,5 s** |
+| montagem do modelo | 22,3 s |
+| pico de memoria | **3.896 MB** |
+| por atualizacao (com validacoes) | 3,23 s |
+
+**A construcao preguicosa nao e necessaria** -- era precaucao minha sem base, como a revisao apontou. Resolvendo
+o sistema com os dois pontos medidos (esta corrida e o piloto 5), separam-se os custos: **0,140 s por exemplo de
+treino** (forward + backward) e **0,088 s por exemplo de validacao** (so forward). Ou seja, **1,12 s por passo de
+8 exemplos** e **14,1 s por validacao de 160**. Dai: 3.000 passos validando a cada 100 dao **~63 min**; 5.000
+validando a cada 200, **~99 min**. Os "90 minutos" que eu tinha extrapolado ficam proximos, mas agora derivam de
+medida.
+
+**E o diagnostico deu a leitura mais limpa ate aqui.** Com 20 passos sobre o conjunto inteiro, `focal_val` foi de
+1,7399 para 1,7305 (**−0,0093**), e a decomposicao atribui isso sem hipotese:
+
+| fonte | delta focal | delta `termo_massa` | delta `termo_escolha` |
+|---|---:|---:|---:|
+| ABraOM | −0,0095 | **−0,0113** | +0,0017 |
+| global | −0,0092 | **−0,0101** | +0,0009 |
+
+**A melhora vem INTEIRA do termo de massa, e o termo de escolha PIOROU nas duas fontes.** Traduzindo: o adapter
+abriu espaco para as bases nao-referencia e **nao** ficou melhor em saber QUAL delas. Era precisamente para
+separar isso que a decomposicao foi construida — e desta vez a atribuicao e exata, nao inferida.
+
+**Outro sinal, no mesmo sentido:** com o conjunto inteiro as duas fontes melhoram **quase igual** (−0,0095 e
+−0,0092), enquanto nas corridas de 400 exemplos o ABraOM melhorava bem mais. Isso reforca que aquela diferenca
+vinha da folga inicial e da amostra, nao de adaptacao especifica.
+
+**Ressalva de tamanho:** 20 passos sao o inicio do treino, onde o `lora_b` acabou de sair do zero. Nao diz o que
+uma corrida longa faz -- diz que, ate aqui, o ganho e de massa e nao de escolha.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
