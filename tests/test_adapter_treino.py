@@ -6,6 +6,7 @@ Precisa de torch (roda no notebook; no Windows os testes PULAM, e o runner conta
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 import tempfile
@@ -484,6 +485,44 @@ def test_juntar_diagnosticos_pondera_por_n():
     assert junto["n"] == 4
     assert abs(junto["entropia"] - (1.0 + 1.2 * 3) / 4) < 1e-9
     assert abs(junto["p_ref"] - (0.4 + 0.6 * 3) / 4) < 1e-9
+
+
+def test_decomposicao_massa_mais_escolha_e_a_perda_focal():
+    """A identidade que torna a atribuicao exata: -log P(ALT) = -log(1-P(REF)) + -log(P(ALT)/(1-P(REF)))."""
+    _exige_torch()
+    exemplo = mlm.montar_exemplo("ACGT" * 4, [(4, 7, mlm.TIPO_VARIANTE)], variant_id="v", fonte="global",
+                                 focal_index=5, ref="A")
+    lote = treino.montar_lote([exemplo])
+    logits = torch.zeros(1, 16, 4)
+    logits[0, 5] = torch.tensor([1.5, 0.3, -0.7, 0.2])
+    d = treino.diagnostico_do_focal(logits, lote)["global"]
+    focal = -math.log(d["p_alt"])
+    assert abs(d["termo_massa"] + d["termo_escolha"] - focal) < 1e-5, (d, focal)
+
+
+def test_fracao_nao_fica_presa_em_um_terco_ao_tirar_massa_da_referencia():
+    """O contraexemplo da revisao de 22/09: redistribuir PROPORCIONALMENTE preserva a fracao onde ela estiver.
+
+    Minha regra ("tirar da referencia deixa a fracao em 1/3") so valia para redistribuicao uniforme.
+    """
+    _exige_torch()
+    exemplo = mlm.montar_exemplo("ACGT" * 4, [(4, 7, mlm.TIPO_VARIANTE)], variant_id="v", fonte="global",
+                                 focal_index=5, ref="A")
+    lote = treino.montar_lote([exemplo])
+
+    def _diag(probabilidades):
+        saida = torch.zeros(1, 16, 4)
+        saida[0, 5] = torch.tensor(probabilidades).log()
+        return treino.diagnostico_do_focal(saida, lote)["global"]
+
+    antes = _diag([0.60, 0.20, 0.12, 0.08])
+    depois = _diag([0.40, 0.30, 0.18, 0.12])
+    assert depois["p_ref"] < antes["p_ref"], "a referencia perdeu massa"
+    assert abs(depois["fracao_do_alt_entre_as_nao_ref"] - antes["fracao_do_alt_entre_as_nao_ref"]) < 1e-5
+    assert abs(antes["fracao_do_alt_entre_as_nao_ref"] - 0.5) < 1e-5, "ficou em 0,50, nao em 1/3"
+    # E a queda da perda focal veio TODA do termo de massa.
+    assert abs(depois["termo_escolha"] - antes["termo_escolha"]) < 1e-5
+    assert depois["termo_massa"] < antes["termo_massa"]
 
 
 if __name__ == "__main__":

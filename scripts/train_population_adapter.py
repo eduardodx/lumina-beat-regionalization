@@ -518,6 +518,7 @@ def rodar_treino(config: argparse.Namespace) -> int:
         print(f"  [base]        focal_val={linha_de_base['criterio_primario']['valor']:.4f}  "
               f"({linha_de_base['sistema']})")
 
+    config.out_dir.expanduser().mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(config.seed)
     historico: list[dict[str, Any]] = []
     atualizacoes = 0
@@ -569,6 +570,14 @@ def rodar_treino(config: argparse.Namespace) -> int:
             linha["validacao"] = avaliar(adapter, validacao_exemplos, pesos=pesos, batch=config.batch,
                                          device=device)
         historico.append(linha)
+        if config.salvar_a_cada and (passo + 1) % config.salvar_a_cada == 0:
+            # Antes de uma corrida longa, salvar so no fim significa perder tudo se ela cair.
+            parcial = config.out_dir.expanduser() / f"adapter_passo{passo + 1:06d}.pt"
+            treino.salvar_adapter(parcial, backbone=backbone, resumo_lora=resumo,
+                                  config={k: str(v) for k, v in vars(config).items()},
+                                  identidades={"checkpoint_r03": str(config.checkpoint),
+                                               "revisao_do_codigo": proveniencia["revisao_do_codigo"]},
+                                  metricas=linha, passo=passo + 1)
         print(f"  passo {passo:>4}  lr={linha['lr']:.2e}  focal_treino="
               f"{linha['criterio_primario_treino']:.4f}"
               + (f"  focal_val={linha['validacao']['criterio_primario']['valor']:.4f}"
@@ -612,12 +621,14 @@ def rodar_treino(config: argparse.Namespace) -> int:
             "diagnostico_do_focal": _delta_diag(final.get("diagnostico_do_focal", {}),
                                                 linha_de_base.get("diagnostico_do_focal", {})),
             "como_ler_o_diagnostico": (
-                "TRES explicacoes para a perda focal cair. (1) o adapter aprendeu qual alelo a populacao "
-                "carrega: `fracao_do_alt_entre_as_nao_ref` SOBE. (2) ele so tirou massa da base de referencia: "
-                "`p_ref` cai e a fracao fica parada em ~1/3. (3) ele apenas ACHATOU a saida: `entropia` sobe "
-                "rumo a ln(4)=1,3863, `p_ref` e `p_alt` andam para 0,25 e a fracao cai rumo a 1/3 -- a perda "
-                "focal melhora porque levanta o piso dos casos em que p_alt era minusculo, e a das posicoes de "
-                "referencia piora. So (1) e adaptacao populacional"),
+                "ATRIBUICAO, nao identificacao de causa. `termo_massa + termo_escolha` e EXATAMENTE a perda "
+                "focal, entao o delta se reparte sem hipotese: massa = quanto custa a probabilidade total das "
+                "nao-referencia; escolha = quanto custa acertar QUAL delas. Uma queda so no termo de massa diz "
+                "que o modelo abriu espaco para as alternativas; uma queda no de escolha diz que ele discriminou "
+                "melhor entre elas. NENHUM dos dois, sozinho, demonstra adaptacao populacional -- discriminar "
+                "melhor pode vir de contexto de sequencia. `entropia`, `p_ref` e a fracao sao descricao; a "
+                "fracao NAO fica presa em 1/3 quando se tira massa da referencia (so se a redistribuicao for "
+                "uniforme), entao nao sirva dela como regra de decisao"),
             "por_fonte": {f: _delta(final["por_fonte"][f], linha_de_base["por_fonte"][f])
                           for f in sorted(set(final["por_fonte"]) & set(linha_de_base["por_fonte"]))},
             "leitura": ("negativo = melhorou. Mede a MESMA amostra de validacao antes e depois, entao nao ha "
@@ -715,6 +726,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--clip-norma", type=float, default=1.0)
     parser.add_argument("--validar-a-cada", type=int, default=5)
+    parser.add_argument("--salvar-a-cada", type=int, default=0,
+                        help="checkpoint parcial a cada N passos; 0 salva so no fim")
     parser.add_argument("--limite-treino", type=int, help="subamostra N linhas preservando a proporcao por fonte (piloto)")
     parser.add_argument("--limite-validacao", type=int)
     parser.add_argument("--retomar", type=Path, help="adapter.pt de onde continuar; o otimizador NAO e restaurado")

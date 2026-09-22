@@ -784,19 +784,38 @@ informado e uma folga clara: aprender seria empurrar 0,41 para cima.
 | ABraOM base → fim | 0,3806 → 0,3788 | 0,2550 → 0,2548 | 0,4172 → **0,4146** | −0,0283 |
 | global base → fim | 0,3535 → 0,3523 | 0,2655 → 0,2646 | 0,4122 → **0,4088** | −0,0173 |
 
-`p_ref` caiu, `p_alt` caiu, a fracao caiu — **todos na direcao do uniforme** (0,25 e 1/3) — e mesmo assim a
-perda focal melhorou. **Uma unica explicacao cobre as quatro observacoes e a quinta (a piora de +0,0033 nas
-posicoes de referencia): o adapter apenas ACHATOU a saida.** Entropia cruzada e media de `−log`: achatar levanta
-o piso dos casos em que `p_alt` era minusculo, o que derruba a media, mesmo com a media aritmetica de `p_alt`
-caindo; e piora onde o alvo era a base provavel, que e o caso das posicoes de referencia.
+`p_ref` caiu, `p_alt` caiu, a fracao caiu — todos na direcao do uniforme — e mesmo assim a perda focal melhorou.
 
-**Portanto a queda de 0,0217 na perda focal NAO e adaptacao populacional.** Foi para isso que o diagnostico
-existia, e ele evitou que o numero fosse lido como resultado.
+**Eu escrevi que "uma unica explicacao cobre as quatro observacoes: o adapter apenas ACHATOU a saida". Isso nao
+se sustenta, por dois motivos.** Primeiro, a entropia **nao estava no log do piloto 4** — foi acrescentada
+depois, entao declarei o mecanismo antes de medir a metrica que o testaria. Segundo, a regra que eu usei para
+ler a fracao esta errada: **ela nao fica presa em 1/3 quando se tira massa da referencia.** Isso so valeria se a
+redistribuicao fosse UNIFORME entre as tres alternativas. Redistribuindo proporcionalmente, `[0,60; 0,20; 0,12;
+0,08] → [0,40; 0,30; 0,18; 0,12]` derruba `p_ref` de 0,60 para 0,40 e deixa a fracao **parada em 0,50**.
 
-**A explicacao mais provavel do nulo e a escala.** 60 passos × 8 exemplos = 480 janelas, com cosseno decaindo a
-quase zero — os deltas de probabilidade sao todos de 0,001 a 0,003. Isto nao refuta a receita; diz que ela nao
-foi exercitada. **A entropia entrou no diagnostico** para que o regime de achatamento passe a ser medido, e nao
-inferido como fiz aqui: as tres explicacoes agora tem assinatura propria no relatorio.
+O que os numeros sustentam, e so isso: **a perda focal melhorou nesta amostra e as perdas de contexto pioraram
+ligeiramente.** Achatamento e *compativel* com esse padrao; nao esta demonstrado.
+
+**[IMPLEMENTADO] A atribuicao exata, no lugar da adivinhacao.** A perda focal se decompoe sem hipotese nenhuma:
+
+    −log P(ALT)  =  −log(1 − P(REF))  +  −log( P(ALT) / (1 − P(REF)) )
+                    \___ termo_massa ___/    \______ termo_escolha ______/
+
+`termo_massa` e quanto custa a probabilidade **total** das nao-referencia; `termo_escolha`, quanto custa acertar
+**qual** delas. Como a soma **e** a perda focal, o delta se reparte entre os dois sem suposicao — e no
+contraexemplo acima a queda vem toda do termo de massa, com o de escolha imovel. Isso e mais informativo que a
+media da fracao e esta diretamente ligado a loss. **Mesmo assim continua sendo diagnostico:** uma queda no termo
+de escolha significa discriminar melhor entre as alternativas, o que pode vir de contexto de sequencia e nao de
+adaptacao populacional.
+
+**A escala e pequena demais para concluir qualquer coisa.** 60 passos × 8 exemplos sao 480 **apresentacoes**,
+nao 480 janelas distintas: reproduzindo o sorteio com a semente declarada sobre 400 exemplos, saem **277 indices
+distintos**. Com o cosseno decaindo a quase zero, os deltas de probabilidade ficam todos entre 0,001 e 0,003.
+Nao ha base para declarar sucesso nem fracasso, e **os pesos nao mudam** por causa disto — nao ha evidencia de
+que 0,5 seja inadequado.
+
+Entraram no diagnostico a **entropia** e a **decomposicao massa/escolha**, e no runner os **checkpoints
+periodicos** (`--salvar-a-cada`): salvar so no fim perde tudo se uma corrida longa cair.
 
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
