@@ -111,7 +111,8 @@ def exemplos_do_plano(plano: pd.DataFrame, fetch, *, window_bp: int) -> Iterator
             continue
         yield ("ok", mlm.montar_exemplo(
             janela.alt_seq, mlm.spans_do_plano(linha.spans), variant_id=str(linha.variant_id),
-            fonte=str(linha.fonte), focal_index=janela.focal_index, ref=janela.ref), None)
+            fonte=str(linha.fonte), focal_index=janela.focal_index, ref=janela.ref,
+            locus_id=str(getattr(linha, "locus_id", "") or "") or None), None)
 
 
 def escala_cosseno(passo: int, *, total: int, aquecimento: int, minimo: float = 0.01) -> float:
@@ -395,6 +396,82 @@ def amostrar_preservando_a_mistura(plano: pd.DataFrame, *, quantos: int, seed: i
     return pd.concat(pedacos, ignore_index=True) if pedacos else plano.head(0)
 
 
+def bootstrap_do_delta(antes: list[dict[str, Any]], depois: list[dict[str, Any]], *,
+                       replicas: int = 2000, seed: int = 20260922) -> dict[str, Any]:
+    """IC do delta reamostrando LOCOS, nao janelas.
+
+    Janelas do mesmo loco se sobrepoem e nao sao observacoes independentes -- reamostrar janela a janela daria um
+    intervalo otimista. Aqui a unidade e o loco: sorteiam-se locos com reposicao e o delta e recalculado sobre
+    todas as janelas dos locos sorteados. Como antes e depois sao os MESMOS exemplos, o delta e pareado.
+
+    Devolve o delta por fonte e a DIFERENCA entre fontes, que e o contraste que a campanha quer ler.
+    """
+    if not antes or not depois or len(antes) != len(depois):
+        return {"indisponivel": "detalhe ausente ou de tamanhos diferentes"}
+    chave = {registro["variant_id"] for registro in antes}
+    if chave != {registro["variant_id"] for registro in depois}:
+        return {"indisponivel": "os dois lados nao cobrem as mesmas variantes"}
+
+    por_loco: dict[str, list[tuple[dict, dict]]] = {}
+    ordem_depois = {registro["variant_id"]: registro for registro in depois}
+    for registro in antes:
+        par = (registro, ordem_depois[registro["variant_id"]])
+        por_loco.setdefault(registro["locus_id"], []).append(par)
+    locos = sorted(por_loco)
+    if len(locos) < 2:
+        return {"indisponivel": f"{len(locos)} loco(s): sem unidade de reamostragem"}
+
+    def _medias(amostra: list[str]) -> dict[str, dict[str, float]]:
+        acumulado: dict[str, dict[str, list[float]]] = {}
+        for loco in amostra:
+            for antes_i, depois_i in por_loco[loco]:
+                alvo = acumulado.setdefault(antes_i["fonte"], {"focal_ce": [], "termo_massa": [],
+                                                               "termo_escolha": []})
+                for campo in alvo:
+                    alvo[campo].append(depois_i[campo] - antes_i[campo])
+        return {fonte: {campo: sum(v) / len(v) for campo, v in dados.items() if v}
+                for fonte, dados in acumulado.items()}
+
+    observado = _medias(locos)
+    rng = np.random.default_rng(seed)
+    replicas_por_fonte: dict[str, dict[str, list[float]]] = {}
+    diferencas: dict[str, list[float]] = {"focal_ce": [], "termo_massa": [], "termo_escolha": []}
+    for _ in range(replicas):
+        amostra = [locos[i] for i in rng.integers(0, len(locos), size=len(locos))]
+        medias = _medias(amostra)
+        for fonte, dados in medias.items():
+            alvo = replicas_por_fonte.setdefault(fonte, {})
+            for campo, valor in dados.items():
+                alvo.setdefault(campo, []).append(valor)
+        if "abraom" in medias and "global" in medias:
+            for campo in diferencas:
+                if campo in medias["abraom"] and campo in medias["global"]:
+                    diferencas[campo].append(medias["abraom"][campo] - medias["global"][campo])
+
+    def _ic(valores: list[float]) -> dict[str, float]:
+        vetor = np.sort(np.asarray(valores))
+        return {"p2_5": round(float(np.percentile(vetor, 2.5)), 6),
+                "p97_5": round(float(np.percentile(vetor, 97.5)), 6)}
+
+    saida: dict[str, Any] = {
+        "unidade_de_reamostragem": "loco",
+        "locos": len(locos), "janelas": len(antes), "replicas": replicas,
+        "por_fonte": {fonte: {campo: {"delta": round(observado[fonte][campo], 6), **_ic(valores)}
+                              for campo, valores in campos.items()}
+                      for fonte, campos in sorted(replicas_por_fonte.items())},
+    }
+    if all(diferencas.values()):
+        saida["abraom_menos_global"] = {
+            campo: {"diferenca": round(observado["abraom"][campo] - observado["global"][campo], 6),
+                    **_ic(valores)}
+            for campo, valores in diferencas.items()}
+        saida["como_ler"] = ("`abraom_menos_global` negativo = o ABraOM melhorou MAIS. O IC cruzando zero "
+                             "significa que a diferenca entre as fontes nao se distingue do ruido de "
+                             "reamostragem dos locos. E isso NAO seria, por si, atribuicao causal ao "
+                             "componente brasileiro: as fontes diferem em folga inicial, contexto e grade de AF")
+    return saida
+
+
 def atualizar_melhor(melhor: dict[str, Any] | None, passo: int,
                      validacao: dict[str, Any]) -> tuple[dict[str, Any] | None, bool]:
     """Devolve (melhor, trocou). Funcao pura, para a selecao ser testavel sem GPU."""
@@ -455,6 +532,8 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
     parciais: list = []
     por_fonte: list = []
     diagnosticos: list = []
+    detalhe: list = []
+    consumidos = 0
     try:
         with torch.no_grad():
             for comeco in range(0, len(exemplos), batch):
@@ -464,6 +543,11 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
                 parciais.append(decomposicao)
                 por_fonte.extend(treino.decomposicao_por_fonte(logits, lote).items())
                 diagnosticos.append(treino.diagnostico_do_focal(logits, lote))
+                for registro, exemplo in zip(treino.detalhe_do_focal(logits, lote),
+                                             exemplos[consumidos:consumidos + batch]):
+                    detalhe.append({**registro, "variant_id": exemplo.variant_id,
+                                    "locus_id": exemplo.locus_id or exemplo.variant_id})
+                consumidos += batch
     finally:
         adapter.backbone.train(modo_anterior)
 
@@ -477,6 +561,7 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
         "por_categoria": agregado,
         "por_fonte": mlm.agregar_por_fonte(por_fonte),
         "diagnostico_do_focal": treino.juntar_diagnosticos(diagnosticos),
+        "detalhe": detalhe,
         "exemplos": len(exemplos),
     }
 
@@ -622,6 +707,7 @@ def rodar_treino(config: argparse.Namespace) -> int:
                                   identidades=identidades_base, metricas=metricas, passo=passo + 1)
 
         if "validacao" in linha:
+            linha["validacao"].pop("detalhe", None)  # so a linha de base e a final precisam do detalhe
             melhor, trocou = atualizar_melhor(melhor, passo, linha["validacao"])
             if trocou:
                 melhor["caminho"] = str(caminho_melhor)
@@ -678,6 +764,10 @@ def rodar_treino(config: argparse.Namespace) -> int:
                     for f in sorted(set(depois) & set(antes))}
 
         delta = {
+            "bootstrap_por_loco": bootstrap_do_delta(linha_de_base.get("detalhe", []),
+                                                     final.get("detalhe", []),
+                                                     replicas=config.replicas_do_bootstrap,
+                                                     seed=config.seed),
             "por_categoria": _delta(final["por_categoria"], linha_de_base["por_categoria"]),
             "diagnostico_do_focal": _delta_diag(final.get("diagnostico_do_focal", {}),
                                                 linha_de_base.get("diagnostico_do_focal", {})),
@@ -828,6 +918,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--clip-norma", type=float, default=1.0)
     parser.add_argument("--validar-a-cada", type=int, default=5)
+    parser.add_argument("--replicas-do-bootstrap", type=int, default=2000,
+                        help="reamostragens por loco para o IC do delta")
     parser.add_argument("--salvar-a-cada", type=int, default=0,
                         help="checkpoint parcial a cada N passos; 0 salva so no fim")
     parser.add_argument("--limite-treino", type=int, help="subamostra N linhas preservando a proporcao por fonte (piloto)")

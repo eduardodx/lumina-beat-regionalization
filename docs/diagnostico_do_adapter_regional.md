@@ -34,6 +34,41 @@ base de referência) antes de aprender qualquer coisa sutil.
 
 **Custo de testar:** uma corrida (~60 min). É a primeira coisa a fazer.
 
+### CONFIRMADO em 22/09 — e a mudança é qualitativa
+
+1.000 passos com `lr = 5 × 10⁻⁶`, tudo o mais igual. 24 minutos, 1,45 s/atualização.
+
+| corrida | `focal_val` | delta contra a base |
+|---|---:|---:|
+| `lr 1e-4`, 20 passos | 1,7305 | −0,0093 |
+| `lr 1e-4`, 300 passos | 1,9991 | **+0,2592** (sobreajustou) |
+| **`lr 5e-6`, 1.000 passos** | **1,6932** | **−0,0467** |
+
+O melhor ficou no **último passo**: com a taxa da v11 não houve sobreajuste em 1.000 atualizações, e a curva
+ainda descia.
+
+**E o termo de escolha trocou de sinal:**
+
+| | massa (`lr 1e-4`) | escolha (`lr 1e-4`) | massa (`lr 5e-6`) | escolha (`lr 5e-6`) |
+|---|---:|---:|---:|---:|
+| ABraOM | −0,0113 | **+0,0017** | −0,0441 | **−0,0087** |
+| global | −0,0101 | **+0,0009** | −0,0412 | **−0,0015** |
+
+Antes o termo de escolha **piorava** nas duas fontes — o modelo só abria espaço contra a referência. Agora
+**melhora** nas duas, e **5,9× mais no ABraOM** que no global. O diagnóstico do item 1 estava certo: a taxa alta
+levava o otimizador ao mínimo mais barato antes de qualquer coisa sutil.
+
+**Três ressalvas que os próprios números impõem.** A massa ainda domina (5,1× o tamanho da escolha no ABraOM),
+então o grosso do ganho continua sendo "abrir espaço". A fração média **caiu** (−0,0037 / −0,0027) enquanto o
+termo de escolha melhorou — são agregações diferentes (média da razão × média do `−log` da razão), e o que
+aconteceu foi o modelo **levantar o piso dos piores casos**, não subir a média. E o "5,9× mais no ABraOM" vem de
+64 contra 96 posições agrupadas em locos, **sem intervalo de confiança** — que por isso foi implementado
+(`bootstrap_do_delta`, reamostrando **locos**, com a diferença `abraom − global` e seu IC).
+
+Mesmo com IC, uma diferença entre as fontes **não** seria atribuição causal ao componente brasileiro: elas
+diferem em folga inicial, contexto e grade de AF, e o comparador que separaria isso (MG) continua ausente
+(item 3).
+
 ---
 
 ## 2. O experimento que a iteração anterior identificou como DECISIVO não está sendo feito [DESENHO]

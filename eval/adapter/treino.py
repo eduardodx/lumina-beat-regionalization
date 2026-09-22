@@ -356,6 +356,23 @@ def diagnostico_do_focal(logits: Tensor, lote: Lote) -> dict[str, Any]:
             for fonte, v in sorted(por_fonte.items())}
 
 
+def detalhe_do_focal(logits: Tensor, lote: Lote) -> list[dict[str, Any]]:
+    """Um registro POR EXEMPLO, para o bootstrap. A agregacao media perde a unidade de reamostragem."""
+    if lote.focal_no_lote is None:
+        return []
+    with torch.no_grad():
+        selecionados = logits[lote.focal_no_lote, lote.focal_posicao]
+        total = torch.logsumexp(selecionados, dim=-1)
+        sem_ref = selecionados.scatter(1, lote.focal_ref[:, None], float("-inf"))
+        log_nao_ref = torch.logsumexp(sem_ref, dim=-1) - total
+        log_alt = selecionados.gather(1, lote.focal_alvo[:, None]).squeeze(1) - total
+        massa = (-log_nao_ref).float().cpu().tolist()
+        escolha = (-(log_alt - log_nao_ref)).float().cpu().tolist()
+    indices = lote.focal_no_lote.detach().cpu().tolist()
+    return [{"fonte": lote.fontes[indice], "termo_massa": m, "termo_escolha": e, "focal_ce": m + e}
+            for indice, m, e in zip(indices, massa, escolha)]
+
+
 def juntar_diagnosticos(partes: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """Junta diagnosticos de varios lotes, ponderando por `n`."""
     acumulado: dict[str, dict[str, float]] = {}

@@ -68,5 +68,44 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(melhor["passo"], 10)
 
 
+    @staticmethod
+    def _detalhe(ganhos, locos):
+        antes, depois = [], []
+        for indice, (fonte, ganho) in enumerate(ganhos):
+            base = 1.0 + 0.001 * indice
+            comum = {"variant_id": f"v{indice}", "locus_id": locos[indice], "fonte": fonte}
+            antes.append({**comum, "focal_ce": base, "termo_massa": base / 2, "termo_escolha": base / 2})
+            depois.append({**comum, "focal_ce": base + ganho, "termo_massa": base / 2,
+                           "termo_escolha": base / 2 + ganho})
+        return antes, depois
+
+    def test_bootstrap_reamostra_locos_e_cobre_o_observado(self):
+        # O ganho varia POR LOCO (i // 3), nao dentro dele: senao todo loco teria a mesma media e a
+        # reamostragem nao produziria variacao -- o IC sairia degenerado por culpa da fixture.
+        ganhos = [("abraom", -0.05 - 0.01 * (i // 3)) for i in range(12)]
+        ganhos += [("global", -0.01 - 0.01 * (i // 3)) for i in range(12)]
+        locos = [f"L{i // 3}" for i in range(24)]
+        saida = runner.bootstrap_do_delta(*self._detalhe(ganhos, locos), replicas=400, seed=3)
+        self.assertEqual(saida["locos"], 8)
+        self.assertEqual(saida["unidade_de_reamostragem"], "loco")
+        for fonte in ("abraom", "global"):
+            faixa = saida["por_fonte"][fonte]["focal_ce"]
+            self.assertLessEqual(faixa["p2_5"], faixa["delta"])
+            self.assertGreaterEqual(faixa["p97_5"], faixa["delta"])
+            self.assertLess(faixa["p2_5"], faixa["p97_5"], "com variacao o IC tem de ter largura")
+        diferenca = saida["abraom_menos_global"]["focal_ce"]
+        self.assertLess(diferenca["diferenca"], 0, "o ABraOM melhorou mais neste sintetico")
+
+    def test_bootstrap_recusa_com_um_unico_loco(self):
+        ganhos = [("abraom", -0.05), ("global", -0.01)]
+        saida = runner.bootstrap_do_delta(*self._detalhe(ganhos, ["L0", "L0"]), replicas=10)
+        self.assertIn("indisponivel", saida)
+
+    def test_bootstrap_recusa_conjuntos_diferentes(self):
+        antes, depois = self._detalhe([("abraom", -0.05), ("global", -0.01)], ["L0", "L1"])
+        depois[0]["variant_id"] = "outro"
+        self.assertIn("indisponivel", runner.bootstrap_do_delta(antes, depois, replicas=10))
+
+
 if __name__ == "__main__":
     unittest.main()

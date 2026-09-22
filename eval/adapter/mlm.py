@@ -112,6 +112,8 @@ class Exemplo:
     #: Classe (0..3) da base de REFERENCIA no focal. Sem ela nao da para separar "tirou massa da referencia" de
     #: "aprendeu QUAL alelo a populacao carrega" -- as duas explicam uma queda da perda focal.
     ref_focal: int | None = None
+    #: Loco do plano. E a unidade de reamostragem: janelas do mesmo loco se sobrepoem e nao sao independentes.
+    locus_id: str | None = None
     metadados: dict[str, Any] = field(default_factory=dict)
 
     def por_categoria(self) -> dict[str, tuple[int, ...]]:
@@ -171,6 +173,7 @@ def montar_exemplo(
     fonte: str,
     focal_index: int,
     ref: str | None = None,
+    locus_id: str | None = None,
     mask_id: int = MASK_ID,
 ) -> Exemplo:
     """Monta o exemplo a partir da janela JA com o ALT aplicado.
@@ -217,6 +220,7 @@ def montar_exemplo(
         categorias=tuple(categorias_por_posicao[p] for p in ordenadas),
         focal_index=focal_index,
         ref_focal=indice_do_alvo(ref) if ref else None,
+        locus_id=locus_id,
         metadados={"window_bp": len(alt_seq), "mascaradas": len(ordenadas)},
     )
 
