@@ -670,6 +670,35 @@ e restaurado; e reconferencia, no fim, de que o backbone congelado continua iden
 anterior por um que dizia "nao calculado", e a ligacao entre resultado, checkpoint e versao do codigo se perdia.
 sha256 de 600 MB custa segundos -- eu havia suposto minutos.
 
+**Piloto curto rodado [22/09] — a maquina anda, e o piloto achou um defeito meu.** 20 passos, 20 atualizacoes,
+`backbone_congelado_intacto: true`, `motivo_de_parada: passos concluidos`. Mas o `por_fonte` da validacao veio
+**so com `abraom`**: `--limite-treino`/`--limite-validacao` usavam `plano.head(n)`, e o gerador concatena o
+ABraOM antes do global — entao o inicio do arquivo e de uma fonte so. **O piloto treinou e validou 100% em
+ABraOM**, sem a mistura 60/40, que e o centro do desenho. E o mesmo defeito que a revisao pegara no smoke, e que
+eu corrigi la sem levar a correcao para o laco.
+
+Corrigido: a subamostra passa a respeitar a PROPORCAO de cada fonte no plano, o relatorio publica
+`mistura_do_treino` e `mistura_da_validacao`, e carregar de um plano misto uma subamostra de fonte unica
+**interrompe**. O piloto tem de ser refeito.
+
+**Uma leitura que ja vale, e que enquadra o que o adapter tem de fazer.** A referencia de uma previsao uniforme
+sobre 4 bases e `ln 4 = 1,3863`. Medido no inicio:
+
+| categoria | entropia cruzada | contra `ln 4` |
+|---|---:|---|
+| `focal_alt` | 1,696 | **acima** — o modelo da ao ALT menos de 25% |
+| `contexto_da_variante` | 1,052 | abaixo |
+| `referencia` | 1,123 | abaixo |
+
+E exatamente o esperado e confirma que a montagem mede o que se pretende: o R03 foi pre-treinado em **genoma de
+referencia**, e no focal se pede justamente a base **nao** referencia. Acertar melhor que o acaso nas posicoes de
+referencia e ficar pior que o acaso na focal e a assinatura de um modelo que ainda nao viu variacao populacional.
+O que o adapter tem de fazer e mover massa de probabilidade para o alelo que a populacao carrega. Essa referencia
+entrou no relatorio para nao depender de quem lembre de calcular `ln 4`.
+
+**Nao ler a queda de `focal_val`** (1,7047 → 1,6962 em 20 passos): sao 0,008 sobre 64 posicoes focais, com a loss
+de treino oscilando entre 1,32 e 2,78. Nao distingue aprendizado de ruido, e o piloto e tecnico.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de

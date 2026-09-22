@@ -347,14 +347,55 @@ def rodar_smoke(config: argparse.Namespace) -> int:
     return 0
 
 
-def carregar_exemplos(caminho: Path, fetch, *, window_bp: int, limite: int | None) -> tuple[list, dict]:
+def amostrar_preservando_a_mistura(plano: pd.DataFrame, *, quantos: int, seed: int) -> pd.DataFrame:
+    """Subamostra mantendo a PROPORCAO de cada fonte.
+
+    `plano.head(n)` era defeito: o gerador concatena o ABraOM antes do global, entao o inicio do arquivo e de uma
+    fonte so. O piloto de 22/09 treinou e validou 100% em ABraOM sem nada reclamar -- a mistura 60/40, que e o
+    centro do desenho, nao foi exercitada. Aqui a cota de cada fonte sai da proporcao que ela tem no plano.
+    """
+    rng = np.random.default_rng(seed)
+    contagem = plano["fonte"].value_counts()
+    total = int(contagem.sum())
+    pedacos: list[pd.DataFrame] = []
+    alocado = 0
+    fontes = list(contagem.index)
+    for posicao, fonte in enumerate(fontes):
+        disponivel = plano[plano["fonte"] == fonte]
+        cota = (quantos - alocado) if posicao == len(fontes) - 1 else round(quantos * len(disponivel) / total)
+        cota = int(min(max(0, cota), len(disponivel)))
+        if cota:
+            escolhidos = rng.choice(len(disponivel), size=cota, replace=False)
+            pedacos.append(disponivel.iloc[np.sort(escolhidos)])
+            alocado += cota
+    return pd.concat(pedacos, ignore_index=True) if pedacos else plano.head(0)
+
+
+def _mistura(exemplos: list) -> dict[str, Any]:
+    """Fracao de cada fonte nos exemplos efetivamente carregados. Sem isto, treinar numa fonte so passa batido."""
+    if not exemplos:
+        return {}
+    contagem: dict[str, int] = {}
+    for exemplo in exemplos:
+        contagem[exemplo.fonte] = contagem.get(exemplo.fonte, 0) + 1
+    total = len(exemplos)
+    return {"por_fonte": dict(sorted(contagem.items())),
+            "fracao": {f: round(q / total, 4) for f, q in sorted(contagem.items())}}
+
+
+def carregar_exemplos(caminho: Path, fetch, *, window_bp: int, limite: int | None,
+                      seed: int = 0) -> tuple[list, dict]:
     """Le o plano e reconstroi os exemplos. `ref_mismatch` interrompe: e erro de dado, nao estatistica."""
     plano = pd.read_parquet(caminho.expanduser())
     faltando = [c for c in COLUNAS if c not in plano.columns]
     if faltando:
         raise SystemExit(f"faltam colunas {faltando} em {caminho}")
+    fontes_no_plano = set(plano["fonte"].unique())
     if limite:
-        plano = plano.head(limite)
+        plano = amostrar_preservando_a_mistura(plano, quantos=limite, seed=seed)
+    if len(fontes_no_plano) > 1 and set(plano["fonte"].unique()) != fontes_no_plano:
+        raise SystemExit(f"a subamostra de {caminho} ficou com {sorted(set(plano['fonte']))} de "
+                         f"{sorted(fontes_no_plano)}: aumente o limite")
     exemplos, falhas = [], {}
     for estado, carga, _vid in exemplos_do_plano(plano, fetch, window_bp=window_bp):
         if estado == "falha":
@@ -414,7 +455,8 @@ def rodar_treino(config: argparse.Namespace) -> int:
     mlm.validar_pesos(pesos)
 
     treino_exemplos, falhas_treino = carregar_exemplos(
-        config.plano_treino, fetch, window_bp=config.window_bp, limite=config.limite_treino)
+        config.plano_treino, fetch, window_bp=config.window_bp, limite=config.limite_treino,
+        seed=config.seed)
     if not treino_exemplos:
         print("FALHOU: nenhum exemplo de treino")
         return 2
@@ -422,7 +464,8 @@ def rodar_treino(config: argparse.Namespace) -> int:
     falhas_validacao: dict = {}
     if config.plano_validacao:
         validacao_exemplos, falhas_validacao = carregar_exemplos(
-            config.plano_validacao, fetch, window_bp=config.window_bp, limite=config.limite_validacao)
+            config.plano_validacao, fetch, window_bp=config.window_bp, limite=config.limite_validacao,
+            seed=config.seed + 1)
 
     adapter, resumo, proveniencia = montar(config, device)
     proveniencia["revisao_do_codigo"] = revisao_do_codigo()
@@ -524,6 +567,8 @@ def rodar_treino(config: argparse.Namespace) -> int:
             "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
             "plano_validacao": str(config.plano_validacao) if config.plano_validacao else None,
             "exemplos_de_treino": len(treino_exemplos), "exemplos_de_validacao": len(validacao_exemplos),
+            "mistura_do_treino": _mistura(treino_exemplos),
+            "mistura_da_validacao": _mistura(validacao_exemplos),
             "falhas_treino": falhas_treino, "falhas_validacao": falhas_validacao,
             "fasta": str(config.fasta), "leitor": leitor,
             "checkpoint_sha256": sha256_file(config.checkpoint.expanduser()),
@@ -533,6 +578,11 @@ def rodar_treino(config: argparse.Namespace) -> int:
                     "passos": config.passos, "exemplos_por_passo": config.exemplos_por_passo,
                     "batch": config.batch, "aquecimento": config.aquecimento, "seed": config.seed,
                     "unidade_do_scheduler": "atualizacoes do otimizador, nao lotes",
+                    "referencia_uniforme": {
+                        "valor": round(math.log(4), 4),
+                        "leitura": ("entropia cruzada de uma previsao uniforme sobre as 4 bases. ACIMA dela, o "
+                                    "modelo da ao alvo menos de 25% -- o esperado no focal, onde se pede o ALT a "
+                                    "um modelo pre-treinado em referencia. ABAIXO, ele acerta mais que o acaso")},
                     "agregacao_da_validacao": "soma e contagem de posicoes, nunca media de medias"},
         "retomada": retomada or None,
         "historico": historico,
