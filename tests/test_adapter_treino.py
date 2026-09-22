@@ -370,6 +370,68 @@ def test_gradientes_separam_ausente_de_zero():
     assert any(n.endswith("lora_a") for n in estado["com_gradiente_zero"]), estado["com_gradiente_zero"][:5]
 
 
+def test_acumulacao_equivale_a_um_lote_unico():
+    """O requisito da revisao: microlotes tem QUANTIDADES DIFERENTES de posicoes mascaradas.
+
+    Dividir cada microlote pelo numero de microlotes daria peso igual a um com 3 posicoes e a outro com 30. O
+    certo e somar `w_i * CE_i` em cada um e dividir os gradientes pelo peso TOTAL antes do passo.
+    """
+    _exige_torch()
+    variados = [
+        mlm.montar_exemplo("ACGT" * 4, [(4, 7, mlm.TIPO_VARIANTE)], variant_id="a", fonte="global",
+                           focal_index=5),
+        mlm.montar_exemplo("ACGT" * 4, [(4, 7, mlm.TIPO_VARIANTE), (9, 14, mlm.TIPO_REFERENCIA)],
+                           variant_id="b", fonte="abraom", focal_index=5),
+    ]
+    assert len(variados[0].posicoes) != len(variados[1].posicoes), "o teste precisa de tamanhos diferentes"
+
+    # (1) lote unico
+    adapter, modelo, _ = _monta()
+    torch.manual_seed(0)
+    lote = treino.montar_lote(variados)
+    perda, _ = treino.perda_do_lote(treino.logits_mlm(adapter, lote.input_ids), lote, mlm.PESOS_INICIAIS)
+    perda.backward()
+    referencia = {n: p.grad.detach().clone() for n, p in modelo.named_parameters() if p.grad is not None}
+
+    # (2) acumulado em microlotes de 1
+    adapter2, modelo2, _ = _monta()
+    modelo2.load_state_dict(modelo.state_dict())
+    peso_total = 0.0
+    for exemplo in variados:
+        micro = treino.montar_lote([exemplo])
+        soma, peso, _ = treino.perda_somada_do_lote(treino.logits_mlm(adapter2, micro.input_ids), micro,
+                                                    mlm.PESOS_INICIAIS)
+        soma.backward()
+        peso_total += peso
+    treino.dividir_gradientes(list(treino.parametros_do_adapter(modelo2).values()), peso_total)
+
+    obtido = {n: p.grad for n, p in modelo2.named_parameters() if p.grad is not None}
+    assert set(obtido) == set(referencia), (sorted(obtido), sorted(referencia))
+    for nome in referencia:
+        assert torch.allclose(obtido[nome], referencia[nome], atol=1e-6), nome
+
+
+def test_dividir_gradientes_recusa_divisor_invalido():
+    _exige_torch()
+    _, modelo, _ = _monta()
+    try:
+        treino.dividir_gradientes(list(treino.parametros_do_adapter(modelo).values()), 0.0)
+    except ValueError:
+        return
+    raise AssertionError("divisor zero tinha de falhar")
+
+
+def test_perda_somada_e_a_media_vezes_o_peso_total():
+    _exige_torch()
+    adapter, _, _ = _monta()
+    lote = treino.montar_lote(_exemplos())
+    logits = treino.logits_mlm(adapter, lote.input_ids)
+    soma, peso_total, decomposicao = treino.perda_somada_do_lote(logits, lote, mlm.PESOS_INICIAIS)
+    media, _ = treino.perda_do_lote(logits, lote, mlm.PESOS_INICIAIS)
+    assert abs(float(soma.detach()) / peso_total - float(media.detach())) < 1e-6
+    assert abs(float(media.detach()) - mlm.perda_ponderada(decomposicao, mlm.PESOS_INICIAIS)) < 1e-5
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

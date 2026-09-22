@@ -631,11 +631,21 @@ nulo e 99 `lora_a` com gradiente zero** -- `lora_b` nasce em zeros, entao no pri
 sinal por construcao. Backbone congelado identico por hash; instancia nova com o adapter reproduz as predicoes
 com diferenca 0,00.
 
-**A superficie declarada tem uma consequencia de desenho:** as camadas **8 e 17** ficam sem adapter. Sao as de
-atencao esparsa (`strided_attn` + `anchor_*`), construidas sobre `nn.MultiheadAttention`, cujo `out_proj` nao e
-chamado como modulo. O adapter portanto **nao alcanca o caminho de longo alcance** do R03 -- adapta as 20 camadas
-Mamba (fwd/bwd), as 4 de atencao local (q/k/v/out), o `stem.purity` e os dois `gate` das etapas de subida.
-Isso e limitacao declarada, nao escolha: adapta-las exigiria embrulhar a propria `MultiheadAttention`.
+**A superficie declarada tem uma consequencia, e ela e mais estreita do que eu disse.** As camadas **8 e 17**
+ficam sem adapter: sao as de atencao esparsa (`strided_attn` + `anchor_*`), sobre `nn.MultiheadAttention`, cujo
+`out_proj` nao e chamado como modulo. O que se pode afirmar e apenas isto:
+
+> As projecoes das duas atencoes globais esparsas **nao recebem LoRA diretamente** nesta receita.
+
+Eu havia escrito que "o adapter nao alcanca o caminho de longo alcance do R03", e isso **nao se sustenta**. Essas
+atencoes continuam funcionando, e suas ENTRADAS vem de camadas adaptadas -- entao suas saidas mudam mesmo com os
+pesos congelados. Os blocos Mamba bidirecionais tambem propagam informacao ao longo da sequencia. A limitacao e
+de **atualizacao direta de determinados parametros**, nao de alcance.
+
+E a justificativa da correcao tambem estava errada: **`grad is None` nao e gradiente zero para o AdamW**.
+Parametro sem gradiente e **pulado** no passo, entao o `weight_decay` nao o movia. O motivo de remover os
+wrappers e outro e mais simples: aqueles deltas estavam fora do calculo util. Eram **6 modulos, ou 12 tensores
+LoRA** (210 → 198), nao 6 tensores.
 
 **Nao ler nada do `por_fonte` desta rodada.** Ele saiu com 2 posicoes focais por fonte -- ABraOM 1,296 contra
 global 1,067 -- e com esse n a diferenca nao distingue nada. O campo existe para o piloto, nao para o smoke.
@@ -643,6 +653,22 @@ global 1,067 -- e com esse n a diferenca nao distingue nada. O campo existe para
 O diagnostico tambem ficou mais fino: `sem_gradiente` (nem entrou no grafo) passou a ser separado de
 `com_gradiente_zero` (entrou e nao recebeu sinal, como `lora_a` no primeiro passo). Estavam juntos e sao
 perguntas diferentes.
+
+**Laco de treino do adapter [IMPLEMENTADO em 22/09]: `train_population_adapter.py --treinar`.** O ponto sutil e a
+**acumulacao de gradiente**: microlotes tem quantidades DIFERENTES de posicoes mascaradas, porque o numero de
+spans e o comprimento deles variam por janela. Dividir cada microlote pelo numero de microlotes daria peso igual
+a um com 3 posicoes e a outro com 30. A implementacao soma `w_i * CE_i` em cada microlote e divide os gradientes
+pelo **peso total** antes do passo; ha teste que compara o gradiente acumulado com o de um lote unico, tensor a
+tensor.
+
+O resto do contrato: validacao em `eval()` e sem gradiente, **agregada por soma e contagem** (nunca media de
+medias) e tambem por fonte; scheduler contado por **atualizacoes do otimizador**; interrupcao em loss ou
+gradiente nao finito, com o motivo no relatorio; retomada explicita com o aviso de que o estado do AdamW **nao**
+e restaurado; e reconferencia, no fim, de que o backbone congelado continua identico por hash.
+
+**O hash do checkpoint passou a ser sempre calculado.** Reexecutar o smoke sem a flag sobrescrevia o relatorio
+anterior por um que dizia "nao calculado", e a ligacao entre resultado, checkpoint e versao do codigo se perdia.
+sha256 de 600 MB custa segundos -- eu havia suposto minutos.
 
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,

@@ -154,13 +154,15 @@ def montar_lote(exemplos: Sequence[mlm.Exemplo], *, device: torch.device | str =
     )
 
 
-def perda_do_lote(
+def perda_somada_do_lote(
     logits: Tensor, lote: Lote, pesos: Mapping[str, float]
-) -> tuple[Tensor, dict[str, dict[str, float]]]:
-    """Loss DIFERENCIAVEL e a decomposicao destacada, nesta ordem.
+) -> tuple[Tensor, float, dict[str, dict[str, float]]]:
+    """`sum_i w_i * CE_i` (SEM dividir), o peso total, e a decomposicao destacada.
 
-    Mesma formula de `mlm.perda_ponderada`, em tensores. A decomposicao sai com `.detach()`: relatorio nao pode
-    segurar o grafo, e a loss de treino nao pode nascer de `float`.
+    A soma e o que a ACUMULACAO precisa. Dividir cada microlote pelo proprio numero de microlotes daria peso
+    igual a microlotes com quantidades DIFERENTES de posicoes mascaradas -- e elas diferem, porque o numero de
+    spans e o comprimento deles variam por janela. Somando aqui e dividindo pelo peso total acumulado antes do
+    passo, o gradiente fica identico ao de um lote unico.
     """
     limpos = mlm.validar_pesos(pesos)
     selecionados = logits[lote.indice_no_lote, lote.posicao]           # [N, 4]
@@ -168,14 +170,35 @@ def perda_do_lote(
 
     tabela = torch.tensor([limpos[c] for c in mlm.CATEGORIAS], dtype=ce.dtype, device=ce.device)
     peso = tabela[lote.categoria]                                      # [N]
-    denominador = peso.sum()
-    if float(denominador) <= 0:
+    peso_total = float(peso.sum())
+    if peso_total <= 0:
         raise ValueError("nenhuma posicao mascarada com peso positivo neste lote")
-    perda = (peso * ce).sum() / denominador
 
     nomes = [mlm.CATEGORIAS[i] for i in lote.categoria.detach().cpu().tolist()]
     decomposicao = mlm.decompor_perdas(ce.detach().float().cpu().tolist(), nomes)
-    return perda, decomposicao
+    return (peso * ce).sum(), peso_total, decomposicao
+
+
+def perda_do_lote(
+    logits: Tensor, lote: Lote, pesos: Mapping[str, float]
+) -> tuple[Tensor, dict[str, dict[str, float]]]:
+    """Loss MEDIA DIFERENCIAVEL e a decomposicao destacada, nesta ordem.
+
+    Mesma formula de `mlm.perda_ponderada`, em tensores. A decomposicao sai com `.detach()`: relatorio nao pode
+    segurar o grafo, e a loss de treino nao pode nascer de `float`.
+    """
+    soma, peso_total, decomposicao = perda_somada_do_lote(logits, lote, pesos)
+    return soma / peso_total, decomposicao
+
+
+def dividir_gradientes(parametros: Sequence[Tensor], divisor: float) -> None:
+    """Escala os gradientes acumulados pelo peso total do lote logico. Sem isto a acumulacao nao e equivalente."""
+    if divisor <= 0:
+        raise ValueError(f"divisor invalido: {divisor}")
+    with torch.no_grad():
+        for parametro in parametros:
+            if parametro.grad is not None:
+                parametro.grad.div_(divisor)
 
 
 def decomposicao_por_fonte(

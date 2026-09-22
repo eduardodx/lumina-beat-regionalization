@@ -37,8 +37,15 @@ DECISOES QUE FICAM REGISTRADAS, NAO IMPLICITAS
 - **A superficie de modulos adaptados** so vira contrato quando passada em `--modulos-esperados`; sem ela o
   smoke RELATA a lista, para ser revisada e congelada depois.
 
-AINDA NAO EXISTEM AQUI (e o smoke nao os verifica): o laco de treino, a validacao agregada por soma e contagem,
-e o scheduler contando atualizacoes do otimizador. Entram depois que este smoke passar no R03.
+O LACO DE TREINO (`--treinar`) acrescenta, e nada disso e verificado pelo smoke:
+- validacao em `eval()` e sem gradiente, agregada por SOMA E CONTAGEM (nunca media de medias), tambem por fonte;
+- acumulacao coerente com a loss ponderada: cada microlote contribui com `sum_i w_i CE_i` e os gradientes sao
+  divididos pelo peso TOTAL antes do passo. Dividir cada microlote pelo numero deles daria peso igual a
+  microlotes com quantidades diferentes de posicoes mascaradas, e elas diferem por janela;
+- scheduler contado por ATUALIZACOES do otimizador;
+- interrupcao em loss ou gradiente nao finito, com o motivo declarado;
+- retomada EXPLICITA (`--retomar`), com o aviso de que o estado do otimizador nao e restaurado;
+- reconferencia, no fim, de que o backbone congelado continua identico.
 """
 
 from __future__ import annotations
@@ -309,8 +316,10 @@ def rodar_smoke(config: argparse.Namespace) -> int:
             "exemplos_pedidos": int(config.smoke_exemplos), "exemplos_usados": len(exemplos),
             "fontes": fontes, "falhas_na_reconstrucao": falhas,
             "fasta": str(config.fasta), "leitor": leitor,
-            "checkpoint_sha256": sha256_file(config.checkpoint.expanduser())
-            if config.hashear_checkpoint else "nao calculado (use --hashear-checkpoint)",
+            # SEMPRE. Reexecutar sem o hash sobrescrevia o relatorio anterior por um que dizia "nao
+            # calculado", e a ligacao entre resultado, checkpoint e versao do codigo se perdia. sha256 de
+            # 600 MB custa segundos, nao minutos como eu havia suposto.
+            "checkpoint_sha256": sha256_file(config.checkpoint.expanduser()),
         },
         "receita": {"pesos": pesos, "criterio_primario": mlm.CRITERIO_PRIMARIO,
                     "window_bp": config.window_bp, "batch": config.batch, "lr": config.lr,
@@ -338,6 +347,224 @@ def rodar_smoke(config: argparse.Namespace) -> int:
     return 0
 
 
+def carregar_exemplos(caminho: Path, fetch, *, window_bp: int, limite: int | None) -> tuple[list, dict]:
+    """Le o plano e reconstroi os exemplos. `ref_mismatch` interrompe: e erro de dado, nao estatistica."""
+    plano = pd.read_parquet(caminho.expanduser())
+    faltando = [c for c in COLUNAS if c not in plano.columns]
+    if faltando:
+        raise SystemExit(f"faltam colunas {faltando} em {caminho}")
+    if limite:
+        plano = plano.head(limite)
+    exemplos, falhas = [], {}
+    for estado, carga, _vid in exemplos_do_plano(plano, fetch, window_bp=window_bp):
+        if estado == "falha":
+            falhas[carga] = falhas.get(carga, 0) + 1
+        else:
+            exemplos.append(carga)
+    if falhas.get("ref_mismatch"):
+        raise SystemExit(f"{falhas['ref_mismatch']} ref_mismatch em {caminho}: FASTA ou build errado.")
+    return exemplos, falhas
+
+
+def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
+    """Validacao em `eval()` e sem gradiente, agregada por SOMA E CONTAGEM -- nunca media de medias.
+
+    Media de medias entre lotes daria o mesmo peso a um lote com 3 posicoes mascaradas e a outro com 30. Quem
+    agrega e `mlm.agregar`, que soma `media * posicoes` e divide pelo total de posicoes.
+    """
+    import torch
+
+    from eval.adapter import mlm, treino
+
+    modo_anterior = adapter.backbone.training
+    adapter.backbone.eval()
+    parciais: list = []
+    por_fonte: list = []
+    try:
+        with torch.no_grad():
+            for comeco in range(0, len(exemplos), batch):
+                lote = treino.montar_lote(exemplos[comeco:comeco + batch], device=device)
+                logits = treino.logits_mlm(adapter, lote.input_ids)
+                _, _, decomposicao = treino.perda_somada_do_lote(logits, lote, pesos)
+                parciais.append(decomposicao)
+                por_fonte.extend(treino.decomposicao_por_fonte(logits, lote).items())
+    finally:
+        adapter.backbone.train(modo_anterior)
+
+    agregado = mlm.agregar(parciais)
+    return {
+        "criterio_primario": {"categoria": mlm.CRITERIO_PRIMARIO,
+                              "valor": agregado[mlm.CRITERIO_PRIMARIO]["media"],
+                              "posicoes": agregado[mlm.CRITERIO_PRIMARIO]["posicoes"]},
+        "por_categoria": agregado,
+        "por_fonte": mlm.agregar_por_fonte(por_fonte),
+        "exemplos": len(exemplos),
+    }
+
+
+def rodar_treino(config: argparse.Namespace) -> int:
+    import torch
+
+    from eval.adapter import mlm, treino
+
+    device = torch.device(config.device)
+    fetch, leitor = abrir_fasta(config.fasta.expanduser())
+    pesos = {mlm.CATEGORIA_FOCAL: config.peso_focal, mlm.CATEGORIA_CONTEXTO: config.peso_contexto,
+             mlm.CATEGORIA_REFERENCIA: config.peso_referencia}
+    mlm.validar_pesos(pesos)
+
+    treino_exemplos, falhas_treino = carregar_exemplos(
+        config.plano_treino, fetch, window_bp=config.window_bp, limite=config.limite_treino)
+    if not treino_exemplos:
+        print("FALHOU: nenhum exemplo de treino")
+        return 2
+    validacao_exemplos: list = []
+    falhas_validacao: dict = {}
+    if config.plano_validacao:
+        validacao_exemplos, falhas_validacao = carregar_exemplos(
+            config.plano_validacao, fetch, window_bp=config.window_bp, limite=config.limite_validacao)
+
+    adapter, resumo, proveniencia = montar(config, device)
+    proveniencia["revisao_do_codigo"] = revisao_do_codigo()
+    backbone = adapter.backbone
+    if config.modulos_esperados:
+        esperados = json.loads(config.modulos_esperados.expanduser().read_text(encoding="utf-8"))
+        if sorted(resumo.module_names) != sorted(esperados):
+            print(f"FALHOU: superficie adaptada difere da aprovada "
+                  f"({len(resumo.module_names)} contra {len(esperados)})")
+            return 2
+
+    parametros = list(treino.parametros_do_adapter(backbone).values())
+    otimizador = torch.optim.AdamW(parametros, lr=config.lr, weight_decay=config.weight_decay)
+    impressao_inicial = treino.impressao_dos_congelados(backbone)
+
+    passo_inicial = 0
+    retomada: dict[str, Any] = {}
+    if config.retomar:
+        # Retomada EXPLICITA: carrega o adapter e continua do passo gravado. O otimizador NAO e restaurado, e
+        # isso vai declarado -- um AdamW recomecado do zero tem momentos vazios e nao e a mesma trajetoria.
+        retomada = treino.carregar_adapter(config.retomar.expanduser(), backbone)
+        passo_inicial = int(retomada.get("passo") or 0)
+        retomada["aviso"] = "o estado do otimizador NAO e restaurado: os momentos do AdamW recomecam do zero"
+        print(f"[retomada] adapter de {config.retomar} no passo {passo_inicial}")
+
+    rng = np.random.default_rng(config.seed)
+    historico: list[dict[str, Any]] = []
+    atualizacoes = 0
+    motivo_de_parada = "passos concluidos"
+
+    for passo in range(passo_inicial, config.passos):
+        indices = rng.permutation(len(treino_exemplos))[:config.exemplos_por_passo]
+        otimizador.zero_grad(set_to_none=True)
+        peso_total = 0.0
+        parciais: list = []
+        finito = True
+        for comeco in range(0, len(indices), config.batch):
+            pedaco = [treino_exemplos[i] for i in indices[comeco:comeco + config.batch]]
+            lote = treino.montar_lote(pedaco, device=device)
+            logits = treino.logits_mlm(adapter, lote.input_ids)
+            soma, peso, decomposicao = treino.perda_somada_do_lote(logits, lote, pesos)
+            if not bool(torch.isfinite(soma)):
+                finito = False
+                break
+            soma.backward()
+            peso_total += peso
+            parciais.append(decomposicao)
+        if not finito:
+            motivo_de_parada = f"loss nao finita no passo {passo}"
+            break
+
+        # A acumulacao so equivale a um lote unico depois desta divisao pelo peso TOTAL.
+        treino.dividir_gradientes(parametros, peso_total)
+        estado = treino.gradientes_do_adapter(backbone)
+        if estado["nao_finitos"]:
+            motivo_de_parada = f"gradiente nao finito no passo {passo}: {estado['nao_finitos'][:3]}"
+            break
+
+        if config.clip_norma > 0:
+            torch.nn.utils.clip_grad_norm_(parametros, config.clip_norma)
+        # O scheduler conta ATUALIZACOES do otimizador, nao lotes: com acumulacao os dois divergem.
+        escala = escala_cosseno(atualizacoes, total=max(1, config.passos - passo_inicial),
+                                aquecimento=config.aquecimento)
+        for grupo in otimizador.param_groups:
+            grupo["lr"] = config.lr * escala
+        otimizador.step()
+        atualizacoes += 1
+
+        agregado = mlm.agregar(parciais)
+        linha = {"passo": passo, "atualizacoes": atualizacoes, "lr": config.lr * escala,
+                 "treino": {c: agregado[c] for c in mlm.CATEGORIAS},
+                 "criterio_primario_treino": agregado[mlm.CRITERIO_PRIMARIO]["media"]}
+        if validacao_exemplos and (passo + 1) % config.validar_a_cada == 0:
+            linha["validacao"] = avaliar(adapter, validacao_exemplos, pesos=pesos, batch=config.batch,
+                                         device=device)
+        historico.append(linha)
+        print(f"  passo {passo:>4}  lr={linha['lr']:.2e}  focal_treino="
+              f"{linha['criterio_primario_treino']:.4f}"
+              + (f"  focal_val={linha['validacao']['criterio_primario']['valor']:.4f}"
+                 if "validacao" in linha else ""))
+
+    congelado_intacto = treino.impressao_dos_congelados(backbone) == impressao_inicial
+    out_dir = config.out_dir.expanduser()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    caminho = out_dir / "adapter.pt"
+    if congelado_intacto and historico:
+        treino.salvar_adapter(caminho, backbone=backbone, resumo_lora=resumo,
+                              config={k: str(v) for k, v in vars(config).items()},
+                              identidades={"checkpoint_r03": str(config.checkpoint),
+                                           "checkpoint_sha256": sha256_file(config.checkpoint.expanduser()),
+                                           "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
+                                           "revisao_do_codigo": proveniencia["revisao_do_codigo"]},
+                              metricas=historico[-1], passo=historico[-1]["passo"] + 1)
+
+    relatorio = {
+        "proveniencia": proveniencia,
+        "entradas": {
+            "plano_treino": str(config.plano_treino),
+            "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
+            "plano_validacao": str(config.plano_validacao) if config.plano_validacao else None,
+            "exemplos_de_treino": len(treino_exemplos), "exemplos_de_validacao": len(validacao_exemplos),
+            "falhas_treino": falhas_treino, "falhas_validacao": falhas_validacao,
+            "fasta": str(config.fasta), "leitor": leitor,
+            "checkpoint_sha256": sha256_file(config.checkpoint.expanduser()),
+        },
+        "receita": {"pesos": pesos, "criterio_primario": mlm.CRITERIO_PRIMARIO, "lr": config.lr,
+                    "weight_decay": config.weight_decay, "clip_norma": config.clip_norma,
+                    "passos": config.passos, "exemplos_por_passo": config.exemplos_por_passo,
+                    "batch": config.batch, "aquecimento": config.aquecimento, "seed": config.seed,
+                    "unidade_do_scheduler": "atualizacoes do otimizador, nao lotes",
+                    "agregacao_da_validacao": "soma e contagem de posicoes, nunca media de medias"},
+        "retomada": retomada or None,
+        "historico": historico,
+        "atualizacoes_do_otimizador": atualizacoes,
+        "motivo_de_parada": motivo_de_parada,
+        "backbone_congelado_intacto": congelado_intacto,
+        "o_que_nao_prova": [
+            "nao demonstra ganho de regionalizacao: mede reconstrucao mascarada",
+            "o criterio primario e a perda no ALT das variantes que a receita selecionou, nao aprendizado de "
+            "estrutura populacional",
+            "poucos passos nao demonstram estabilidade de um treino longo",
+        ],
+        "saidas": {"adapter": str(caminho), "adapter_sha256": sha256_file(caminho)}
+        if caminho.exists() else {},
+    }
+    (out_dir / "treino_do_adapter.json").write_text(
+        json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    print(json.dumps({k: relatorio[k] for k in ("receita", "atualizacoes_do_otimizador", "motivo_de_parada",
+                                                "backbone_congelado_intacto", "saidas")},
+                     ensure_ascii=False, indent=2, default=str))
+    if historico and "validacao" in historico[-1]:
+        print(json.dumps(historico[-1]["validacao"], ensure_ascii=False, indent=2, default=str))
+
+    if not congelado_intacto:
+        print("\nFALHOU: o backbone congelado MUDOU durante o treino.")
+        return 2
+    if motivo_de_parada != "passos concluidos":
+        print(f"\nFALHOU: {motivo_de_parada}")
+        return 2
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--checkpoint", required=True, type=Path, help="best_checkpoint.pt do R03")
@@ -359,19 +586,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--peso-referencia", type=float, default=0.5)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--smoke", action="store_true", help="roda so as checagens de integridade no R03 real")
+    parser.add_argument("--treinar", action="store_true", help="roda o laco de treino (piloto curto por padrao)")
+    parser.add_argument("--passos", type=int, default=20)
+    parser.add_argument("--exemplos-por-passo", type=int, default=8)
+    parser.add_argument("--aquecimento", type=int, default=2)
+    parser.add_argument("--weight-decay", type=float, default=0.01)
+    parser.add_argument("--clip-norma", type=float, default=1.0)
+    parser.add_argument("--validar-a-cada", type=int, default=5)
+    parser.add_argument("--limite-treino", type=int, help="usa so as N primeiras linhas do plano (piloto)")
+    parser.add_argument("--limite-validacao", type=int)
+    parser.add_argument("--retomar", type=Path, help="adapter.pt de onde continuar; o otimizador NAO e restaurado")
     parser.add_argument("--smoke-exemplos", type=int, default=8)
     parser.add_argument("--modulos-esperados", type=Path,
                         help="JSON com a superficie APROVADA de modulos adaptados; sem ele a lista so e relatada")
     parser.add_argument("--seed", type=int, default=20260921)
-    parser.add_argument("--hashear-checkpoint", action="store_true",
-                        help="sha256 do checkpoint do R03; custa minutos num arquivo grande")
     parser.add_argument("--out-dir", required=True, type=Path)
     config = parser.parse_args(argv)
 
-    if not config.smoke:
-        print("FALHOU: por enquanto so --smoke esta implementado; o laco de treino entra depois que ele passar.")
+    if config.smoke and config.treinar:
+        print("FALHOU: escolha --smoke OU --treinar, nao os dois.")
         return 2
-    return rodar_smoke(config)
+    if config.smoke:
+        return rodar_smoke(config)
+    if config.treinar:
+        return rodar_treino(config)
+    print("FALHOU: use --smoke (checagens de integridade) ou --treinar (laco).")
+    return 2
 
 
 if __name__ == "__main__":
