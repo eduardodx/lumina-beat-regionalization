@@ -461,6 +461,11 @@ def test_diagnostico_separa_tirar_da_referencia_de_aprender_o_alelo():
     aprendeu = treino.diagnostico_do_focal(_logits([0.0, 3.0, 0.0, 0.0]), lote)["global"]
     assert aprendeu["fracao_do_alt_entre_as_nao_ref"] > 0.9, aprendeu
 
+    # (d) ACHATOU: a entropia vai para ln(4) e tudo anda para o uniforme. Foi o regime do piloto 4.
+    assert so_ref["entropia"] < tirou["entropia"], (so_ref["entropia"], tirou["entropia"])
+    assert abs(tirou["entropia"] - tirou["entropia_do_uniforme"]) < 1e-4, tirou
+    assert aprendeu["entropia"] < tirou["entropia"], "concentrar no alelo BAIXA a entropia"
+
 
 def test_diagnostico_ausente_quando_o_exemplo_nao_traz_a_referencia():
     _exige_torch()
@@ -473,8 +478,11 @@ def test_juntar_diagnosticos_pondera_por_n():
     _exige_torch()
     um = {"global": {"p_ref": 0.4, "p_alt": 0.3, "fracao_do_alt_entre_as_nao_ref": 0.5, "n": 1}}
     outro = {"global": {"p_ref": 0.6, "p_alt": 0.1, "fracao_do_alt_entre_as_nao_ref": 0.25, "n": 3}}
+    um["global"]["entropia"] = 1.0
+    outro["global"]["entropia"] = 1.2
     junto = treino.juntar_diagnosticos([um, outro])["global"]
     assert junto["n"] == 4
+    assert abs(junto["entropia"] - (1.0 + 1.2 * 3) / 4) < 1e-9
     assert abs(junto["p_ref"] - (0.4 + 0.6 * 3) / 4) < 1e-9
 
 

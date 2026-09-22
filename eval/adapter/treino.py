@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -312,15 +313,22 @@ def diagnostico_do_focal(logits: Tensor, lote: Lote) -> dict[str, Any]:
         p_alt = probabilidades.gather(1, lote.focal_alvo[:, None]).squeeze(1)
         p_ref = probabilidades.gather(1, lote.focal_ref[:, None]).squeeze(1)
         fracao = p_alt / (1.0 - p_ref).clamp_min(1e-9)
+        # TERCEIRA explicacao, medida em vez de inferida: o adapter pode so estar ACHATANDO a saida. Isso
+        # derruba a perda focal (levanta o piso dos casos em que p_alt era minusculo), sobe a das posicoes de
+        # referencia, e empurra p_ref, p_alt e a fracao todos na direcao do uniforme -- foi o padrao do piloto 4.
+        entropia = -(probabilidades.clamp_min(1e-9).log() * probabilidades).sum(dim=-1)
     por_fonte: dict[str, list[list[float]]] = {}
     for indice, fonte in enumerate(lote.fontes):
-        alvo = por_fonte.setdefault(fonte, [[], [], []])
+        alvo = por_fonte.setdefault(fonte, [[], [], [], []])
         alvo[0].append(float(p_ref[indice]))
         alvo[1].append(float(p_alt[indice]))
         alvo[2].append(float(fracao[indice]))
+        alvo[3].append(float(entropia[indice]))
     return {fonte: {"p_ref": sum(v[0]) / len(v[0]), "p_alt": sum(v[1]) / len(v[1]),
                     "fracao_do_alt_entre_as_nao_ref": sum(v[2]) / len(v[2]),
-                    "acaso_se_so_tirasse_da_ref": 1 / 3, "n": len(v[0])}
+                    "entropia": sum(v[3]) / len(v[3]),
+                    "acaso_se_so_tirasse_da_ref": 1 / 3, "entropia_do_uniforme": round(math.log(4), 6),
+                    "n": len(v[0])}
             for fonte, v in sorted(por_fonte.items())}
 
 
@@ -332,12 +340,15 @@ def juntar_diagnosticos(partes: Sequence[dict[str, Any]]) -> dict[str, Any]:
             if not isinstance(dados, dict) or "n" not in dados:
                 continue
             alvo = acumulado.setdefault(fonte, {"p_ref": 0.0, "p_alt": 0.0,
-                                                "fracao_do_alt_entre_as_nao_ref": 0.0, "n": 0})
-            for chave in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref"):
-                alvo[chave] += dados[chave] * dados["n"]
+                                                "fracao_do_alt_entre_as_nao_ref": 0.0, "entropia": 0.0,
+                                                "n": 0})
+            for chave in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref", "entropia"):
+                alvo[chave] += dados.get(chave, 0.0) * dados["n"]
             alvo["n"] += dados["n"]
-    return {fonte: {**{c: v[c] / v["n"] for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref")},
-                    "acaso_se_so_tirasse_da_ref": 1 / 3, "n": int(v["n"])}
+    return {fonte: {**{c: v[c] / v["n"] for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref",
+                                                  "entropia")},
+                    "acaso_se_so_tirasse_da_ref": 1 / 3, "entropia_do_uniforme": round(math.log(4), 6),
+                    "n": int(v["n"])}
             for fonte, v in sorted(acumulado.items()) if v["n"]}
 
 

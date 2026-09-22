@@ -603,7 +603,8 @@ def rodar_treino(config: argparse.Namespace) -> int:
 
         def _delta_diag(depois, antes):
             return {f: {c: round(depois[f][c] - antes[f][c], 6)
-                        for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref")}
+                        for c in ("p_ref", "p_alt", "fracao_do_alt_entre_as_nao_ref", "entropia")
+                        if c in depois[f] and c in antes[f]}
                     for f in sorted(set(depois) & set(antes))}
 
         delta = {
@@ -611,9 +612,12 @@ def rodar_treino(config: argparse.Namespace) -> int:
             "diagnostico_do_focal": _delta_diag(final.get("diagnostico_do_focal", {}),
                                                 linha_de_base.get("diagnostico_do_focal", {})),
             "como_ler_o_diagnostico": (
-                "p_ref caindo com fracao_do_alt_entre_as_nao_ref PARADA (~1/3) = o adapter so tirou massa da "
-                "base de referencia, o que derruba a perda focal sem aprender nada sobre o alelo. A fracao "
-                "SUBINDO = ele aprendeu qual alelo a populacao carrega"),
+                "TRES explicacoes para a perda focal cair. (1) o adapter aprendeu qual alelo a populacao "
+                "carrega: `fracao_do_alt_entre_as_nao_ref` SOBE. (2) ele so tirou massa da base de referencia: "
+                "`p_ref` cai e a fracao fica parada em ~1/3. (3) ele apenas ACHATOU a saida: `entropia` sobe "
+                "rumo a ln(4)=1,3863, `p_ref` e `p_alt` andam para 0,25 e a fracao cai rumo a 1/3 -- a perda "
+                "focal melhora porque levanta o piso dos casos em que p_alt era minusculo, e a das posicoes de "
+                "referencia piora. So (1) e adaptacao populacional"),
             "por_fonte": {f: _delta(final["por_fonte"][f], linha_de_base["por_fonte"][f])
                           for f in sorted(set(final["por_fonte"]) & set(linha_de_base["por_fonte"]))},
             "leitura": ("negativo = melhorou. Mede a MESMA amostra de validacao antes e depois, entao nao ha "

@@ -770,6 +770,34 @@ alelo (fracao em 1/3), e alelo aprendido (fracao > 0,9).
 **Sem esse numero, o piloto nao distingue adaptacao populacional de um atalho.** Com ele, a pergunta vira
 verificavel sem esperar a avaliacao clinica.
 
+**Piloto 4 [22/09]: o diagnostico respondeu, e a resposta e NAO — com um achado positivo junto.**
+
+**Achado positivo, da LINHA DE BASE:** o R03 **ja** coloca ~**41,5%** da massa nao-referencia sobre o alelo
+verdadeiro (ABraOM 0,4172; global 0,4122), contra **33,3%** do acaso. O backbone, sem nenhum treino
+populacional, ja sabe algo sobre QUAL alternativa e plausivel naquele contexto. Isso da a metrica um piso
+informado e uma folga clara: aprender seria empurrar 0,41 para cima.
+
+**E o adapter nao empurrou. Empurrou para baixo:**
+
+| | p_ref | p_alt | fracao do ALT | perda focal |
+|---|---:|---:|---:|---:|
+| ABraOM base → fim | 0,3806 → 0,3788 | 0,2550 → 0,2548 | 0,4172 → **0,4146** | −0,0283 |
+| global base → fim | 0,3535 → 0,3523 | 0,2655 → 0,2646 | 0,4122 → **0,4088** | −0,0173 |
+
+`p_ref` caiu, `p_alt` caiu, a fracao caiu — **todos na direcao do uniforme** (0,25 e 1/3) — e mesmo assim a
+perda focal melhorou. **Uma unica explicacao cobre as quatro observacoes e a quinta (a piora de +0,0033 nas
+posicoes de referencia): o adapter apenas ACHATOU a saida.** Entropia cruzada e media de `−log`: achatar levanta
+o piso dos casos em que `p_alt` era minusculo, o que derruba a media, mesmo com a media aritmetica de `p_alt`
+caindo; e piora onde o alvo era a base provavel, que e o caso das posicoes de referencia.
+
+**Portanto a queda de 0,0217 na perda focal NAO e adaptacao populacional.** Foi para isso que o diagnostico
+existia, e ele evitou que o numero fosse lido como resultado.
+
+**A explicacao mais provavel do nulo e a escala.** 60 passos × 8 exemplos = 480 janelas, com cosseno decaindo a
+quase zero — os deltas de probabilidade sao todos de 0,001 a 0,003. Isto nao refuta a receita; diz que ela nao
+foi exercitada. **A entropia entrou no diagnostico** para que o regime de achatamento passe a ser medido, e nao
+inferido como fiz aqui: as tres explicacoes agora tem assinatura propria no relatorio.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
