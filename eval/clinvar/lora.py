@@ -105,6 +105,8 @@ class LoRASummary:
     module_names: tuple[str, ...]
     total_params: int
     use_rslora: bool = False
+    #: Linear dentro de `nn.MultiheadAttention`: embrulha-los seria inerte, entao ficam de fora e sao declarados.
+    modulos_inertes_ignorados: tuple[str, ...] = ()
 
     @property
     def module_count(self) -> int:
@@ -139,10 +141,29 @@ def apply_lora(
         return LoRASummary(rank=rank, alpha=alpha, dropout=dropout, module_names=(), total_params=0,
                            use_rslora=use_rslora)
 
+    # `nn.MultiheadAttention` NAO chama o proprio `out_proj` como modulo: ela repassa `out_proj.weight` para
+    # `F.multi_head_attention_forward`. Embrulhar esse Linear e INERTE -- o delta do LoRA nunca e aplicado, os
+    # parametros ficam fora do grafo (`grad is None`) e ainda assim entram no otimizador, onde o weight decay os
+    # move. Medido no R03 em 22/09: 6 dos 105 modulos adaptados eram assim (strided_attn e anchor_* das camadas
+    # 8 e 17), e o smoke reprovou por gradiente ausente.
+    dentro_de_mha = {
+        f"{nome}.{filho}" if nome else filho
+        for nome, modulo in backbone.named_modules() if isinstance(modulo, nn.MultiheadAttention)
+        for filho, _ in modulo.named_children()
+    }
+
     targets: list[str] = []
+    inertes: list[str] = []
     for name, module in backbone.named_modules():
-        if isinstance(module, nn.Linear) and not _should_exclude(name):
-            targets.append(name)
+        if not isinstance(module, nn.Linear) or _should_exclude(name):
+            continue
+        if name in dentro_de_mha:
+            inertes.append(name)
+            continue
+        targets.append(name)
+    if inertes:
+        log.info("LoRA NAO aplicado a %d Linear dentro de nn.MultiheadAttention (embrulho inerte): %s",
+                 len(inertes), inertes[:6])
 
     for name in targets:
         parts = name.split(".")
@@ -162,6 +183,7 @@ def apply_lora(
     return LoRASummary(
         rank=rank, alpha=alpha, dropout=dropout,
         module_names=tuple(targets), total_params=total, use_rslora=use_rslora,
+        modulos_inertes_ignorados=tuple(inertes),
     )
 
 

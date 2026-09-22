@@ -130,6 +130,7 @@ def montar(config: argparse.Namespace, device: Any) -> tuple[Any, Any, dict[str,
         "parametros_congelados": congelados,
         "parametros_do_adapter": len(nomes),
         "modulos_adaptados": list(resumo.module_names),
+        "modulos_inertes_ignorados": list(getattr(resumo, "modulos_inertes_ignorados", ())),
         "use_rslora": resumo.use_rslora,
         "rank": resumo.rank, "alpha": resumo.alpha, "dropout": resumo.dropout,
         "modo_do_backbone": "eval" if config.backbone_em_eval else "train",
@@ -250,9 +251,10 @@ def rodar_smoke(config: argparse.Namespace) -> int:
 
     # ---- 4) GRADIENTES antes do passo -------------------------------------------------------
     estado = treino.gradientes_do_adapter(backbone)
-    tudo &= checar("4b. gradientes presentes e finitos no adapter",
-                   not estado["sem_gradiente"] and not estado["nao_finitos"],
-                   f"sem_gradiente={estado['sem_gradiente'][:3]} nao_finitos={estado['nao_finitos'][:3]}")
+    tudo &= checar("4b. todo modulo adaptado ENTROU no grafo (nenhum embrulho inerte)",
+                   not estado["sem_gradiente"],
+                   f"sem_gradiente={estado['sem_gradiente'][:4]}")
+    tudo &= checar("4b2. nenhum gradiente nao finito", not estado["nao_finitos"], estado["nao_finitos"][:3])
     tudo &= checar("4c. ao menos um gradiente nao nulo", bool(estado["com_gradiente_nao_nulo"]),
                    f"{len(estado['com_gradiente_nao_nulo'])} de {estado['tensores_do_adapter']} tensores")
     tudo &= checar("4d. nenhum gradiente nos congelados", not estado["congelados_com_gradiente"],

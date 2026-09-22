@@ -309,6 +309,67 @@ def test_lote_com_janelas_de_larguras_diferentes_reprova():
     raise AssertionError("larguras diferentes tinham de reprovar")
 
 
+def test_lora_nao_embrulha_linear_dentro_de_multihead_attention():
+    """MEDIDO no R03 em 22/09: `nn.MultiheadAttention` passa `out_proj.weight` para
+    `F.multi_head_attention_forward` em vez de chamar o modulo. Embrulhar aquele Linear e INERTE: o delta nunca e
+    aplicado, os parametros ficam fora do grafo (`grad is None`) e mesmo assim o weight decay os move.
+    """
+    _exige_torch()
+
+    class ComMHA(nn.Module):
+        def __init__(self, d=8):
+            super().__init__()
+            self.emb = nn.Embedding(8, d)
+            self.mha = nn.MultiheadAttention(d, 2, batch_first=True)
+            self.proj = nn.Linear(d, d)
+            self.mlm_head = nn.Linear(d, 4)
+
+        def encode(self, input_ids):
+            x = self.emb(input_ids)
+            atendido, _ = self.mha(x, x, x, need_weights=False)
+            return {"last_hidden_state": self.proj(atendido)}
+
+    modelo = ComMHA()
+    treino.congelar_tudo(modelo)
+    resumo = apply_lora(modelo, rank=2, alpha=4, dropout=0.0, use_rslora=True)
+    assert "proj" in resumo.module_names, resumo.module_names
+    assert not any(n.startswith("mha.") for n in resumo.module_names), resumo.module_names
+    assert any("out_proj" in n for n in resumo.modulos_inertes_ignorados), resumo.modulos_inertes_ignorados
+
+    # E o que sobrou entra todo no grafo: nenhum `grad is None`.
+    class Env:
+        def __init__(self, m):
+            self._m = m
+
+        @property
+        def backbone(self):
+            return self._m
+
+        def forward_hidden_states(self, batch):
+            return self._m.encode(batch["input_ids"])["last_hidden_state"]
+
+    exemplo = mlm.montar_exemplo("ACGT" * 4, [(4, 7, mlm.TIPO_VARIANTE)], variant_id="v", fonte="global",
+                                 focal_index=5)
+    lote = treino.montar_lote([exemplo])
+    perda, _ = treino.perda_do_lote(treino.logits_mlm(Env(modelo), lote.input_ids), lote, mlm.PESOS_INICIAIS)
+    perda.backward()
+    estado = treino.gradientes_do_adapter(modelo)
+    assert not estado["sem_gradiente"], estado["sem_gradiente"]
+
+
+def test_gradientes_separam_ausente_de_zero():
+    _exige_torch()
+    _, modelo, _ = _monta()
+    lote = treino.montar_lote(_exemplos())
+    adapter, modelo2, _ = _monta()
+    perda, _ = treino.perda_do_lote(treino.logits_mlm(adapter, lote.input_ids), lote, mlm.PESOS_INICIAIS)
+    perda.backward()
+    estado = treino.gradientes_do_adapter(modelo2)
+    assert "com_gradiente_zero" in estado and "sem_gradiente" in estado
+    # lora_a no primeiro passo entra no grafo com gradiente ZERO, nao ausente.
+    assert any(n.endswith("lora_a") for n in estado["com_gradiente_zero"]), estado["com_gradiente_zero"][:5]
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     failed, skipped = 0, []

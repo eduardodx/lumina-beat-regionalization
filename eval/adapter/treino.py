@@ -234,9 +234,15 @@ def gradientes_do_adapter(modulo: nn.Module) -> dict[str, Any]:
     congelados_com_gradiente = sorted(
         nome for nome, p in modulo.named_parameters()
         if not p.requires_grad and p.grad is not None and float(p.grad.abs().sum()) > 0)
+    com_gradiente_zero = sorted(nome for nome, p in do_adapter.items()
+                                if p.grad is not None and float(p.grad.abs().sum()) == 0)
     return {
         "tensores_do_adapter": len(do_adapter),
         "sem_gradiente": sem_gradiente,
+        "com_gradiente_zero": com_gradiente_zero,
+        "diferenca": ("`sem_gradiente` = o modulo nem entrou no grafo (embrulho inerte, caminho nao percorrido); "
+                      "`com_gradiente_zero` = entrou e nao recebeu sinal (lora_a no primeiro passo, ou caminho "
+                      "tocado com magnitude zero). Sao diagnosticos diferentes"),
         "nao_finitos": nao_finitos,
         "com_gradiente_nao_nulo": sorted(n for n, v in normas.items() if v > 0),
         "congelados_com_gradiente": congelados_com_gradiente,

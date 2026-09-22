@@ -602,6 +602,33 @@ Ha teste para chave removida e para chave sobrando.
 **A loss e reescrita em tensores** porque `mlm.perda_ponderada` converte para `float` e romperia o gradiente. O
 teste que liga os dois mundos confere igualdade numerica entre as duas formulas — se divergirem, quebra.
 
+**Smoke do adapter no R03 real [22/09] — passou em quase tudo, e o que reprovou era defeito de verdade.**
+Confirmado no modelo: `checkpoint_sha256 = f2983560f8f965…`, que **bate com o contrato**; `lumina` importado do
+pacote deste repo; 597 parametros congelados; logits `(1, 4096, 4)`; loss em tensores igual a do nucleo sem
+torch; focal 4 / contexto 14 / referencia 23 posicoes; backbone congelado **identico por hash** apos o passo; e a
+instancia **nova**, construida da base com o adapter carregado, reproduzindo as predicoes com diferenca
+**0,00e+00**.
+
+**O que reprovou: 4 tensores com `grad is None`** — `strided_attn.out_proj` das camadas 8 e 17. A causa e do
+adapter, nao do smoke: **`nn.MultiheadAttention` nao chama o proprio `out_proj` como modulo**, ela repassa
+`out_proj.weight` para `F.multi_head_attention_forward`. Como o `LoRALinear` expoe `.weight` como propriedade do
+`base`, o embrulho fica **inerte**: o delta nunca e aplicado, os parametros ficam fora do grafo, e ainda assim
+entram no otimizador, onde o `weight_decay` os move.
+
+Eram **6 dos 105** modulos adaptados: `strided_attn` e os dois `anchor_*` das camadas 8 e 17, as de atencao
+esparsa. Os `anchor_*` eram inertes **duas vezes** — sem `variant_edit_mask`, o `backbone.py` toca os parametros
+deles com magnitude zero so para o DDP ver um conjunto constante de treinaveis, entao receberiam gradiente
+exatamente zero mesmo se o embrulho funcionasse.
+
+`apply_lora` passa a pular esses `Linear` e a declara-los em `modulos_inertes_ignorados`. **Numericamente nao
+muda nada** — eles nunca participaram do forward —, mas tira 6 tensores mortos do otimizador e corrige o
+manifesto, onde "105 modulos adaptados" superestimava a superficie real. A superficie efetiva do adapter no R03
+e de **99 modulos**, a congelar com `--modulos-esperados` depois de revista.
+
+O diagnostico tambem ficou mais fino: `sem_gradiente` (nem entrou no grafo) passou a ser separado de
+`com_gradiente_zero` (entrou e nao recebeu sinal, como `lora_a` no primeiro passo). Estavam juntos e sao
+perguntas diferentes.
+
 **[ABERTO] Confundimento espacial entre as duas fontes.** O pool do ABraOM é concentrado onde o ABraOM tem dado —
 o chr16 aparece mais que o chr1, que é cinco vezes maior. Se o lado global for amostrado uniformemente pelo genoma,
 as duas metades da mistura passam a diferir **também pela localização**, e o adapter pode separar "global" de
