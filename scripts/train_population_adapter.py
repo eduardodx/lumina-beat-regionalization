@@ -73,6 +73,16 @@ FAMILIA = "lumina-r03"
 COLUNAS = ("variant_id", "chrom", "pos_1based", "ref", "alt", "focal_index", "window_start", "spans", "fonte")
 
 
+def pico_de_memoria_mb() -> float | None:
+    """Pico de RSS do processo. Em Linux `ru_maxrss` vem em KB; em macOS, em bytes. None no Windows."""
+    try:
+        import resource
+    except ImportError:  # Windows
+        return None
+    pico = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return round(pico / 1024, 1) if sys.platform.startswith("linux") else round(pico / (1024 * 1024), 1)
+
+
 def revisao_do_codigo() -> str:
     """O commit que rodou. `lumina.__file__` diz ONDE o pacote estava, nao QUAL versao havia ali."""
     import subprocess
@@ -477,6 +487,9 @@ def rodar_treino(config: argparse.Namespace) -> int:
     from eval.adapter import mlm, treino
 
     inicializar_aleatoriedade(config.seed)
+    import time
+
+    relogio = {"inicio": time.monotonic()}
     device = torch.device(config.device)
     fetch, leitor = abrir_fasta(config.fasta.expanduser())
     pesos = {mlm.CATEGORIA_FOCAL: config.peso_focal, mlm.CATEGORIA_CONTEXTO: config.peso_contexto,
@@ -495,6 +508,11 @@ def rodar_treino(config: argparse.Namespace) -> int:
         validacao_exemplos, falhas_validacao = carregar_exemplos(
             config.plano_validacao, fetch, window_bp=config.window_bp, limite=config.limite_validacao,
             seed=config.seed + 1)
+
+    relogio["exemplos_prontos"] = time.monotonic()
+    print(f"  [carga] {len(treino_exemplos)} exemplos de treino e {len(validacao_exemplos)} de validacao em "
+          f"{relogio['exemplos_prontos'] - relogio['inicio']:.0f}s  "
+          f"(pico de memoria ate aqui: {pico_de_memoria_mb()} MB)")
 
     adapter, resumo, proveniencia = montar(config, device)
     proveniencia["revisao_do_codigo"] = revisao_do_codigo()
@@ -540,6 +558,7 @@ def rodar_treino(config: argparse.Namespace) -> int:
         print(f"  [base]        focal_val={linha_de_base['criterio_primario']['valor']:.4f}  "
               f"({linha_de_base['sistema']})")
 
+    relogio["modelo_pronto"] = time.monotonic()
     config.out_dir.expanduser().mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(config.seed)
     historico: list[dict[str, Any]] = []
@@ -678,6 +697,22 @@ def rodar_treino(config: argparse.Namespace) -> int:
                         "posicoes focais nao equivale ao numero de observacoes independentes: respeitar os locos"),
         }
 
+    relogio["fim"] = time.monotonic()
+    custo = {
+        "segundos_carregando_exemplos": round(relogio["exemplos_prontos"] - relogio["inicio"], 1),
+        "segundos_montando_o_modelo": round(relogio["modelo_pronto"] - relogio["exemplos_prontos"], 1),
+        "segundos_no_laco": round(relogio["fim"] - relogio["modelo_pronto"], 1),
+        "segundos_por_atualizacao": round((relogio["fim"] - relogio["modelo_pronto"]) / atualizacoes, 2)
+        if atualizacoes else None,
+        "pico_de_memoria_mb": pico_de_memoria_mb(),
+        "exemplos_de_treino_na_memoria": len(treino_exemplos),
+        "o_que_nao_separa": ("o tempo do laco inclui as validacoes; para separar, comparar corridas com "
+                             "--validar-a-cada diferente"),
+    }
+    print(f"  [custo] carga {custo['segundos_carregando_exemplos']}s, modelo "
+          f"{custo['segundos_montando_o_modelo']}s, laco {custo['segundos_no_laco']}s "
+          f"({custo['segundos_por_atualizacao']}s/atualizacao), pico {custo['pico_de_memoria_mb']} MB")
+
     valor_da_base = linha_de_base["criterio_primario"]["valor"] if linha_de_base else None
     if melhor and caminho_melhor.exists():
         melhor["sha256"] = sha256_file(caminho_melhor)
@@ -730,6 +765,7 @@ def rodar_treino(config: argparse.Namespace) -> int:
                                     "ABAIXO, a media geometrica e superior a 25%. Nao mede acuracia nem "
                                     "demonstra exposicao ou ausencia de variacao no pre-treino")},
                     "agregacao_da_validacao": "soma e contagem de posicoes, nunca media de medias"},
+        "custo": custo,
         "retomada": retomada or None,
         "historico": historico,
         "atualizacoes_do_otimizador": atualizacoes,
@@ -747,8 +783,8 @@ def rodar_treino(config: argparse.Namespace) -> int:
     (out_dir / "treino_do_adapter.json").write_text(
         json.dumps(relatorio, ensure_ascii=False, indent=2, sort_keys=True, default=str), encoding="utf-8")
     print(json.dumps({k: relatorio[k] for k in ("receita", "atualizacoes_do_otimizador", "motivo_de_parada",
-                                                "backbone_congelado_intacto", "melhor_por_validacao",
-                                                "final_pior_que_a_base", "saidas")},
+                                                "backbone_congelado_intacto", "custo",
+                                                "melhor_por_validacao", "final_pior_que_a_base", "saidas")},
                      ensure_ascii=False, indent=2, default=str))
     if delta:
         print(json.dumps({"delta_da_validacao": delta}, ensure_ascii=False, indent=2, default=str))
