@@ -42,12 +42,32 @@
     "o_que_o_desenvolvimento_nao_mede": "a interacao regional. Os recortes de desenvolvimento excluem membros dos estudos e a regra ampla brasileira, entao nao ha casos de participacao brasileira neles: M0 x MR aqui mede classificacao geral, nao o efeito regional"
   },
   "sementes": {
-    "adapter": [20260921, 20260922, 20260923],
-    "cabeca": [11, 12, 13],
+    "adapter": [
+      20260921,
+      20260922,
+      20260923
+    ],
+    "cabeca": [
+      11,
+      12,
+      13
+    ],
     "combinacoes": [
-      {"indice": 1, "adapter": 20260921, "cabeca": 11},
-      {"indice": 2, "adapter": 20260922, "cabeca": 12},
-      {"indice": 3, "adapter": 20260923, "cabeca": 13}
+      {
+        "indice": 1,
+        "adapter": 20260921,
+        "cabeca": 11
+      },
+      {
+        "indice": 2,
+        "adapter": 20260922,
+        "cabeca": 12
+      },
+      {
+        "indice": 3,
+        "adapter": 20260923,
+        "cabeca": 13
+      }
     ],
     "regra": "MR_i = adapter de semente a_i + cabeca de semente h_i. M0_i = R03 sem adapter + cabeca h_i: as MESMAS sementes de cabeca nos dois sistemas, para o par (M0_i, MR_i) compartilhar inicializacao e ordem dos dados. Predicao de cada sistema = media das 3 probabilidades calibradas; metricas tambem por combinacao. Cruzar 3 x 3 daria 9 cabecas ao MR e 3 ao M0, e ensembles de tamanhos diferentes nao se comparam",
     "desenvolvimento": "enquanto so houver o adapter a_1, MR_dev = a_1 com h_1, h_2 e h_3: a variacao entre sementes de adapter nao entra, e os intervalos nao a incluem",
@@ -56,21 +76,32 @@
   },
   "adapter_do_mr": {
     "receita": {
-      "lr": 5e-6,
+      "lr": 5e-06,
       "passos": 3000,
       "exemplos_por_passo": 8,
       "batch": 1,
       "aquecimento": 2,
       "weight_decay": 0.01,
       "clip_norma": 1.0,
-      "pesos": {"focal_alt": 1.0, "contexto_da_variante": 0.5, "referencia": 0.5},
+      "pesos": {
+        "focal_alt": 1.0,
+        "contexto_da_variante": 0.5,
+        "referencia": 0.5
+      },
       "limite_validacao": 800,
       "validar_a_cada": 250,
       "backbone_em_eval": true,
-      "lora": {"rank": 8, "alpha": 16, "rslora": true}
+      "lora": {
+        "rank": 8,
+        "alpha": 16,
+        "rslora": true
+      }
     },
     "superficie": "configs/adapter_r03_superficie.json",
-    "planos_sha256_prefixo": {"treino": "c76d08d4", "validacao": "034eca34"},
+    "planos_sha256_prefixo": {
+      "treino": "c76d08d4",
+      "validacao": "034eca34"
+    },
     "checkpoint": "adapter_melhor.pt de cada semente: o de menor focal_alt na validacao do adapter (criterio primario declarado)",
     "se_nenhum_checkpoint_supera_a_base": "nao ha MR com esta receita: parar e rediscutir, sem trocar de receita olhando metrica clinica",
     "proibido": "escolher adapter, receita ou checkpoint por metrica clinica ou por diagnostico do MLM",
@@ -80,5 +111,21 @@
     "natureza": "exploratoria",
     "clinico_de_desenvolvimento": "bootstrap por overlap_cluster_id no conjunto de selecao, com os mesmos sorteios para M0 e MR",
     "adapter": "bootstrap por loco na validacao do adapter"
+  },
+  "adapters_congelados": {
+    "20260921": {
+      "arquivo": "~/artifacts/redesenho/g4_corrida2/adapter_melhor.pt",
+      "sha256": "6327a9fa8846389dd815b4c91499280ca33019227e3b476f209bec9e682b4a05",
+      "passo": 2999,
+      "focal_alt_validacao": {
+        "base": 1.7331,
+        "adapter": 1.6008,
+        "delta": -0.1323
+      },
+      "supera_a_base": true,
+      "congelado_em": "2026-09-23",
+      "pela_regra": "adapter_do_mr.checkpoint: menor focal_alt na validacao do adapter; nenhuma metrica clinica consultada",
+      "nota": "adapter.pt da mesma corrida tem outro sha256 so porque grava menos proveniencia (sem o hash do plano de validacao); a regra aponta para adapter_melhor.pt"
+    }
   }
 }

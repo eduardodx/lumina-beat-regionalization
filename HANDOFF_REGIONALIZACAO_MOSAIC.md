@@ -514,6 +514,27 @@ fechamento do terminal. Log completo em `~/artifacts/redesenho/g4_corrida2.log`;
 `python3 scripts/resumir_treino_do_adapter.py ~/artifacts/redesenho/g4_corrida2` (funciona também na corrida
 `g4_lr5e6`, cuja curva nunca foi vista).
 
+**Resultado da corrida a₁ (23/09, `exit=0`), lido pelas regras declaradas:**
+
+| | ABraOM | global |
+|---|---:|---:|
+| `focal_alt` (base → final) | 1,7724 → 1,6378 | 1,7066 → 1,5758 |
+| delta, IC 95% exploratório por loco | −0,135 [−0,169; −0,102] | −0,131 [−0,162; −0,101] |
+| termo de massa / termo de escolha | −0,120 / −0,014 | −0,107 / −0,024 |
+| ALT em 1º entre as não-referência | +0,006 [−0,006; +0,019] | +0,004 [−0,002; +0,013] |
+| entropia no focal | +0,068 | +0,068 |
+| perda nas posições de referência | +0,009 | +0,006 |
+
+- **Critério primário:** 1,7331 → **1,6008** (−0,132) nas 800 janelas; curva monotônica, achatando depois de ~1.750
+  passos (quando o cosseno leva a taxa perto de zero); melhor = último. Pela regra, **a₁ = `adapter_melhor.pt`
+  `6327a9fa…` está congelado** (registrado em `adapters_congelados` na declaração).
+- **Diagnósticos (descrição):** 82–89% do ganho está no termo de massa (global e ABraOM); a **ordem** entre as alternativas não se
+  moveu de forma distinguível; entropia subiu e a referência piorou. O que mudou no MLM foi sobretudo a confiança
+  nas posições mascaradas.
+- **Fontes:** nenhuma diferença distinguível (`focal_ce` −0,004 [−0,051; +0,042]). Não substitui o MG × MR.
+- **Linha de base útil:** o R03 já põe o ALT verdadeiro em 1º entre as três não-referência em 44,7% (ABraOM) e
+  48,3% (global) das janelas (acaso: 33,3%).
+
 **Próximos passos:**
 1. **G3, extração e cache por sistema** (M0 agora; MR quando a₁ terminar), cobrindo o treino de `nenhum` (as três
    políticas são aninhadas), o fold 1 e a seleção comum — e recusando o papel `test` e os estudos por construção.
@@ -535,11 +556,23 @@ fechamento do terminal. Log completo em `~/artifacts/redesenho/g4_corrida2.log`;
 | `windows.py` portado e auditoria de janelas | `44bf674` |
 | `variant_encoder` no otimizador e recarga do rsLoRA na avaliação | `101bec9` |
 
-**Falta:** cache de embeddings por sistema com a chave ampliada (checkpoint, adapter, versão do extrator, FASTA,
-janela, orientação, configuração e ordem das features); cabeça para a extração nova (a `RegimeAHead` espera a
-leitura antiga); o smoke real do M0 no R03; e o consumidor da avaliação do Mosaic (deltas, interação e bootstrap
-conjunto por cluster, nos dois estudos). **Primeiro passo:** levantar o que o `eval/clinvar/train.py` já faz com
-`rank=0` e o que falta para as duas extrações candidatas do G5.
+**Caminho escolhido em 23/09: cache, não treino ponta a ponta.** O `eval/clinvar/train.py` refaz o forward do
+backbone a cada época. Com o backbone congelado em M0 e em MR, isso dá o mesmo número a um custo de horas por
+época; extrair uma vez e treinar as cabeças sobre o cache é exato e barato.
+
+**Escrito em 23/09 (testes sem GPU passando; smoke real pendente):**
+
+| Peça | O que faz |
+|---|---|
+| `eval/campanha/recortes.py` | lê a declaração e **impõe** os recortes: recusa o papel `test`, variante do fold 0 em qualquer entrada, membro dos estudos, chr8 e variante em dois papéis |
+| `eval/campanha/layout.py` | lote de tamanho fixo `[ref_0, alt_0, …]`, completado com cópias; limites do contexto local; dimensões das extrações |
+| `eval/campanha/leituras.py` | as duas candidatas do mesmo forward: `cabecas_172` (68 W·Δ + 10 MLP + 78 na referência + 16 de substituição) e `leitura_antiga_1344` (sítio, alt − ref, média em `[f−64, f+64)`) |
+| `scripts/extract_campaign_features.py` | carrega M0 ou MR (confere o sha do adapter contra a declaração, a superfície de 99 módulos e o conjunto exato de chaves), extrai em fragmentos retomáveis, recusa retomar com identidade diferente; `--smoke` mede custo, determinismo, independência da posição no lote e, em MR, que o adapter está ativo |
+
+**Falta:** o smoke real no R03 (mede o custo que decide o escopo); a extração do M0 (treino de `nenhum` + fold 1 +
+seleção); a cabeça sobre o cache com as sementes declaradas; o G5 só com M0; a extração do MR; o comparador
+exploratório M0 × MR na seleção comum; e, para o G7, o consumidor do Mosaic (interação e bootstrap conjunto por
+cluster, nos dois estudos).
 
 ### 14.8 O padrão de erro a não repetir
 
