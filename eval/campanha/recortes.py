@@ -132,6 +132,20 @@ def hash_da_tabela(tabela: pd.DataFrame) -> str:
     return hashlib.sha256("\n".join(linhas).encode("utf-8")).hexdigest()
 
 
+def hash_do_conteudo(tabela: pd.DataFrame) -> str:
+    """Hash de CONTEUDO: toda coluna que a extracao ou a cabeca leem -- coordenadas, alelos, rotulo, painel,
+    cluster, tier e papel --, linha a linha, em ordem canonica. O de composicao (`hash_da_tabela`) so via
+    `variant_id + papel`: trocar uma coordenada ou um rotulo o preservava (revisao de 23/09)."""
+    colunas = list(COLUNAS) + ["papel"]
+    faltando = [c for c in colunas if c not in tabela.columns]
+    if faltando:
+        raise ValueError(f"tabela sem as colunas {faltando}")
+    ordenada = tabela[colunas].sort_values(["papel", "variant_id"], kind="mergesort")
+    linhas = ["\t".join(colunas)] + ["\t".join(map(str, valores))
+                                      for valores in ordenada.itertuples(index=False, name=None)]
+    return hashlib.sha256("\n".join(linhas).encode("utf-8")).hexdigest()
+
+
 def resumo_da_tabela(tabela: pd.DataFrame) -> dict[str, Any]:
     """Tamanho, classes e paineis por papel -- o que se confere antes de gastar GPU."""
     saida: dict[str, Any] = {}

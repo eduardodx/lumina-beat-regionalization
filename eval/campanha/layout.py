@@ -1,8 +1,9 @@
 """Layout do lote e das extracoes: a parte sem torch, testavel no Windows.
 
 A numerica das leituras depende do TAMANHO do forward (cuBLAS/cuDNN/Mamba escolhem algoritmo por ele; a pesquisa
-mediu ~2e-3 entre tamanhos), nao do conteudo das outras linhas. Por isso o lote tem tamanho fixo e o ultimo e
-completado com copias: toda variante e calculada nas mesmas condicoes, em M0 e em MR.
+mediu ~2e-3 entre tamanhos) e, muito menos, das outras linhas do lote (1e-6 no smoke de 23/09). Por isso o lote tem
+tamanho fixo, o ultimo e completado com copias e a ordem da tabela e fixa: toda variante e calculada nas mesmas
+condicoes, em M0 e em MR.
 """
 from __future__ import annotations
 

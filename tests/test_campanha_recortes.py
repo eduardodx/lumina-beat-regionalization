@@ -92,6 +92,17 @@ class RecortesTests(unittest.TestCase):
         embaralhada = tabela.sample(frac=1.0, random_state=3)
         self.assertEqual(recortes.hash_da_tabela(tabela), recortes.hash_da_tabela(embaralhada))
 
+    def test_hash_de_conteudo_pega_coordenada_e_rotulo(self):
+        # O de composicao (variant_id + papel) nao mudava com eles: foi o que a revisao de 23/09 reproduziu.
+        tabela = recortes.tabela_de_extracao(*_entradas())
+        for coluna, valor in (("pos_1based", 1001), ("binary_label", 0), ("alt", "T"),
+                              ("overlap_cluster_id", "outro")):
+            trocada = tabela.copy()
+            trocada.loc[0, coluna] = valor
+            self.assertEqual(recortes.hash_da_tabela(tabela), recortes.hash_da_tabela(trocada))
+            self.assertNotEqual(recortes.hash_do_conteudo(tabela), recortes.hash_do_conteudo(trocada), coluna)
+        self.assertEqual(recortes.hash_do_conteudo(tabela), recortes.hash_do_conteudo(tabela.iloc[::-1]))
+
     def test_resumo_conta_rotulos_e_clusters(self):
         resumo = recortes.resumo_da_tabela(recortes.tabela_de_extracao(*_entradas()))
         self.assertEqual(resumo["train"]["variantes"], 2)

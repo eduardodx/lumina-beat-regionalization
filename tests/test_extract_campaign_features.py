@@ -1,6 +1,5 @@
-"""Extrator do G3: o que se testa sem GPU -- identidade do cache, retomada e nomes indefinidos."""
+"""Extrator do G3: o que se testa sem GPU -- identidade do cache, tabela gravada, retomada e nomes indefinidos."""
 import builtins
-import json
 import symtable
 import sys
 import tempfile
@@ -8,22 +7,35 @@ import unittest
 from argparse import Namespace
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts import extract_campaign_features as extrator  # noqa: E402
 
 
-def _tabela():
-    return pd.DataFrame({"variant_id": ["a", "b", "c"], "papel": ["train", "validation", "selecao"]})
+def _tabela(**troca):
+    linhas = [
+        {"variant_id": "a", "papel": "train", "chrom": "chr1", "pos_1based": 100, "ref": "A", "alt": "G",
+         "binary_label": 1, "primary_panel": "missense", "overlap_cluster_id": "c1", "label_tier": "gold"},
+        {"variant_id": "b", "papel": "validation", "chrom": "chr2", "pos_1based": 200, "ref": "C", "alt": "T",
+         "binary_label": 0, "primary_panel": "splice", "overlap_cluster_id": "c2", "label_tier": "gold"},
+        {"variant_id": "c", "papel": "selecao", "chrom": "chr3", "pos_1based": 300, "ref": "G", "alt": "A",
+         "binary_label": 0, "primary_panel": "plof", "overlap_cluster_id": "c3", "label_tier": "consensus"},
+    ]
+    tabela = pd.DataFrame(linhas)
+    for coluna, valor in troca.items():
+        tabela.loc[0, coluna] = valor
+    return tabela
 
 
-def _ident(**troca):
-    args = Namespace(sistema="MR", semente_do_adapter=20260921, window_bp=4096, variantes_por_lote=8)
-    base = extrator.identidade(args, tabela=_tabela(), checkpoint_sha="f2983560" + "0" * 56,
-                               adapter_sha="6327a9fa" + "0" * 56, fasta_sha="056974f6" + "0" * 56,
-                               revisao="abc")
+def _ident(tabela=None, variantes_por_lote=8, **troca):
+    args = Namespace(sistema="MR", semente_do_adapter=20260921, window_bp=4096,
+                     variantes_por_lote=variantes_por_lote, fragmento=4096)
+    base = extrator.identidade(args, tabela=_tabela() if tabela is None else tabela,
+                               checkpoint_sha="f2983560" + "0" * 56, adapter_sha="6327a9fa" + "0" * 56,
+                               fasta_sha="056974f6" + "0" * 56, revisao="abc",
+                               codigo={"arquivos": {"eval/campanha/leituras.py": "1" * 64}},
+                               ambiente={"torch": "2.x", "gpu": "A10G"})
     base.update(troca)
     return base
 
@@ -45,7 +57,14 @@ class ExtratorTests(unittest.TestCase):
         self.assertEqual(ident["indice_focal"], 2047)
         self.assertEqual(ident["extracoes"]["cabecas_172"]["dims"], 172)
         self.assertEqual(ident["papeis"], ["selecao", "train", "validation"])
-        self.assertEqual(len(ident["tabela_sha256_composicao"]), 64)
+        self.assertEqual(len(ident["tabela_sha256_conteudo"]), 64)
+        self.assertIn("codigo", ident)
+        self.assertIn("ambiente", ident)
+
+    def test_arquivos_declarados_existem(self):
+        raiz = Path(extrator.__file__).resolve().parents[1]
+        faltando = [a for a in extrator.ARQUIVOS_QUE_DETERMINAM_AS_FEATURES if not (raiz / a).exists()]
+        self.assertEqual(faltando, [])
 
     def test_cache_novo_grava_e_retomada_igual_passa(self):
         with tempfile.TemporaryDirectory() as pasta:
@@ -53,27 +72,34 @@ class ExtratorTests(unittest.TestCase):
             self.assertIsNone(extrator.conferir_identidade(destino, _ident()))
             self.assertTrue((destino / "identidade.json").exists())
             self.assertIsNone(extrator.conferir_identidade(destino, _ident(revisao_do_codigo="outra")),
-                              "revisao do codigo nao muda numero: nao bloqueia a retomada")
+                              "o commit do git sozinho nao muda numero: nao bloqueia a retomada")
 
-    def test_retomada_com_outro_sistema_ou_outro_lote_e_recusada(self):
+    def test_retomada_com_outro_adapter_lote_codigo_ou_ambiente_e_recusada(self):
         with tempfile.TemporaryDirectory() as pasta:
             destino = Path(pasta, "cache")
             extrator.conferir_identidade(destino, _ident())
-            problema = extrator.conferir_identidade(destino, _ident(adapter_sha256="outro"))
-            self.assertIn("adapter_sha256", problema)
-            args = Namespace(sistema="MR", semente_do_adapter=20260921, window_bp=4096, variantes_por_lote=4)
-            outro_lote = extrator.identidade(args, tabela=_tabela(), checkpoint_sha="f2983560" + "0" * 56,
-                                             adapter_sha="6327a9fa" + "0" * 56, fasta_sha="056974f6" + "0" * 56,
-                                             revisao="abc")
-            self.assertIn("lote", extrator.conferir_identidade(destino, outro_lote))
+            for troca, campo in ((_ident(adapter_sha256="outro"), "adapter_sha256"),
+                                 (_ident(variantes_por_lote=4), "lote"),
+                                 (_ident(codigo={"arquivos": {"eval/campanha/leituras.py": "2" * 64}}), "codigo"),
+                                 (_ident(ambiente={"torch": "2.x", "gpu": "H100"}), "ambiente")):
+                self.assertIn(campo, extrator.conferir_identidade(destino, troca))
 
-    def test_ja_extraidas_junta_os_fragmentos(self):
+    def test_coordenada_ou_rotulo_trocado_muda_a_identidade(self):
+        # Antes o hash era so de variant_id + papel: trocar uma coordenada preservava a identidade.
+        with tempfile.TemporaryDirectory() as pasta:
+            destino = Path(pasta, "cache")
+            extrator.conferir_identidade(destino, _ident())
+            for tabela in (_tabela(pos_1based=101), _tabela(binary_label=0)):
+                self.assertIn("tabela_sha256_conteudo", extrator.conferir_identidade(destino, _ident(tabela)))
+
+    def test_tabela_gravada_na_criacao_e_so_conferida_na_retomada(self):
         with tempfile.TemporaryDirectory() as pasta:
             destino = Path(pasta)
-            for i, ids in enumerate((["a", "b"], ["c"])):
-                np.savez(destino / f"fragmento_{i:05d}.npz", variant_id=np.array(ids),
-                         papel=np.array(["train"] * len(ids)), cabecas_172=np.zeros((len(ids), 172)))
-            self.assertEqual(extrator.ja_extraidas(destino), {"a", "b", "c"})
+            self.assertIsNone(extrator.conferir_tabela_gravada(destino, _tabela(), novo=True))
+            gravada = (destino / "tabela.parquet").read_bytes()
+            self.assertIsNone(extrator.conferir_tabela_gravada(destino, _tabela(), novo=False))
+            self.assertIn("nao confere", extrator.conferir_tabela_gravada(destino, _tabela(pos_1based=5), novo=False))
+            self.assertEqual((destino / "tabela.parquet").read_bytes(), gravada, "a retomada nao reescreve")
 
     def test_mr_sem_adapter_e_recusado_antes_de_carregar_qualquer_coisa(self):
         self.assertEqual(extrator.main(["--sistema", "MR", "--checkpoint", "x", "--fasta", "x", "--snapshot", "x",

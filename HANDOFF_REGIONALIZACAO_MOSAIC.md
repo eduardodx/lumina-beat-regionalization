@@ -569,10 +569,33 @@ backbone a cada época. Com o backbone congelado em M0 e em MR, isso dá o mesmo
 | `eval/campanha/leituras.py` | as duas candidatas do mesmo forward: `cabecas_172` (68 W·Δ + 10 MLP + 78 na referência + 16 de substituição) e `leitura_antiga_1344` (sítio, alt − ref, média em `[f−64, f+64)`) |
 | `scripts/extract_campaign_features.py` | carrega M0 ou MR (confere o sha do adapter contra a declaração, a superfície de 99 módulos e o conjunto exato de chaves), extrai em fragmentos retomáveis, recusa retomar com identidade diferente; `--smoke` mede custo, determinismo, independência da posição no lote e, em MR, que o adapter está ativo |
 
-**Falta:** o smoke real no R03 (mede o custo que decide o escopo); a extração do M0 (treino de `nenhum` + fold 1 +
-seleção); a cabeça sobre o cache com as sementes declaradas; o G5 só com M0; a extração do MR; o comparador
-exploratório M0 × MR na seleção comum; e, para o G7, o consumidor do Mosaic (interação e bootstrap conjunto por
-cluster, nos dois estudos).
+**Smoke no R03 (23/09): M0 e MR passaram.** Tabela de 171.720 variantes; determinismo do mesmo lote = 0 exato;
+dependência da vizinhança no lote = 1,9e-6 (M0) e 1,4e-6 (MR) — não zero, como a pesquisa tinha medido; o que
+protege a comparação é o protocolo idêntico nos dois sistemas, registrado com a tolerância de 1e-5. Adapter ativo
+na representação sem máscara (0,66 nas 172 dims, 0,051 na leitura antiga: mostra que está ativo, não que melhora,
+e as duas escalas não se comparam). Custo: M0 ~2,4 h, MR ~3,3 h. As janelas conferidas no smoke são só as 48 da
+amostra; a tabela inteira é conferida na extração.
+
+**Revisão de 23/09 do cache, antes da rodada longa (reproduzida e corrigida, `eval/campanha/cache.py`):**
+
+| Defeito | Correção |
+|---|---|
+| "completo" com variante faltando (`len(total) == len(tabela) − falhas`) | completo = **toda** variante da tabela no cache; falha de janela sai em `falhas.json` e dá saída 2 |
+| identidade só com `variant_id + papel` | hash de **conteúdo** (coordenadas, alelos, rótulo, painel, cluster, tier, papel), sha256 dos arquivos que determinam os números e do pacote `lumina` importado, e ambiente (torch, CUDA, GPU) |
+| tabela reescrita a cada retomada | gravada uma vez na criação; na retomada, só conferida |
+| fragmento gravado direto no nome final | temporário + `fsync` + troca atômica; `.tmp` de queda é apagado na retomada |
+| retomada lia só os ids | cada fragmento é validado: legível, formas, finitude, duplicatas, ids e papéis contra a tabela |
+| próximo fragmento = contagem de arquivos | maior índice + 1 |
+| finitude conferida só no smoke | conferida em todo fragmento, antes de gravar |
+| duas execuções no mesmo cache | trava com o PID; trava de processo morto é removida com aviso |
+
+Consequência operacional: **durante a extração, não mudar os arquivos listados em
+`ARQUIVOS_QUE_DETERMINAM_AS_FEATURES`** — uma retomada seria recusada. O código novo do G3 vai em arquivos novos.
+
+**Falta:** o ensaio curto do caminho completo (só a validação, ~3 min); a extração do M0 e do MR (~5,7 h, com log
+por tentativa e PID); a cabeça sobre o cache com as sementes declaradas; o G5 só com M0; o comparador exploratório
+M0 × MR na seleção comum; e, para o G7, o consumidor do Mosaic (interação e bootstrap conjunto por cluster, nos dois
+estudos).
 
 ### 14.8 O padrão de erro a não repetir
 

@@ -4,7 +4,9 @@ O lote tem layout fixo ``[ref_0, alt_0, ref_1, alt_1, ...]``: ref e alt de cada 
 forward. Isso importa porque cuBLAS/cuDNN/Mamba escolhem algoritmo pelo tamanho do lote e a soma em float nao e
 associativa: o mesmo par em lotes de tamanhos diferentes muda ~2e-3 (medido na pesquisa, `PROBE_BATCH_SIZE`).
 Com o tamanho de lote FIXO -- e o ultimo lote completado com copias -- toda variante e calculada nas mesmas
-condicoes, em M0 e em MR. Nao ha contaminacao entre linhas do lote (medido: invariancia de conteudo exata).
+condicoes, em M0 e em MR. A vizinhanca no lote NAO e exatamente neutra: no smoke de 23/09 a mesma variante mudou
+1,9e-6 (M0) e 1,4e-6 (MR) conforme as outras linhas (a pesquisa tinha medido 0). O que protege a comparacao e o
+protocolo: mesma tabela, mesma ordem e mesmo tamanho de lote nos dois sistemas.
 
 - ``cabecas_172``: W.Delta das 7 cabecas lineares (68) + delta das 3 MLP (10) + as cabecas na referencia (78) +
   one-hot da substituicao (16). A candidata da pesquisa de extracao (`eval/embedding_probe/rich.py`).

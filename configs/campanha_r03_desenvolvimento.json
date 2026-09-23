@@ -125,7 +125,7 @@
       "supera_a_base": true,
       "congelado_em": "2026-09-23",
       "pela_regra": "adapter_do_mr.checkpoint: menor focal_alt na validacao do adapter; nenhuma metrica clinica consultada",
-      "nota": "adapter.pt da mesma corrida tem outro sha256 so porque grava menos proveniencia (sem o hash do plano de validacao); a regra aponta para adapter_melhor.pt"
+      "nota": "adapter.pt da mesma corrida tem outro sha256. O codigo sugere que a diferenca e so de proveniencia gravada (o adapter.pt nao grava o hash do plano de validacao), mas isso NAO foi verificado comparando tensores. Nao bloqueia: a regra e o extrator apontam para adapter_melhor.pt"
     }
   }
 }
