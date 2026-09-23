@@ -625,8 +625,23 @@ na política escolhida; empate exato fica com `cabecas_172`. Quem roda o G5 conf
 Viés conhecido e declarado no comparador: o conjunto de seleção escolheu a configuração do M0 no G5 (a melhor de
 6), então a macro do M0 ali tende a estar sorteada para cima e o delta MR − M0, se tanto, puxado para baixo.
 
-**Falta:** o MR terminar (~3,6 h); o G5 (só M0, pode rodar já, na CPU); o comparador exploratório depois do G5 e do
-MR; e, para o G7, o consumidor do Mosaic (interação e bootstrap conjunto por cluster, nos dois estudos).
+**Extração MR (23/09): completa.** 171.720 de 171.720, zero falha, `exit_MR=0`, 0,074 s/variante.
+
+**G5 (23/09, só M0, regra da extração confirmada pelo Gabriel ao rodar): `leitura_antiga_1344` + `janela2048`.**
+Macro-AUROC (missense/splice/noncoding) no conjunto de seleção, 3 sementes:
+
+| | `janela4096` (86.560) | `janela2048` (99.992) | `nenhum` (167.346) | política pela regra |
+|---|---:|---:|---:|---|
+| `cabecas_172` | 0,9004 | 0,9024 | 0,9095 | `janela4096` (a 0,0091 da melhor) |
+| `leitura_antiga_1344` | 0,9056 | **0,9144** | 0,9193 | `janela2048` (a 0,0049; `janela4096` fica a 0,0137, fora) |
+
+A leitura antiga vence nas três políticas (+0,005 a +0,012), e na escolhida a pior semente dela (0,9133) passa a
+melhor da de 172 (0,9044) — coerente com a pesquisa de extração, onde as 172 dims eram candidata, não vencedora. A
+política troca ~0,005 de macro por mais isolamento de locus, como a regra prevê. Decisão em
+`~/artifacts/redesenho/g5/g5_decisao.json`, com o sha da identidade do cache do M0 e dos três snapshots.
+
+**Falta:** o comparador exploratório (disparado encadeado ao G5); e, para o G7, o consumidor do Mosaic (interação e
+bootstrap conjunto por cluster, nos dois estudos).
 
 ### 14.8 O padrão de erro a não repetir
 
