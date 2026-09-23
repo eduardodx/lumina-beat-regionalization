@@ -640,8 +640,26 @@ melhor da de 172 (0,9044) — coerente com a pesquisa de extração, onde as 172
 política troca ~0,005 de macro por mais isolamento de locus, como a regra prevê. Decisão em
 `~/artifacts/redesenho/g5/g5_decisao.json`, com o sha da identidade do cache do M0 e dos três snapshots.
 
-**Falta:** o comparador exploratório (disparado encadeado ao G5); e, para o G7, o consumidor do Mosaic (interação e
-bootstrap conjunto por cluster, nos dois estudos).
+**Comparação exploratória M0 × MR (23/09; leitura antiga + `janela2048`; adapter a₁; cabeças 11/12/13):**
+
+| No conjunto de seleção (média das 3 cabeças) | M0 | MR | delta | IC 95% exploratório (1.000, por cluster) |
+|---|---:|---:|---:|---|
+| macro (missense/splice/noncoding) | 0,9178 | 0,9137 | **−0,0041** | [−0,0090; +0,0010] |
+| AUROC geral | 0,9683 | 0,9658 | −0,0025 | [−0,0051; −0,0006] |
+| AUPRC geral | 0,9228 | 0,9206 | −0,0022 | [−0,0057; +0,0013] |
+
+Por painel: missense −0,0037, splice −0,0005, noncoding −0,0083. Por semente (macro): −0,0036, −0,0098, −0,0002.
+As cabeças do M0 reproduzem exatamente as do G5 (mesmas sementes e linhas).
+
+**Leitura, pela regra combinada antes de ver o número:** na classificação geral o MR fica **levemente abaixo** do M0,
+com o mesmo sinal em todas as sementes e painéis, e o IC do critério declarado (macro) cruza zero. **Não há sinal de
+melhora.** A AUROC geral tem IC abaixo de zero, mas ela é dominada pela separação entre painéis (plof quase só P,
+synonymous só B) e não é o critério. Ressalvas: IC exploratório, um único adapter, e o conjunto de seleção favorece o
+M0 (escolheu a configuração dele). **Isto não é a pergunta regional**, que só existe no G7.
+
+**Falta:** decidir com o Eduardo, antes das sementes a₂/a₃ (~10 h de GPU) e da avaliação única, se o G7 segue com esta
+receita; e, em qualquer caso, o consumidor do Mosaic para o G7 (interação e bootstrap conjunto por cluster, nos dois
+estudos), o manifesto do G6 e a flag da semente da validação do adapter.
 
 ### 14.8 O padrão de erro a não repetir
 
