@@ -158,6 +158,18 @@ def test_g5_e_comparador_de_ponta_a_ponta_num_cache_sintetico():
                                 "--replicas", "50", "--out-dir", str(pasta / "comparacao")]) == 0
         saida = json.loads((pasta / "comparacao" / "comparacao_m0_mr.json").read_text(encoding="utf-8"))
         assert len(saida["por_semente"]) == 3 and saida["bootstrap_da_media"]["natureza"] == "exploratoria"
+        salvas = sorted(q.name for q in (pasta / "comparacao").glob("cabeca_*.pt"))
+        assert salvas == [f"cabeca_{s}_h{h}.pt" for s in ("M0", "MR") for h in (11, 12, 13)], salvas
+        guardada = torch.load(pasta / "comparacao" / "cabeca_MR_h11.pt", weights_only=False)
+        assert {"estado", "media", "desvio", "platt", "limiar_de_mcc", "snapshot_sha256",
+                "cache_identidade_sha256", "semente_do_adapter"} <= set(guardada)
+
+        # Trocar um snapshot entre a decisao e a comparacao tem de ser recusado.
+        pd.DataFrame({"variant_id": treino[:10], "role": "train"}).to_parquet(pasta / "janela4096.parquet",
+                                                                             index=False)
+        assert comparador.main(["--cache-m0", str(pasta / "M0"), "--cache-mr", str(pasta / "MR"),
+                                "--decisao-g5", str(pasta / "g5" / "g5_decisao.json"), *comum,
+                                "--replicas", "50", "--out-dir", str(pasta / "comparacao2")]) == 2
 
 
 if __name__ == "__main__":

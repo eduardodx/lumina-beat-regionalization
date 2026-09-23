@@ -91,27 +91,70 @@ def pontuar(cabeca: dict[str, Any], X: np.ndarray) -> np.ndarray:
         return cabeca["rede"](entrada).squeeze(1).numpy().astype(np.float64)
 
 
-def platt(logits: np.ndarray, rotulos: np.ndarray, *, iteracoes: int = 100) -> tuple[float, float]:
-    """(a, b) de p = sigmoide(a*s + b) por Newton na verossimilhanca, com os alvos suavizados de Platt."""
+def _softplus(x: np.ndarray) -> np.ndarray:
+    """log(1 + e^x) sem estouro."""
+    return np.maximum(x, 0.0) + np.log1p(np.exp(-np.abs(x)))
+
+
+def _sigmoide(x: np.ndarray) -> np.ndarray:
+    """1 / (1 + e^-x) sem estouro nos dois lados."""
+    x = np.asarray(x, dtype=np.float64)
+    saida = np.empty_like(x)
+    positivo = x >= 0
+    saida[positivo] = 1.0 / (1.0 + np.exp(-x[positivo]))
+    e = np.exp(x[~positivo])
+    saida[~positivo] = e / (1.0 + e)
+    return saida
+
+
+def platt(logits: np.ndarray, rotulos: np.ndarray, *, max_iteracoes: int = 100, tolerancia: float = 1e-5,
+          passo_minimo: float = 1e-10, sigma: float = 1e-12) -> tuple[float, float]:
+    """(a, b) de p = sigmoide(a*s + b): Platt (1999) pelo algoritmo de Lin, Lin e Weng (2007).
+
+    Entropia cruzada com os alvos suavizados de Platt, calculada sem estouro; Newton com busca em linha (Armijo),
+    a partir de a = 0 e b = log((n_pos + 1) / (n_neg + 1)). A versao anterior dava passos completos de Newton a
+    partir de a = 1: com logits grandes a sigmoide saturava, a curvatura ia a zero e o passo explodia -- em
+    [-10, -8, 8, 10] saia a = 6,8e9 e probabilidades 0/1, quando o otimo e a ~ 0,12 (revisao de 23/09).
+    """
     s = np.asarray(logits, dtype=np.float64)
-    y = np.asarray(rotulos, dtype=np.float64)
-    n_pos, n_neg = y.sum(), len(y) - y.sum()
+    y = np.asarray(rotulos, dtype=int)
+    n_pos, n_neg = int((y == 1).sum()), int((y == 0).sum())
+    if n_pos == 0 or n_neg == 0:
+        raise ValueError("Platt precisa das duas classes")
     alvo = np.where(y == 1, (n_pos + 1) / (n_pos + 2), 1 / (n_neg + 2))
-    a, b = 1.0, 0.0
-    for _ in range(iteracoes):
-        p = 1 / (1 + np.exp(-(a * s + b)))
-        gradiente = np.array([np.sum((p - alvo) * s), np.sum(p - alvo)])
-        w = p * (1 - p) + 1e-12
-        hessiana = np.array([[np.sum(w * s * s), np.sum(w * s)], [np.sum(w * s), np.sum(w)]])
-        passo = np.linalg.solve(hessiana + 1e-9 * np.eye(2), gradiente)
-        a, b = a - passo[0], b - passo[1]
-        if np.max(np.abs(passo)) < 1e-10:
+
+    def perda(a: float, b: float) -> float:
+        z = a * s + b
+        return float(np.sum(alvo * _softplus(-z) + (1 - alvo) * _softplus(z)))
+
+    a, b = 0.0, float(np.log((n_pos + 1) / (n_neg + 1)))
+    valor = perda(a, b)
+    for _ in range(max_iteracoes):
+        p = _sigmoide(a * s + b)
+        g_a, g_b = float(np.sum((p - alvo) * s)), float(np.sum(p - alvo))
+        if abs(g_a) < tolerancia and abs(g_b) < tolerancia:
             break
+        w = p * (1 - p)
+        h_aa, h_bb, h_ab = float(np.sum(w * s * s)) + sigma, float(np.sum(w)) + sigma, float(np.sum(w * s))
+        determinante = h_aa * h_bb - h_ab * h_ab
+        d_a = -(h_bb * g_a - h_ab * g_b) / determinante
+        d_b = -(-h_ab * g_a + h_aa * g_b) / determinante
+        inclinacao = g_a * d_a + g_b * d_b
+        passo = 1.0
+        while passo >= passo_minimo:
+            novo_a, novo_b = a + passo * d_a, b + passo * d_b
+            novo_valor = perda(novo_a, novo_b)
+            if novo_valor < valor + 1e-4 * passo * inclinacao:
+                a, b, valor = novo_a, novo_b, novo_valor
+                break
+            passo /= 2
+        else:
+            break  # nenhuma descida: fica no ultimo ponto aceito, que nunca e pior que o inicial
     return float(a), float(b)
 
 
 def calibrar(logits: np.ndarray, a: float, b: float) -> np.ndarray:
-    return 1 / (1 + np.exp(-(a * np.asarray(logits, dtype=np.float64) + b)))
+    return _sigmoide(a * np.asarray(logits, dtype=np.float64) + b)
 
 
 def limiar_de_mcc(probabilidades: np.ndarray, rotulos: np.ndarray) -> dict[str, float]:
@@ -154,10 +197,21 @@ def rodar_sementes(matriz: np.ndarray, tabela: Any, linhas: dict[str, np.ndarray
         prob_va, prob_se = calibrar(logits_va, a, b), calibrar(logits_se, a, b)
         saida.append({
             "semente": int(semente), "epoca": cabeca["epoca"], "macro_validacao_na_parada": cabeca["macro_validacao"],
-            "platt": {"a": a, "b": b}, "limiar_de_mcc": limiar_de_mcc(prob_va, y[validacao]),
-            "validacao": metricas.resumo(prob_va, y[validacao], paineis[validacao]),
-            "selecao": metricas.resumo(prob_se, y[selecao], paineis[selecao]),
+            "platt": {"a": a, "b": b, "inverte_a_ordem": a <= 0},
+            "limiar_de_mcc": limiar_de_mcc(prob_va, y[validacao]),
+            # Metricas de ORDEM sobre os LOGITS. Platt com a > 0 e monotono e nao muda a ordem, mas sobre a
+            # probabilidade a saturacao perto de 0 e 1 viraria empate. As probabilidades calibradas ficam para a
+            # media entre sementes e para os limiares.
+            "validacao": metricas.resumo(logits_va, y[validacao], paineis[validacao]),
+            "selecao": metricas.resumo(logits_se, y[selecao], paineis[selecao]),
             "prob_validacao": prob_va, "prob_selecao": prob_se,
+            "modelo": {"estado": {k: v.clone() for k, v in cabeca["rede"].state_dict().items()},
+                       "media": cabeca["media"], "desvio": cabeca["desvio"]},
         })
     return saida
+
+
+def sem_matrizes(rodada: dict[str, Any]) -> dict[str, Any]:
+    """A parte de uma rodada que vai para JSON: sem as probabilidades nem o modelo."""
+    return {k: v for k, v in rodada.items() if not k.startswith("prob_") and k != "modelo"}
 

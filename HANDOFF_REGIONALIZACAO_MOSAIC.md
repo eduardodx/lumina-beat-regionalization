@@ -613,6 +613,18 @@ disparado em seguida no mesmo job.
 declarado antes". Aplica-se a regra da política dentro de cada extração; ganha a extração com a maior macro média
 na política escolhida; empate exato fica com `cabecas_172`. Quem roda o G5 confirma com a flag.
 
+**Revisão de 23/09 da cabeça, antes do G5 (reproduzida e corrigida):**
+
+| Defeito | Correção |
+|---|---|
+| Platt por Newton de passo cheio a partir de a = 1: em `[-10, -8, 8, 10]` dava a = 6,8e9, probabilidades 0/1 e estouro (o ótimo é a ≈ 0,121) | Lin, Lin e Weng (2007): começa em a = 0, perda com os alvos suavizados calculada sem estouro, Newton com busca em linha; sigmoide estável |
+| métricas por semente sobre a probabilidade calibrada (a saturação vira empate) | métricas de ordem sobre os LOGITS; a probabilidade calibrada fica para a média entre sementes e para os limiares |
+| G5 registrava o caminho dos snapshots, não o conteúdo | G5 grava o sha256 dos três; o comparador recusa snapshot diferente do da decisão |
+| cabeças não eram salvas | o comparador salva cada cabeça inteira (pesos, padronização, Platt, limiar, identidades), para pontuar os estudos sem retreinar |
+
+Viés conhecido e declarado no comparador: o conjunto de seleção escolheu a configuração do M0 no G5 (a melhor de
+6), então a macro do M0 ali tende a estar sorteada para cima e o delta MR − M0, se tanto, puxado para baixo.
+
 **Falta:** o MR terminar (~3,6 h); o G5 (só M0, pode rodar já, na CPU); o comparador exploratório depois do G5 e do
 MR; e, para o G7, o consumidor do Mosaic (interação e bootstrap conjunto por cluster, nos dois estudos).
 

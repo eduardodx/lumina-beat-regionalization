@@ -39,6 +39,7 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
 from eval.campanha import g5  # noqa: E402
+from eval.campanha.cache import sha256_do_arquivo  # noqa: E402
 from eval.campanha.layout import EXTRACOES  # noqa: E402
 from eval.campanha.leitura_do_cache import carregar_cache, linhas_da_politica  # noqa: E402
 from eval.campanha.recortes import carregar_campanha  # noqa: E402
@@ -59,6 +60,11 @@ def ler_snapshots(pares: list[str]) -> dict[str, Path]:
         raise SystemExit(f"FALHOU: --snapshot precisa exatamente de {list(g5.ISOLAMENTO)} "
                          f"(faltando {faltando}, sobrando {sobrando})")
     return snapshots
+
+
+def hashes_dos_snapshots(snapshots: dict[str, Path]) -> dict[str, str]:
+    """sha256 de cada snapshot de politica: o comparador confere que recebeu os MESMOS arquivos da decisao."""
+    return {politica: sha256_do_arquivo(caminho) for politica, caminho in sorted(snapshots.items())}
 
 
 def media_ou_none(valores: list[float | None]) -> float | None:
@@ -86,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     snapshots = ler_snapshots(args.snapshot)
     sementes = list(campanha["sementes"]["cabeca"])
-    from eval.campanha.cabeca import RECEITA, rodar_sementes
+    from eval.campanha.cabeca import RECEITA, rodar_sementes, sem_matrizes
 
     inicio = time.perf_counter()
     medias: dict[tuple[str, str], float | None] = {}
@@ -107,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
                   f"{'-' if medias[(extracao, politica)] is None else f'{medias[(extracao, politica)]:.4f}'}")
             for r in rodadas:
                 detalhe.append({"extracao": extracao, "politica": politica, "treino": int(len(linhas["train"])),
-                                **{k: v for k, v in r.items() if not k.startswith("prob_")}})
+                                **sem_matrizes(r)})
                 predicoes.append(pd.DataFrame({
                     "extracao": extracao, "politica": politica, "semente": r["semente"],
                     "variant_id": cache["tabela"]["variant_id"].to_numpy()[linhas["selecao"]],
@@ -125,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         "cache_m0": str(args.cache_m0),
         "cache_m0_identidade_sha256": sha_da_identidade(args.cache_m0),
         "snapshots": {p: str(c) for p, c in snapshots.items()},
+        "snapshots_sha256": hashes_dos_snapshots(snapshots),
         "device": args.device,
         "segundos": round(time.perf_counter() - inicio, 1),
         "o_que_nao_e": "nao usa MR; nao mede o efeito regional; o conjunto de selecao e de desenvolvimento",

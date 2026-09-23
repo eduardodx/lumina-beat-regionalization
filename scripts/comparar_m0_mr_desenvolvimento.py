@@ -10,6 +10,8 @@ O QUE ISTO NAO MEDE
     A interacao regional: os recortes de desenvolvimento excluem os membros dos estudos e a regra ampla brasileira,
     entao nao ha casos de participacao brasileira aqui. Isto e classificacao geral. Com um so adapter (a_1), a
     variacao entre sementes de adapter nao entra. Os IC sao exploratorios e nao sao criterio de avanco.
+    E o conjunto de selecao ja escolheu a extracao e a politica do M0 (a melhor de 6 configuracoes): a macro do M0
+    ali tende a estar sorteada para cima, o que, se tanto, puxa o delta MR - M0 para baixo.
 
 O QUE O CODIGO EXIGE ANTES DE TREINAR
     - a decisao do G5, feita com o MESMO cache do M0 (sha256 da identidade);
@@ -26,6 +28,7 @@ USO (notebook)
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 import time
@@ -41,7 +44,11 @@ sys.path.insert(0, str(RAIZ))
 from eval.campanha import metricas  # noqa: E402
 from eval.campanha.leitura_do_cache import carregar_cache, conferir_par, linhas_da_politica  # noqa: E402
 from eval.campanha.recortes import adapter_congelado, carregar_campanha  # noqa: E402
-from scripts.g5_escolher_extracao_e_politica import ler_snapshots, sha_da_identidade  # noqa: E402
+from scripts.g5_escolher_extracao_e_politica import (  # noqa: E402
+    hashes_dos_snapshots,
+    ler_snapshots,
+    sha_da_identidade,
+)
 
 
 def _delta(a: Any, b: Any) -> float | None:
@@ -79,6 +86,34 @@ def comparar(rodadas_m0: list[dict], rodadas_mr: list[dict], tabela: pd.DataFram
     }
 
 
+def snapshots_diferentes(decisao_g5: dict[str, Any], atuais: dict[str, str]) -> list[str]:
+    """Politicas cujo snapshot nao e o mesmo arquivo usado na decisao do G5. Troca silenciosa entre a escolha e a
+    comparacao mudaria o treino da cabeca sem mudar nenhum nome (revisao de 23/09)."""
+    registrados = decisao_g5.get("snapshots_sha256") or {}
+    if not registrados:
+        return ["a decisao do G5 nao registrou os hashes dos snapshots"]
+    return sorted(p for p in set(registrados) | set(atuais) if registrados.get(p) != atuais.get(p))
+
+
+def salvar_cabecas(destino: Path, sistema: str, rodadas: list[dict], contexto: dict[str, Any]) -> list[str]:
+    """Cada cabeca por inteiro -- pesos, padronizacao, Platt e limiar --, para pontuar os estudos com o sistema
+    efetivamente congelado, sem retreinar."""
+    import torch
+
+    from eval.campanha.cabeca import RECEITA
+
+    caminhos = []
+    for rodada in rodadas:
+        caminho = destino / f"cabeca_{sistema}_h{rodada['semente']}.pt"
+        torch.save({"formato": "campanha_r03_cabeca_v1", "sistema": sistema, "semente": rodada["semente"],
+                    "estado": rodada["modelo"]["estado"], "media": rodada["modelo"]["media"],
+                    "desvio": rodada["modelo"]["desvio"], "platt": rodada["platt"],
+                    "limiar_de_mcc": rodada["limiar_de_mcc"], "epoca": rodada["epoca"], "receita": RECEITA,
+                    **contexto}, caminho)
+        caminhos.append(str(caminho))
+    return caminhos
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--cache-m0", required=True, type=Path)
@@ -99,6 +134,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     extracao, politica = decisao_g5["decisao"]["extracao"], decisao_g5["decisao"]["politica"]
     snapshots = ler_snapshots(args.snapshot)
+    trocados = snapshots_diferentes(decisao_g5, hashes_dos_snapshots(snapshots))
+    if trocados:
+        print(f"FALHOU: snapshots diferentes dos usados na decisao do G5: {trocados}")
+        return 2
     m0, mr = carregar_cache(args.cache_m0, extracao), carregar_cache(args.cache_mr, extracao)
     conferir_par(m0, mr)
     semente_do_adapter = mr["identidade"]["semente_do_adapter"]
@@ -109,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     sementes = list(campanha["sementes"]["cabeca"])
     print(f"[comparacao] extracao {extracao} | politica {politica} | adapter {semente_do_adapter} | cabecas {sementes}")
 
-    from eval.campanha.cabeca import RECEITA, rodar_sementes
+    from eval.campanha.cabeca import RECEITA, rodar_sementes, sem_matrizes
 
     inicio = time.perf_counter()
     rodadas_m0 = rodar_sementes(m0["matriz"], m0["tabela"], linhas, sementes=sementes, device=args.device)
@@ -131,16 +170,26 @@ def main(argv: list[str] | None = None) -> int:
         "selecao": int(len(linhas["selecao"])),
         **resultado,
         "fold1_descritivo": validacao,
-        "cabecas": {"M0": [{k: v for k, v in r.items() if not k.startswith("prob_")} for r in rodadas_m0],
-                    "MR": [{k: v for k, v in r.items() if not k.startswith("prob_")} for r in rodadas_mr]},
+        "cabecas": {"M0": [sem_matrizes(r) for r in rodadas_m0], "MR": [sem_matrizes(r) for r in rodadas_mr]},
         "identidades": {"M0": str(args.cache_m0), "MR": str(args.cache_mr),
                         "decisao_g5": str(args.decisao_g5)},
         "o_que_nao_mede": ("a interacao regional (sem casos de participacao brasileira nos recortes de "
                            "desenvolvimento); a variacao entre sementes de adapter (so a_1)"),
+        "vies_conhecido": ("o conjunto de selecao escolheu a configuracao do M0 no G5 (a melhor de 6): a macro do M0 "
+                           "tende a estar sorteada para cima e o delta MR - M0, se tanto, puxado para baixo"),
         "segundos": round(time.perf_counter() - inicio, 1),
     }
     destino = args.out_dir.expanduser()
     destino.mkdir(parents=True, exist_ok=True)
+    contexto = {"extracao": extracao, "politica": politica,
+                "snapshot_sha256": hashes_dos_snapshots(snapshots)[politica],
+                "decisao_g5_sha256": hashlib.sha256(args.decisao_g5.expanduser().read_bytes()).hexdigest()}
+    relatorio["cabecas_salvas"] = {
+        "M0": salvar_cabecas(destino, "M0", rodadas_m0, {**contexto, "cache_identidade_sha256":
+                                                         sha_da_identidade(args.cache_m0)}),
+        "MR": salvar_cabecas(destino, "MR", rodadas_mr, {**contexto, "cache_identidade_sha256":
+                                                         sha_da_identidade(args.cache_mr),
+                                                         "semente_do_adapter": semente_do_adapter})}
     (destino / "comparacao_m0_mr.json").write_text(json.dumps(relatorio, ensure_ascii=False, indent=2, default=str),
                                                    encoding="utf-8")
     ids = m0["tabela"]["variant_id"].to_numpy()[linhas["selecao"]]
