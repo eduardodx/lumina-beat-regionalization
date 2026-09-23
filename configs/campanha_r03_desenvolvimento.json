@@ -127,5 +127,33 @@
       "pela_regra": "adapter_do_mr.checkpoint: menor focal_alt na validacao do adapter; nenhuma metrica clinica consultada",
       "nota": "adapter.pt da mesma corrida tem outro sha256. O codigo sugere que a diferenca e so de proveniencia gravada (o adapter.pt nao grava o hash do plano de validacao), mas isso NAO foi verificado comparando tensores. Nao bloqueia: a regra e o extrator apontam para adapter_melhor.pt"
     }
+  },
+  "cabeca": {
+    "receita": {
+      "tipo": "MLP",
+      "camadas": "Linear(d, 64) -> GELU -> Dropout(0,1) -> Linear(64, 1)",
+      "otimizador": "Adam, lr 3e-3, weight_decay 1e-4",
+      "perda": "BCE sem pesos, lote cheio",
+      "max_epocas": 600,
+      "avaliar_a_cada": 10,
+      "paciencia_em_avaliacoes": 10,
+      "padronizacao": "media e desvio do treino da politica; desvio < 1e-8 vira 1"
+    },
+    "parada": "epoca de maior macro-AUROC (missense, splice, noncoding) no fold 1",
+    "calibracao": "Platt no fold 1; limiar de MCC no fold 1 (guardado para o G6/G7)",
+    "combinacao_das_sementes": "media das probabilidades calibradas das 3 cabecas; metricas tambem por semente",
+    "origem": "mlp_scores de scripts/probe_feature_eval.py (branch embedding-probe-mosaic), portado sem mudar",
+    "codigo": "eval/campanha/cabeca.py; rodar_sementes e a unica funcao que treina cabeca (G5 e comparador)"
+  },
+  "g5": {
+    "so_com": "M0",
+    "metrica": "macro-AUROC nao ponderada de missense, splice e noncoding no conjunto de selecao, media das 3 sementes",
+    "regra_da_politica": "a mais isolada (janela4096 > janela2048 > nenhum) cuja macro media fique a ate 0,01 da melhor; empate a favor da mais isolada (plano, secao 4.2, fixada em 17/09)",
+    "regra_da_extracao": {
+      "texto": "aplica-se a regra da politica dentro de cada extracao; ganha a extracao com a maior macro media na politica escolhida; empate EXATO fica com cabecas_172 (menos dimensoes)",
+      "estado": "PROPOSTA em 23/09, registrada antes de qualquer score; confirmada por quem roda o G5, com --confirmo-a-regra-da-extracao",
+      "por_que": "o plano so dizia 'criterio declarado antes'. Comparar as extracoes no que de fato seria usado (a politica que a regra escolhe) e o analogo direto da regra da politica"
+    },
+    "codigo": "eval/campanha/g5.py e scripts/g5_escolher_extracao_e_politica.py"
   }
 }

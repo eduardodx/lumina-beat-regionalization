@@ -592,10 +592,29 @@ amostra; a tabela inteira é conferida na extração.
 Consequência operacional: **durante a extração, não mudar os arquivos listados em
 `ARQUIVOS_QUE_DETERMINAM_AS_FEATURES`** — uma retomada seria recusada. O código novo do G3 vai em arquivos novos.
 
-**Falta:** o ensaio curto do caminho completo (só a validação, ~3 min); a extração do M0 e do MR (~5,7 h, com log
-por tentativa e PID); a cabeça sobre o cache com as sementes declaradas; o G5 só com M0; o comparador exploratório
-M0 × MR na seleção comum; e, para o G7, o consumidor do Mosaic (interação e bootstrap conjunto por cluster, nos dois
-estudos).
+**Ensaio (23/09):** o caminho completo passou no GPU (1.575 variantes, completo, `exit=0`) e a retomada também
+(segunda execução: `identidade confere`, 0 pendentes).
+
+**Extração M0 (23/09): completa.** 171.720 de 171.720, zero falha de janela, `exit_M0=0`, 0,055 s/variante. O MR foi
+disparado em seguida no mesmo job.
+
+**Cabeça, G5 e comparador (23/09, escritos durante a extração do MR, só em arquivos novos):**
+
+| Peça | O que faz |
+|---|---|
+| `eval/campanha/metricas.py` | AUROC (Mann-Whitney, empate meio ponto, arredondamento 1e-12 relativo) e macro de missense/splice/noncoding portadas da pesquisa; AUPRC; bootstrap pareado por `overlap_cluster_id` (1.000, seed 20260901, exploratório) |
+| `eval/campanha/leitura_do_cache.py` | lê um cache completo, confere o hash de conteúdo, alinha a matriz à tabela; `conferir_par` recusa M0 e MR que difiram além do adapter; `linhas_da_politica` recusa política não aninhada |
+| `eval/campanha/cabeca.py` | o MLP da pesquisa, portado sem mudar; parada pela macro no fold 1; Platt e limiar de MCC no fold 1; `rodar_sementes` é a ÚNICA função que treina cabeça (G5 e comparador) |
+| `eval/campanha/g5.py` | a regra da política (plano §4.2) e a da extração (proposta abaixo) |
+| `scripts/g5_escolher_extracao_e_politica.py` | 2 extrações × 3 políticas × 3 sementes só com M0; recusa cache de MR; exige `--confirmo-a-regra-da-extracao`; grava a decisão com o sha da identidade do cache do M0 |
+| `scripts/comparar_m0_mr_desenvolvimento.py` | exige a decisão do G5 feita com o MESMO cache do M0, caches pareados e o adapter declarado; H0 e HR com as mesmas sementes; métricas por semente, da média, e IC exploratório |
+
+**Regra da extração do G5 — PROPOSTA em 23/09, registrada antes de qualquer score:** o plano só dizia "critério
+declarado antes". Aplica-se a regra da política dentro de cada extração; ganha a extração com a maior macro média
+na política escolhida; empate exato fica com `cabecas_172`. Quem roda o G5 confirma com a flag.
+
+**Falta:** o MR terminar (~3,6 h); o G5 (só M0, pode rodar já, na CPU); o comparador exploratório depois do G5 e do
+MR; e, para o G7, o consumidor do Mosaic (interação e bootstrap conjunto por cluster, nos dois estudos).
 
 ### 14.8 O padrão de erro a não repetir
 
