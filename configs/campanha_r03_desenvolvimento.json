@@ -17,6 +17,7 @@
       "arquivo": "g2_final_<politica>/core_head_snapshot.parquet",
       "papel": "validation",
       "descricao": "fold 1 gold, 1.575 variantes, identico nas tres politicas",
+      "variantes": 1575,
       "uso": "early stopping, Platt e limiar de MCC de cada cabeca. Comparar sistemas aqui e so descritivo: as cabecas pararam e foram calibradas nele"
     },
     "comparacao_de_desenvolvimento": {
@@ -256,13 +257,26 @@
         "margem maxima de regressao no controle",
         "paineis em que uma regressao e inaceitavel"
       ],
-      "nota": "o 0,02 do plano (secao 6.5) nao diz sobre qual quantidade incide. Ganho absoluto no coorte BR, interacao delta_br_matched - delta_control e nao inferioridade geral sao perguntas diferentes, cada uma com a sua margem"
+      "nota": "o 0,02 do plano (secao 6.5) nao diz sobre qual quantidade incide. Ganho absoluto no coorte BR, interacao delta_br_matched - delta_control e nao inferioridade geral sao perguntas diferentes, cada uma com a sua margem",
+      "como_declarar": "cada regra e `estatistica >= limite` sobre um delta MR - M0, com estatistica = estimativa ou p2_5 (o limite inferior do IC); limite finito, >= 0 nas de melhoria e <= 0 nas de regressao; estudos entre br_clinical_evidence e br_population_observed. Preencher os campos nulos abaixo e mudar o estado para DECLARADO: o construtor do G6 recusa congelar com campo nulo ou fora do dominio (eval/campanha/g6.py:problemas_das_margens)",
+      "melhoria_minima_no_coorte_br": {"estudos": null, "delta": null, "metrica": null, "estatistica": null, "limite": null, "delta_permitido": ["delta_br_full", "delta_br_matched"]},
+      "regressao_maxima_no_controle": {"estudos": null, "delta": "delta_control", "metrica": null, "estatistica": null, "limite": null},
+      "paineis_com_regressao_inaceitavel": {"paineis": null, "estudos": null, "delta": null, "metrica": null, "estatistica": null, "limite": null, "nota": "paineis entre missense, splice e noncoding (os com AUROC/AUPRC no consumidor); lista vazia so com `motivo`"},
+      "beneficio_nao_explicado_por_um_painel": {"estudos": null, "delta": null, "metrica": null, "estatistica": null, "limite": null, "suporte_minimo_por_painel": null, "nota": "condicao 3 do Mosaic (PLAN 13.5): quando dois ou mais paineis tem suporte (n_P e n_B >= suporte_minimo_por_painel), o delta do coorte sem cada painel (celulas sem_painel:* do consumidor) atende a regra"},
+      "interacao": {"criterio_proprio": null, "nota": "true: regra propria (estudos, metrica, estatistica, limite >= 0) sobre delta_br_matched - delta_control; false: so relatada com os absolutos, com `motivo`"}
     },
     "bootstrap_da_interacao": {
       "estado": "PROPOSTO (plano, secao 6.3)",
       "regra": "reamostrar overlap_cluster_id EM CONJUNTO sobre a uniao de casos pareados e controles, com os mesmos sorteios para M0 e MR: preserva a dependencia genomica, NAO os pares",
       "sensibilidade": "sorteio por par: preserva o pareamento, NAO a dependencia entre pares do mesmo cluster; os dois ICs saem juntos",
-      "alinhar_com_o_eduardo": "a unidade: o PDF previa reamostragem por matched set (10.000 replicas); replicas e seed sao detalhe operacional da equipe"
+      "alinhar_com_o_eduardo": "a unidade: o PDF previa reamostragem por matched set (10.000 replicas); replicas e seed sao detalhe operacional da equipe",
+      "unidade_principal": null,
+      "unidade_de_sensibilidade": null,
+      "unidades_implementadas": ["cluster_conjunto", "par"],
+      "replicas": 1000,
+      "seed": 20260901,
+      "percentis": [2.5, 97.5],
+      "como_declarar": "unidade_principal e unidade_de_sensibilidade entre as implementadas, uma de cada (o componente conexo cluster-par nao esta implementado), e o estado DECLARADO; o construtor confere replicas, seed e percentis (eval/campanha/g6.py:problemas_do_bootstrap)"
     },
     "analises_secundarias": {
       "estado": "PRE-DECLARADAS (plano 6.4 e achado de 20/09): nenhuma muda o resultado oficial, nenhuma e escolhida depois dos resultados, todas mantem pares inteiros; entrada ausente sai como nao_calculada, com o motivo",
@@ -271,7 +285,7 @@
       "exposicao_empatada": "interacao so nos pares com diferenca 0 de variantes de treino na janela (n_janela), no snapshot final janela2048 com raio 4.096; raio e tolerancia PROPOSTOS",
       "pares_completos_na_cobertura": "so se a cobertura desfizer pares: interacao nos pares com os dois membros cobertos pelos dois sistemas",
       "com_limiar_e_brier": "com os limiares e calibradores congelados; Brier a escrever",
-      "baselines_diagnosticas": "presenca no ABraOM e AF (gnomAD, ABraOM) nos mesmos pares, fora dos sistemas: a escrever, ou retirar ANTES do G6 com o motivo",
+      "baselines_diagnosticas": "fora dos sistemas, nos mesmos coortes e pares, com metricas absolutas: (1) gnomad_rarity, o comparador OFICIAL do Mosaic (config/comparators.yaml, mosaic-comparators/v1: -gnomad_v4_af, not_found e ac0 com AF 0), das anotacoes do release (pb_annotations.parquet, por variant_id), sem ler VCF; o pareamento ja casa gnomad_af_bin, entao dentro do par ela so difere dentro da faixa; (2) raridade no ABraOM, -abraom_af com ausente = 0 (regra NOSSA, analoga, declarada como tal); (3) presenca no ABraOM, com papel explicito: no clinico, diagnostico da diferenca de composicao (casos 4,6x mais presentes); no populacional a presenca DEFINE os grupos (casos presentes, controles ausentes), e constante dentro de cada um e nao se relata como discriminacao (nao aplicavel por construcao), e a raridade no ABraOM e constante (0) nos controles populacionais. Nenhuma metrica de baseline nos estudos antes do G7",
       "sanidade_no_fold0": "AUROC/AUPRC de M0 e MR no teste do core_locus, so depois do G6"
     },
     "proveniencia": {
@@ -291,6 +305,16 @@
         "origem": "derivado do core_locus do release v1 do Mosaic (clinvar-pb-capability-suite/v1, codigo 814e7f0), segundo a orientacao do mantenedor em 15/09/2026, com as exclusoes de exclusoes_aplicadas",
         "cutoff_dos_rotulos": "ClinVar 2026-06, o do release v1: cutoff dos ROTULOS da cabeca, nao do pre-treino",
         "hash": "sha256 do arquivo do snapshot, o registrado na decisao do G5 (o construtor reconfere no arquivo)"
+      },
+      "release_do_mosaic": {
+        "release_id": "clinvar-pb-capability-suite/v1",
+        "copia": "~/mosaic-v1 no notebook, no layout anterior a ADR 0006 (bundle.manifest.json)",
+        "artifact_contracts_hash": "4a2077e95eeb302612fd96ab880ce9290f06f82d73cb0a6353ac9fb10384d519",
+        "logical_hash": {
+          "pb_annotations.parquet": {"n": 326826, "logical_hash": "7a6ae9b22216d0ccd437282b6d3aacdc31da70384c23c05d39fa7f09bca5478e"},
+          "studies/brazil/membership.parquet": {"n": 8875, "logical_hash": "1c1cd65d29c1f6c5cd2488b9313010c67cec52910bcfc96b95f1d1028d20cec2"}
+        },
+        "origem": "specs/PLAN-release-migration.md, secao 7.1, do Mosaic (814e7f0): invariantes da ADR 0006, que nao mudam na migracao de bundle para release; o do membership e o conferido no G1"
       },
       "abraom": {
         "fonte": "abraom_sabe1171",
@@ -324,7 +348,7 @@
     ],
     "pendencias_antes_do_congelamento": [
       {"item": "Brier do ensemble com os calibradores congelados (analises_secundarias.com_limiar_e_brier)", "estado": "A_ESCREVER"},
-      {"item": "baselines diagnosticas: presenca no ABraOM e AF (gnomAD, ABraOM) nos mesmos pares (analises_secundarias.baselines_diagnosticas)", "estado": "A_ESCREVER_OU_RETIRAR"},
+      {"item": "baselines diagnosticas (analises_secundarias.baselines_diagnosticas): conferir cobertura e proveniencia das anotacoes do release nos membros (scripts/conferir_cobertura_das_baselines.py: hash logico contra g6.proveniencia.release_do_mosaic e o manifesto da copia, so contagens, nenhuma metrica) e depois escrever no consumidor; retirar so com motivo que se sustente", "estado": "A_CONFERIR"},
       {"item": "script de pontuacao e relatorio do G7 (scripts/avaliar_estudos.py), testado com dados sinteticos", "estado": "A_ESCREVER"},
       {"item": "ensaio do consumidor na membership real com scores SINTETICOS, sem nenhum score dos estudos: confere a leitura dos artefatos da campanha antes da avaliacao unica", "estado": "A_FAZER"}
     ],

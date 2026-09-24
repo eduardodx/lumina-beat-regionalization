@@ -91,8 +91,17 @@ escolhida depois dos resultados, todas mantêm pares inteiros; entrada ausente s
 | Exposição de locus | interação só nos pares com exposição empatada (diferença 0) de variantes de treino na janela, no snapshot final (`janela2048`) com raio 4.096 | `exposicao_por_membro.parquet` desse snapshot e raio (gerar se não existir) | implementada; raio e tolerância PROPOSTOS |
 | Pares completos na cobertura | só se a cobertura desfizer pares: interação nos pares com os dois membros cobertos | scores | implementada |
 | Métricas com limiar e Brier | com os limiares e calibradores congelados | manifesto | métricas com limiar implementadas; Brier a escrever |
-| Baselines diagnósticas | presença no ABraOM e AF (gnomAD, ABraOM) pontuadas nos mesmos pares, fora dos sistemas | colunas de AF a localizar | a escrever, ou retirar **antes** do G6 com o motivo |
+| Baselines diagnósticas | fora dos sistemas, nos mesmos coortes e pares: (1) `gnomad_rarity`, o comparador **oficial** do Mosaic (`−gnomad_v4_af`, `not_found`/`ac0` com AF 0); (2) raridade no ABraOM (`−abraom_af`, ausente = 0; regra **nossa**, análoga); (3) presença no ABraOM com **papel explícito** — no clínico, diagnóstico da diferença de composição; no populacional ela **define** os grupos, é constante dentro de cada um e não se relata como discriminação | `pb_annotations.parquet` do release, por `variant_id` (hash lógico contra os invariantes da ADR 0006 declarados em `g6.proveniencia.release_do_mosaic` e contra o manifesto da cópia) | cobertura e proveniência a conferir (`scripts/conferir_cobertura_das_baselines.py`, só contagens); depois escrever. Não retirar pela falta na membership: a informação está no release |
 | Sanidade no fold 0 | AUROC/AUPRC de M0 e MR no teste do `core_locus`, só depois do G6 | extração do fold 0 depois do congelamento | a escrever |
+
+**Por que a baseline contínua fica (revisão de 24/09).** Eu tinha proposto retirar a de AF contínua porque ela "não
+está na membership". Não se sustenta: o release traz `pb_annotations.parquet`, uma linha por `variant_id` da suíte,
+com `gnomad_v4_af`, `gnomad_status`, `abraom_af` e `abraom_status`, e o `gnomad_rarity` é um dos comparadores
+oficiais do Mosaic, calculado dessas colunas sem nova leitura de VCF. Duas propriedades de construção limitam a
+leitura, e vão declaradas: o pareamento casa `gnomad_af_bin`, então dentro do par o `gnomad_rarity` só difere dentro
+da faixa; e no estudo populacional a presença no ABraOM define os grupos (casos presentes, controles ausentes), o que
+torna a presença constante em cada grupo e a raridade no ABraOM constante (0) nos controles. Nenhuma métrica de
+baseline nos estudos antes do G7.
 
 **Aberto — decisão científica do Eduardo, antes de qualquer score dos estudos (Mosaic §13.5):**
 
@@ -106,6 +115,14 @@ escolhida depois dos resultados, todas mantêm pares inteiros; entrada ausente s
 6. **Unidade da reamostragem** principal. Réplicas e seed são detalhe da equipe.
 
 Métrica, margem e regra se fixam juntas e antes; não se escolhe depois a combinação mais favorável.
+
+**Como declarar (24/09).** A seção `g6.margens` da declaração traz o modelo com os campos nulos: cada regra é
+`estatística >= limite` sobre um delta MR − M0, com `estudos`, `delta` (Δ_BR_full ou Δ_BR_matched na melhoria;
+Δ_control no controle), `metrica` (AUROC ou AUPRC), `estatistica` (estimativa ou `p2_5`, o limite inferior do IC) e
+`limite` finito (≥ 0 na melhoria, ≤ 0 na regressão); painéis entre missense, splice e noncoding (lista vazia só com
+motivo); a condição 3 com `suporte_minimo_por_painel`; a interação com `criterio_proprio` explícito. O bootstrap
+traz `unidade_principal` e `unidade_de_sensibilidade` (entre `cluster_conjunto` e `par`). O construtor recusa
+congelar com qualquer campo nulo ou fora do domínio.
 
 **Duas perguntas separadas para as margens.** (a) Qual melhora seria **cientificamente relevante**? É a decisão do
 Eduardo, e não se reduz a margem para facilitar um resultado positivo. (b) Com os dados disponíveis, que melhora se
@@ -126,16 +143,24 @@ arquivo não contém o próprio hash). O consumidor recusa um manifesto cujo sha
 ou os estudos. Confere, antes de qualquer número: a composição contra o pareamento de sementes; cada componente
 contra a conferência do seu comparador (mesmo sha256); o M0 dos comparadores da a₂ e da a₃ idêntico ao da a₁
 (reconferido); os quatro caches (sistema, adapter congelado, o mesmo R03, M0 × MR só diferindo pelo adapter,
-mesmas linhas). Recarrega as seis cabeças e confere a reprodução: probabilidades da seleção contra
-`predicoes_selecao.parquet`, métricas da seleção e do fold 1 contra o relatório do comparador, **Platt e limiar da
-cabeça refeitos no fold 1** (prova que as linhas do fold 1 são as da calibração). Então: média das três
+mesmas linhas). A **identidade das linhas vem de IDs e hashes**: cada cabeça aponta
+(`cache_identidade_sha256`) para a identidade do seu cache, que fixa o hash de conteúdo da tabela, papel incluído
+(reconferido ao carregar); os IDs do fold 1 são exatamente o papel `validation` do snapshot da política e os da
+seleção exatamente os de `selecao_comum.parquet` (sha256 com o prefixo declarado), nas contagens declaradas.
+Recarrega as seis cabeças e confere a reprodução: probabilidades da seleção contra `predicoes_selecao.parquet`,
+métricas da seleção e do fold 1 contra o relatório do comparador, Platt e limiar da cabeça refeitos no fold 1 — isso
+é **consistência numérica**, não o que sustenta a identidade das linhas (revisão de 24/09). Então: média das três
 probabilidades por sistema, limiar do ensemble pela regra do Mosaic, e o **ensemble final no desenvolvimento**,
 descritivo, com IC por cluster condicional aos sistemas treinados — o resultado não muda composição nem limiar.
 Saídas: `g6_construcao.json`, `g6_predicoes.parquet`, `g6_manifesto_rascunho.json`; com `--congelar` e sem
-bloqueio, `g6_manifesto.json` e o sha256. **Bloqueios** (o congelamento é recusado com qualquer um): margens e
-unidade do bootstrap não declaradas; pendências da declaração (`g6.pendencias_antes_do_congelamento`: Brier,
-baselines, script de pontuação do G7, ensaio do consumidor na membership real com scores sintéticos); código do G7
-ausente ou com mudança fora do git; `abraom_snapshot_hash` não reconferido no arquivo. Testes: regras puras
+bloqueio, `g6_manifesto.json` e o sha256. **Bloqueios** (o congelamento é recusado com qualquer um), que
+conferem **conteúdo**, não o texto do estado: cada margem com estudos, delta, métrica, estatística (estimativa ou
+limite inferior do IC) e limite finito com o sinal certo, a condição 3 do Mosaic com o suporte mínimo por painel e a
+interação com `criterio_proprio` explícito (`g6.problemas_das_margens`); bootstrap com unidade principal e de
+sensibilidade entre as implementadas, réplicas, seed e percentis (`problemas_do_bootstrap`); pendência `FEITO` com
+`onde` e `RETIRADO` com `motivo`; revisão do git conferida e nenhum arquivo de código ausente, fora do git ou com
+mudança fora do commit — **um git que falha bloqueia**, não vale como "sem mudanças" (`problemas_do_codigo`);
+`abraom_snapshot_hash` reconferido no arquivo. Testes: regras puras
 (`tests/test_campanha_g6.py`, sem torch) e ponta a ponta sobre caches sintéticos com G5, três comparadores e três
 conferências (`tests/test_construir_g6.py`, com torch).
 
@@ -197,4 +222,5 @@ estudos é um script próprio, que exige o manifesto do G6.
 | script de extração dos estudos | a escrever |
 | construtor do G6 (`scripts/construir_g6.py`, `eval/campanha/g6.py`) | escrito em 24/09 e testado com dados sintéticos (regras puras no Windows; ponta a ponta com torch no notebook); rascunho a rodar nos artefatos; congelamento bloqueado até as margens, a unidade do bootstrap e as pendências |
 | script de pontuação e relatório do G7 | a escrever |
-| Brier, baselines diagnósticas, sanidade no fold 0 | a escrever, ou retirar antes do G6 com o motivo |
+| Brier, sanidade no fold 0 | a escrever (a sanidade no fold 0 fica para depois do congelamento) |
+| baselines diagnósticas | conferência de cobertura e proveniência escrita (`scripts/conferir_cobertura_das_baselines.py`), a rodar; depois escrever no consumidor |

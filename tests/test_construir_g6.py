@@ -78,17 +78,33 @@ def _cache(pasta: Path, *, semente_do_adapter, tabela, sinal, campanha, rng_seed
                               papel=tabela["papel"].to_numpy().astype(str), matrizes=matrizes)
 
 
-def _campanha_do_teste(tabela, destino: Path, *, resolvida=False, abraom_sha=None) -> Path:
-    """A declaracao real com as contagens da selecao sintetica; `resolvida` fecha margens, bootstrap e pendencias."""
+def _regra(**extra):
+    return {"estudos": ["br_clinical_evidence"], "metrica": "auroc", "estatistica": "p2_5", **extra}
+
+
+def _campanha_do_teste(tabela, destino: Path, *, selecao_comum: Path, resolvida=False, abraom_sha=None) -> Path:
+    """A declaracao real com as contagens e o hash da selecao sintetica; `resolvida` fecha margens, bootstrap e
+    pendencias com CONTEUDO (exemplo sintetico, nao proposta de margem)."""
     campanha = json.loads((RAIZ / "configs" / "campanha_r03_desenvolvimento.json").read_text(encoding="utf-8"))
     selecao = tabela[tabela["papel"] == "selecao"]
     campanha["recortes"]["comparacao_de_desenvolvimento"].update(
-        variantes=int(len(selecao)), clusters=int(selecao["overlap_cluster_id"].nunique()))
+        variantes=int(len(selecao)), clusters=int(selecao["overlap_cluster_id"].nunique()),
+        sha256_prefixo=hashlib.sha256(selecao_comum.read_bytes()).hexdigest()[:8])
+    campanha["recortes"]["parada_e_calibracao"]["variantes"] = int((tabela["papel"] == "validation").sum())
     if resolvida:
-        campanha["g6"]["margens"]["estado"] = "DECLARADO (teste sintetico)"
-        campanha["g6"]["bootstrap_da_interacao"]["estado"] = "DECLARADO (teste sintetico)"
+        campanha["g6"]["margens"] = {
+            "estado": "DECLARADO (teste sintetico)",
+            "melhoria_minima_no_coorte_br": _regra(delta="delta_br_full", limite=0.0),
+            "regressao_maxima_no_controle": _regra(delta="delta_control", limite=-0.01),
+            "paineis_com_regressao_inaceitavel": _regra(delta="delta_br_full", limite=-0.02, paineis=["missense"]),
+            "beneficio_nao_explicado_por_um_painel": _regra(delta="delta_br_full", limite=0.0,
+                                                            suporte_minimo_por_painel=10),
+            "interacao": {"criterio_proprio": False, "motivo": "relatada com os absolutos (teste)"}}
+        campanha["g6"]["bootstrap_da_interacao"] = {
+            "estado": "DECLARADO (teste sintetico)", "unidade_principal": "cluster_conjunto",
+            "unidade_de_sensibilidade": "par", "replicas": 1000, "seed": 20260901, "percentis": [2.5, 97.5]}
         for pendencia in campanha["g6"]["pendencias_antes_do_congelamento"]:
-            pendencia["estado"] = "FEITO"
+            pendencia.update(estado="FEITO", onde="teste sintetico")
     if abraom_sha:
         campanha["g6"]["proveniencia"]["abraom"]["sha256"] = abraom_sha
     destino.write_text(json.dumps(campanha), encoding="utf-8")
@@ -102,7 +118,9 @@ def _montar(raiz: Path, tabela) -> dict:
     from scripts import conferir_cabecas_salvas as conferencia
     from scripts import g5_escolher_extracao_e_politica as g5_script
 
-    configuracao = _campanha_do_teste(tabela, raiz / "campanha.json")
+    selecao_comum = raiz / "selecao_comum.parquet"
+    tabela.loc[tabela["papel"] == "selecao", ["variant_id"]].to_parquet(selecao_comum, index=False)
+    configuracao = _campanha_do_teste(tabela, raiz / "campanha.json", selecao_comum=selecao_comum)
     campanha = carregar_campanha(configuracao)
     caches = {"M0": raiz / "g3_cache" / "M0"}
     _cache(caches["M0"], semente_do_adapter=None, tabela=tabela, sinal=1.0, campanha=campanha, rng_seed=7)
@@ -111,10 +129,13 @@ def _montar(raiz: Path, tabela) -> dict:
         _cache(caches[semente], semente_do_adapter=semente, tabela=tabela, sinal=1.0 + 0.1 * i, campanha=campanha,
                rng_seed=7 + i)
     treino = tabela.loc[tabela["papel"] == "train", "variant_id"].tolist()
+    validacao = tabela.loc[tabela["papel"] == "validation", "variant_id"].tolist()
     snapshots, argumentos = {}, []
     for nome, fracao in (("nenhum", 1.0), ("janela2048", 0.7), ("janela4096", 0.5)):
         snapshots[nome] = raiz / f"{nome}.parquet"
-        pd.DataFrame({"variant_id": treino[: int(len(treino) * fracao)], "role": "train"}).to_parquet(
+        do_treino = treino[: int(len(treino) * fracao)]
+        pd.DataFrame({"variant_id": do_treino + validacao,
+                      "role": ["train"] * len(do_treino) + ["validation"] * len(validacao)}).to_parquet(
             snapshots[nome], index=False)
         argumentos += ["--snapshot", f"{nome}={snapshots[nome]}"]
     comum = ["--campanha", str(configuracao), *argumentos]
@@ -131,7 +152,8 @@ def _montar(raiz: Path, tabela) -> dict:
                                  "--cache-mr", str(caches[semente]), "--decisao-g5", str(decisao),
                                  "--campanha", str(configuracao), *referencia]) == 0
     politica = json.loads(decisao.read_text(encoding="utf-8"))["decisao"]["politica"]
-    return {"caches": caches, "decisao": decisao, "snapshot": snapshots[politica], "campanha": configuracao}
+    return {"caches": caches, "decisao": decisao, "snapshot": snapshots[politica], "campanha": configuracao,
+            "selecao_comum": selecao_comum}
 
 
 def _argumentos(raiz: Path, montado: dict, caches: dict | None = None) -> list[str]:
@@ -139,7 +161,7 @@ def _argumentos(raiz: Path, montado: dict, caches: dict | None = None) -> list[s
     return ["--raiz", str(raiz), "--cache-m0", str(caches["M0"]),
             *[a for s in SEMENTES for a in ("--cache-mr", f"{s}={caches[s]}")],
             "--decisao-g5", str(montado["decisao"]), "--snapshot-da-politica", str(montado["snapshot"]),
-            "--replicas", "30"]
+            "--selecao", str(montado["selecao_comum"]), "--replicas", "30"]
 
 
 def test_construtor_de_ponta_a_ponta():
@@ -182,10 +204,12 @@ def test_construtor_de_ponta_a_ponta():
         # 4. Com a declaracao resolvida, o ABraOM reconferido e o codigo dado como pronto, congela.
         abraom = raiz / "SABE1171.Abraom.clean.tsv"
         abraom.write_text("chrom\tpos\tref\talt\taf_abraom\n", encoding="utf-8")
-        resolvida = _campanha_do_teste(tabela, raiz / "campanha_resolvida.json", resolvida=True,
+        resolvida = _campanha_do_teste(tabela, raiz / "campanha_resolvida.json",
+                                       selecao_comum=montado["selecao_comum"], resolvida=True,
                                        abraom_sha=hashlib.sha256(abraom.read_bytes()).hexdigest())
         original = construtor.estado_do_codigo
-        construtor.estado_do_codigo = lambda arquivos: ("teste", [], [])
+        construtor.estado_do_codigo = lambda arquivos: {"revisao": "0" * 40, "ausentes": [], "nao_rastreados": [],
+                                                        "modificados": [], "erro": None}
         try:
             assert construtor.main([*_argumentos(raiz, montado), "--campanha", str(resolvida), "--proveniencia",
                                     f"abraom={abraom}", "--congelar", "--out-dir", str(raiz / "g6_c")]) == 0
@@ -199,6 +223,24 @@ def test_construtor_de_ponta_a_ponta():
             {k: v for k, v in manifesto.items() if k != "estado"}, "rascunho e congelado so diferem no estado"
         assert manifesto["sistemas"]["base"]["limiar"]["threshold"] == construcao["limiares_do_ensemble"]["M0"][
             "threshold"], "mesmo limiar nas duas construcoes"
+
+        # 4b. Um git que falha nao vale como `sem mudancas`: com todo o resto resolvido, o --congelar e recusado.
+        import subprocess
+
+        def git_que_falha(*argumentos):
+            raise subprocess.CalledProcessError(128, ["git", *argumentos], stderr="fatal: not a git repository")
+
+        original = construtor._git
+        construtor._git = git_que_falha
+        try:
+            assert construtor.main([*_argumentos(raiz, montado), "--campanha", str(resolvida), "--proveniencia",
+                                    f"abraom={abraom}", "--congelar", "--out-dir", str(raiz / "g6_c2")]) == 2
+        finally:
+            construtor._git = original
+        construcao_c2 = json.loads((raiz / "g6_c2" / "g6_construcao.json").read_text(encoding="utf-8"))
+        assert construcao_c2["bloqueios"] == ["estado do codigo nao conferido (git falhou: CalledProcessError: "
+                                              "fatal: not a git repository)"], construcao_c2["bloqueios"]
+        assert not (raiz / "g6_c2" / g6.NOME_DO_MANIFESTO).exists()
 
         # 5. Adulteracoes: cabeca trocada no comparador da a_2 e caches de adapter trocados.
         alvo = raiz / "comparacao_dev_a2" / "cabeca_MR_h12.pt"

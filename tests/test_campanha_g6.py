@@ -207,36 +207,133 @@ def _entradas(campanha, bloqueios=()):
                 bloqueios_atuais=list(bloqueios), criado_em_utc="2026-09-24T20:00:00Z")
 
 
+CODIGO_OK = {"revisao": "0123456789abcdef0123456789abcdef01234567", "ausentes": [], "nao_rastreados": [],
+             "modificados": [], "erro": None}
+ABRAOM_OK = {"abraom": {"confere": True}}
+
+
+def _regra(**extra):
+    return {"estudos": ["br_clinical_evidence"], "metrica": "auroc", "estatistica": "p2_5", **extra}
+
+
+def _margens_declaradas():
+    """Um exemplo SINTETICO de declaracao completa -- nao e proposta de margem."""
+    return {"estado": "DECLARADO (teste sintetico)",
+            "melhoria_minima_no_coorte_br": _regra(delta="delta_br_full", limite=0.0),
+            "regressao_maxima_no_controle": _regra(delta="delta_control", limite=-0.01),
+            "paineis_com_regressao_inaceitavel": _regra(delta="delta_br_full", limite=-0.02, paineis=["missense"]),
+            "beneficio_nao_explicado_por_um_painel": _regra(delta="delta_br_full", limite=0.0,
+                                                            suporte_minimo_por_painel=10),
+            "interacao": {"criterio_proprio": False, "motivo": "relatada com os absolutos (teste)"}}
+
+
+def _bootstrap_declarado():
+    return {"estado": "DECLARADO (teste sintetico)", "unidade_principal": "cluster_conjunto",
+            "unidade_de_sensibilidade": "par", "replicas": 1000, "seed": 20260901, "percentis": [2.5, 97.5]}
+
+
 def _resolvida(campanha):
     campanha = copy.deepcopy(campanha)
-    campanha["g6"]["margens"]["estado"] = "DECLARADO em 30/09 pelo Eduardo (teste)"
-    campanha["g6"]["bootstrap_da_interacao"]["estado"] = "DECLARADO em 30/09 (teste)"
+    campanha["g6"]["margens"] = _margens_declaradas()
+    campanha["g6"]["bootstrap_da_interacao"] = _bootstrap_declarado()
     for pendencia in campanha["g6"]["pendencias_antes_do_congelamento"]:
-        pendencia["estado"] = "FEITO"
+        pendencia.update(estado="FEITO", onde="teste sintetico")
     return campanha
 
 
 class BloqueiosTests(unittest.TestCase):
     def test_a_declaracao_de_hoje_nao_congela(self):
-        bloqueios = g6.bloqueios(_campanha())
-        self.assertTrue(any(b.startswith("margens nao declaradas") for b in bloqueios))
-        self.assertTrue(any(b.startswith("unidade da reamostragem") for b in bloqueios))
+        bloqueios = g6.bloqueios(_campanha(), estado_do_codigo=CODIGO_OK)
+        self.assertTrue(any(b.startswith("margens: nao declaradas") for b in bloqueios), bloqueios)
+        self.assertTrue(any(b.startswith("bootstrap da interacao: nao declarado") for b in bloqueios))
         self.assertEqual(sum(b.startswith("pendencia ") for b in bloqueios), 4)
         self.assertTrue(any(b.startswith("abraom_snapshot_hash") for b in bloqueios))
 
     def test_tudo_resolvido_nao_bloqueia(self):
-        self.assertEqual(g6.bloqueios(_resolvida(_campanha()), proveniencia={"abraom": {"confere": True}}), [])
+        self.assertEqual(g6.bloqueios(_resolvida(_campanha()), estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK), [])
 
-    def test_codigo_ausente_ou_fora_do_git_bloqueia(self):
-        bloqueios = g6.bloqueios(_resolvida(_campanha()), codigo_ausente=["scripts/avaliar_estudos.py"],
-                                 modificados=["eval/campanha/g6.py"], proveniencia={"abraom": {"confere": True}})
-        self.assertEqual(bloqueios, ["codigo ausente: scripts/avaliar_estudos.py",
-                                     "codigo com mudanca nao registrada no git: eval/campanha/g6.py"])
+    def test_so_o_texto_do_estado_nao_basta(self):
+        # Reproduz a revisao de 24/09: margens e bootstrap com so {"estado": "DECLARADO"} passavam.
+        campanha = _resolvida(_campanha())
+        campanha["g6"]["margens"] = {"estado": "DECLARADO"}
+        campanha["g6"]["bootstrap_da_interacao"] = {"estado": "DECLARADO"}
+        bloqueios = g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK)
+        for nome in g6.MARGENS_EXIGIDAS:
+            self.assertIn(f"margens: {nome}: ausente", bloqueios)
+        self.assertIn("margens: interacao.criterio_proprio: true ou false, explicito", bloqueios)
+        self.assertTrue(any(b.startswith("bootstrap da interacao: unidade_principal") for b in bloqueios))
+        self.assertTrue(any(b.startswith("bootstrap da interacao: replicas") for b in bloqueios))
+
+    def test_margens_com_conteudo_invalido_reprovam(self):
+        casos = {
+            "limite": lambda m: m["melhoria_minima_no_coorte_br"].update(limite=float("nan")),
+            "limite: numero finito": lambda m: m["regressao_maxima_no_controle"].update(limite=True),
+            "tem de ser >= 0": lambda m: m["melhoria_minima_no_coorte_br"].update(limite=-0.01),
+            "tem de ser <= 0": lambda m: m["regressao_maxima_no_controle"].update(limite=0.01),
+            "estatistica": lambda m: m["melhoria_minima_no_coorte_br"].update(estatistica="p97_5"),
+            "delta": lambda m: m["regressao_maxima_no_controle"].update(delta="delta_br_full"),
+            "estudos": lambda m: m["melhoria_minima_no_coorte_br"].update(estudos=[]),
+            "metrica": lambda m: m["melhoria_minima_no_coorte_br"].update(metrica="macro"),
+            "paineis": lambda m: m["paineis_com_regressao_inaceitavel"].update(paineis=["plof"]),
+            "exige `motivo`": lambda m: m["paineis_com_regressao_inaceitavel"].update(paineis=[]),
+            "suporte_minimo": lambda m: m["beneficio_nao_explicado_por_um_painel"].update(suporte_minimo_por_painel=0),
+            "criterio_proprio false exige": lambda m: m["interacao"].pop("motivo"),
+            "interacao.limite": lambda m: m["interacao"].update(criterio_proprio=True),
+        }
+        for trecho, estragar in casos.items():
+            margens = _margens_declaradas()
+            estragar(margens)
+            problemas = g6.problemas_das_margens(margens)
+            self.assertTrue(any(trecho in p for p in problemas), (trecho, problemas))
+        self.assertEqual(g6.problemas_das_margens(_margens_declaradas()), [])
+        margens = _margens_declaradas()
+        margens["paineis_com_regressao_inaceitavel"] = {"paineis": [], "motivo": "nenhum painel critico (teste)"}
+        self.assertEqual(g6.problemas_das_margens(margens), [])
+
+    def test_bootstrap_com_unidade_invalida_reprova(self):
+        for campo, valor in (("unidade_principal", "componente_conexo"), ("unidade_de_sensibilidade", "cluster_conjunto"),
+                             ("replicas", 100), ("seed", None), ("percentis", [5, 95])):
+            bootstrap = dict(_bootstrap_declarado(), **{campo: valor})
+            self.assertTrue(any(p.startswith(campo) for p in g6.problemas_do_bootstrap(bootstrap)), campo)
+        self.assertEqual(g6.problemas_do_bootstrap(_bootstrap_declarado()), [])
+
+    def test_pendencia_resolvida_exige_onde_ou_motivo(self):
+        self.assertEqual(g6.problemas_das_pendencias([{"item": "x", "estado": "FEITO", "onde": "commit abc"},
+                                                      {"item": "y", "estado": "RETIRADO", "motivo": "sem suporte"}]), [])
+        problemas = g6.problemas_das_pendencias([{"item": "x", "estado": "FEITO"},
+                                                 {"item": "y", "estado": "RETIRADO", "motivo": "  "},
+                                                 {"item": "z", "estado": "A_FAZER"}])
+        self.assertEqual(problemas, ["pendencia FEITO sem `onde`: x", "pendencia RETIRADO sem `motivo`: y",
+                                     "pendencia A_FAZER: z"])
+
+    def test_git_que_falha_nao_vale_como_sem_mudancas(self):
+        base = _resolvida(_campanha())
+        falhou = dict(CODIGO_OK, revisao=None, erro="CalledProcessError: fatal: not a git repository")
+        self.assertEqual(g6.bloqueios(base, estado_do_codigo=falhou, proveniencia=ABRAOM_OK),
+                         ["estado do codigo nao conferido (git falhou: CalledProcessError: fatal: not a git "
+                          "repository)"])
+        for revisao in ("desconhecida", "", None, "0123"):
+            self.assertTrue(g6.bloqueios(base, estado_do_codigo=dict(CODIGO_OK, revisao=revisao),
+                                         proveniencia=ABRAOM_OK))
+        sujo = dict(CODIGO_OK, ausentes=["scripts/avaliar_estudos.py"], nao_rastreados=["eval/campanha/g6.py"],
+                    modificados=["scripts/construir_g6.py"])
+        self.assertEqual(g6.bloqueios(base, estado_do_codigo=sujo, proveniencia=ABRAOM_OK),
+                         ["codigo ausente: scripts/avaliar_estudos.py", "codigo fora do git: eval/campanha/g6.py",
+                          "codigo com mudanca nao commitada: scripts/construir_g6.py"])
 
     def test_margem_aberta_com_outra_palavra_continua_bloqueando(self):
         campanha = _resolvida(_campanha())
         campanha["g6"]["margens"]["estado"] = "em discussao"
-        self.assertTrue(g6.bloqueios(campanha, proveniencia={"abraom": {"confere": True}}))
+        self.assertTrue(g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK))
+
+    def test_a_declaracao_real_tem_os_campos_das_margens_e_do_bootstrap(self):
+        # O modelo da declaracao tem todos os campos que a validacao cobra, nulos ate a decisao.
+        g6_real = _campanha()["g6"]
+        for nome in g6.MARGENS_EXIGIDAS:
+            self.assertIn(nome, g6_real["margens"])
+        self.assertIn("criterio_proprio", g6_real["margens"]["interacao"])
+        for campo in ("unidade_principal", "unidade_de_sensibilidade", "replicas", "seed", "percentis"):
+            self.assertIn(campo, g6_real["bootstrap_da_interacao"])
 
 
 class ManifestoTests(unittest.TestCase):

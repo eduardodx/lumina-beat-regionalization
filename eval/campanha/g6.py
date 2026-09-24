@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -221,22 +222,143 @@ def _declarado(estado: Any) -> bool:
     return str(estado).upper().startswith(("DECLARADO", "CONFIRMADO"))
 
 
-def bloqueios(campanha: dict[str, Any], *, codigo_ausente: Iterable[str] = (), modificados: Iterable[str] = (),
+def _finito(valor: Any) -> bool:
+    return isinstance(valor, (int, float)) and not isinstance(valor, bool) and math.isfinite(valor)
+
+
+def _texto(valor: Any) -> bool:
+    return isinstance(valor, str) and bool(valor.strip())
+
+
+ESTUDOS = ("br_clinical_evidence", "br_population_observed")
+DELTAS = ("delta_br_full", "delta_br_matched", "delta_control")
+METRICAS_DAS_MARGENS = ("auroc", "auprc")
+#: A regra e sempre `estatistica >= limite` sobre um delta MR - M0: a estimativa ou o limite inferior do IC.
+ESTATISTICAS = ("estimativa", "p2_5")
+#: As tres margens do Mosaic (PLAN 13.5) e a condicao 3 do protocolo, com o delta que cada uma pode usar e o sinal
+#: do limite: melhoria pede limite >= 0; regressao maxima, limite <= 0.
+MARGENS_EXIGIDAS: dict[str, tuple[tuple[str, ...], str]] = {
+    "melhoria_minima_no_coorte_br": (("delta_br_full", "delta_br_matched"), ">= 0"),
+    "regressao_maxima_no_controle": (("delta_control",), "<= 0"),
+    "paineis_com_regressao_inaceitavel": (DELTAS, "<= 0"),
+    "beneficio_nao_explicado_por_um_painel": (("delta_br_full", "delta_br_matched"), ">= 0"),
+}
+UNIDADES_IMPLEMENTADAS = ("cluster_conjunto", "par")
+
+
+def _problemas_da_regra(nome: str, item: Any, deltas: tuple[str, ...] | None, sinal: str) -> list[str]:
+    """Uma regra `estatistica >= limite`; `deltas` None = a regra nao escolhe delta (a interacao)."""
+    if not isinstance(item, dict):
+        return [f"{nome}: ausente"]
+    problemas = []
+    estudos = item.get("estudos")
+    if not (isinstance(estudos, list) and estudos and len(set(estudos)) == len(estudos) and set(estudos) <= set(ESTUDOS)):
+        problemas.append(f"{nome}.estudos: lista nao vazia de {list(ESTUDOS)}, recebeu {estudos!r}")
+    campos = (("metrica", METRICAS_DAS_MARGENS), ("estatistica", ESTATISTICAS))
+    for campo, dominio in ((("delta", deltas),) if deltas is not None else ()) + campos:
+        if item.get(campo) not in dominio:
+            problemas.append(f"{nome}.{campo}: um de {list(dominio)}, recebeu {item.get(campo)!r}")
+    limite = item.get("limite")
+    if not _finito(limite):
+        problemas.append(f"{nome}.limite: numero finito, recebeu {limite!r}")
+    elif (sinal == ">= 0" and limite < 0) or (sinal == "<= 0" and limite > 0):
+        problemas.append(f"{nome}.limite: tem de ser {sinal}, recebeu {limite}")
+    return problemas
+
+
+def problemas_das_margens(margens: dict[str, Any]) -> list[str]:
+    """O que falta para as margens valerem como regra de decisao: estado declarado E, em cada uma, estudos, delta,
+    metrica, estatistica e limite finito -- nao basta o texto do estado (revisao de 24/09). Pura."""
+    problemas = []
+    for nome, (deltas, sinal) in MARGENS_EXIGIDAS.items():
+        item = margens.get(nome)
+        if nome == "paineis_com_regressao_inaceitavel" and isinstance(item, dict) and item.get("paineis") == []:
+            if not _texto(item.get("motivo")):
+                problemas.append(f"{nome}: lista vazia de paineis exige `motivo`")
+            continue
+        problemas += _problemas_da_regra(nome, item, deltas, sinal)
+        if nome == "paineis_com_regressao_inaceitavel" and isinstance(item, dict):
+            paineis = item.get("paineis")
+            if not (isinstance(paineis, list) and paineis and set(paineis) <= set(metricas.PAINEIS_DE_DISCRIMINACAO)):
+                problemas.append(f"{nome}.paineis: lista de {list(metricas.PAINEIS_DE_DISCRIMINACAO)} (ou vazia com "
+                                 f"motivo), recebeu {paineis!r}")
+        if nome == "beneficio_nao_explicado_por_um_painel" and isinstance(item, dict):
+            suporte = item.get("suporte_minimo_por_painel")
+            if not (isinstance(suporte, int) and not isinstance(suporte, bool) and suporte >= 1):
+                problemas.append(f"{nome}.suporte_minimo_por_painel: inteiro >= 1 (P e B do painel), recebeu "
+                                 f"{suporte!r}")
+    interacao = margens.get("interacao")
+    if not isinstance(interacao, dict) or not isinstance(interacao.get("criterio_proprio"), bool):
+        problemas.append("interacao.criterio_proprio: true ou false, explicito")
+    elif interacao["criterio_proprio"]:
+        problemas += _problemas_da_regra("interacao", interacao, None, ">= 0")
+    elif not _texto(interacao.get("motivo")):
+        problemas.append("interacao: criterio_proprio false exige `motivo` (ex.: relatada com os absolutos)")
+    if not _declarado(margens.get("estado")):
+        incompletas = sorted({p.split(".")[0].split(":")[0] for p in problemas})
+        return [f"nao declaradas ({margens.get('estado')}); incompletas: {', '.join(incompletas) or 'nenhuma'}"]
+    return problemas
+
+
+def problemas_do_bootstrap(bootstrap: dict[str, Any]) -> list[str]:
+    """Unidade principal e de sensibilidade entre as implementadas, replicas, seed e percentis. Pura."""
+    if not _declarado(bootstrap.get("estado")):
+        return [f"nao declarado ({bootstrap.get('estado')}); unidade_principal = {bootstrap.get('unidade_principal')!r}"]
+    problemas = []
+    principal, sensibilidade = bootstrap.get("unidade_principal"), bootstrap.get("unidade_de_sensibilidade")
+    if principal not in UNIDADES_IMPLEMENTADAS:
+        problemas.append(f"unidade_principal: uma de {list(UNIDADES_IMPLEMENTADAS)} (o componente conexo cluster-par "
+                         f"nao esta implementado), recebeu {principal!r}")
+    if sensibilidade not in UNIDADES_IMPLEMENTADAS or sensibilidade == principal:
+        problemas.append(f"unidade_de_sensibilidade: a outra de {list(UNIDADES_IMPLEMENTADAS)}, recebeu "
+                         f"{sensibilidade!r}")
+    replicas, seed = bootstrap.get("replicas"), bootstrap.get("seed")
+    if not (isinstance(replicas, int) and not isinstance(replicas, bool) and replicas >= 1000):
+        problemas.append(f"replicas: inteiro >= 1000 (o Mosaic usa 1000), recebeu {replicas!r}")
+    if not (isinstance(seed, int) and not isinstance(seed, bool)):
+        problemas.append(f"seed: inteiro, recebeu {seed!r}")
+    if bootstrap.get("percentis") != [2.5, 97.5]:
+        problemas.append(f"percentis: [2.5, 97.5], recebeu {bootstrap.get('percentis')!r}")
+    return problemas
+
+
+def problemas_das_pendencias(pendencias: Iterable[dict[str, Any]]) -> list[str]:
+    """Pendencia resolvida e FEITO com `onde` (arquivo, commit ou teste) ou RETIRADO com `motivo`. Pura."""
+    problemas = []
+    for pendencia in pendencias:
+        estado, item = pendencia.get("estado"), pendencia.get("item")
+        if estado == "FEITO" and not _texto(pendencia.get("onde")):
+            problemas.append(f"pendencia FEITO sem `onde`: {item}")
+        elif estado == "RETIRADO" and not _texto(pendencia.get("motivo")):
+            problemas.append(f"pendencia RETIRADO sem `motivo`: {item}")
+        elif estado not in ESTADOS_RESOLVIDOS:
+            problemas.append(f"pendencia {estado}: {item}")
+    return problemas
+
+
+def problemas_do_codigo(estado: dict[str, Any]) -> list[str]:
+    """Revisao do git conferida (40 hex), nenhum arquivo de codigo ausente, fora do git ou com mudanca. Um git que
+    falha NAO vale como `sem mudancas` (revisao de 24/09). Pura."""
+    if estado.get("erro"):
+        return [f"estado do codigo nao conferido (git falhou: {estado['erro']})"]
+    problemas = []
+    revisao = str(estado.get("revisao") or "")
+    if len(revisao) != 40 or any(c not in "0123456789abcdef" for c in revisao):
+        problemas.append(f"revisao do git nao conferida: {revisao!r}")
+    problemas += [f"codigo ausente: {a}" for a in estado.get("ausentes", [])]
+    problemas += [f"codigo fora do git: {a}" for a in estado.get("nao_rastreados", [])]
+    problemas += [f"codigo com mudanca nao commitada: {a}" for a in estado.get("modificados", [])]
+    return problemas
+
+
+def bloqueios(campanha: dict[str, Any], *, estado_do_codigo: dict[str, Any],
               proveniencia: dict[str, dict[str, Any]] | None = None) -> list[str]:
     """O que impede o congelamento, na ordem em que se resolve. Vazio = pode congelar. Pura."""
     g6 = campanha["g6"]
-    saida = []
-    if not _declarado(g6["margens"]["estado"]):
-        saida.append("margens nao declaradas (decisao do Eduardo: tres margens, cada uma com quantidade, metrica e "
-                     f"regra, antes de qualquer score dos estudos): {g6['margens']['estado']}")
-    if not _declarado(g6["bootstrap_da_interacao"]["estado"]):
-        saida.append("unidade da reamostragem da interacao nao declarada (alinhar com o Eduardo): "
-                     f"{g6['bootstrap_da_interacao']['estado']}")
-    for pendencia in g6.get("pendencias_antes_do_congelamento", []):
-        if pendencia.get("estado") not in ESTADOS_RESOLVIDOS:
-            saida.append(f"pendencia {pendencia.get('estado')}: {pendencia.get('item')}")
-    saida += [f"codigo ausente: {arquivo}" for arquivo in codigo_ausente]
-    saida += [f"codigo com mudanca nao registrada no git: {arquivo}" for arquivo in modificados]
+    saida = [f"margens: {p}" for p in problemas_das_margens(g6["margens"])]
+    saida += [f"bootstrap da interacao: {p}" for p in problemas_do_bootstrap(g6["bootstrap_da_interacao"])]
+    saida += problemas_das_pendencias(g6.get("pendencias_antes_do_congelamento", []))
+    saida += problemas_do_codigo(estado_do_codigo)
     if not ((proveniencia or {}).get("abraom") or {}).get("confere"):
         saida.append("abraom_snapshot_hash nao reconferido no arquivo (--proveniencia abraom=<SABE1171.Abraom.clean.tsv>)")
     return saida

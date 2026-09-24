@@ -915,8 +915,8 @@ não lê o fold 0 nem os estudos. Confere a composição contra o pareamento; ca
 seu comparador (mesmo sha256); o M0 dos comparadores da a₂ e da a₃ idêntico ao da a₁ (reconferido); os quatro
 caches (sistema, adapter congelado, o mesmo R03, só o adapter diferindo, mesmas linhas); recarrega as seis cabeças e
 confere a reprodução (seleção contra `predicoes_selecao.parquet`; métricas da seleção e do fold 1 contra o
-comparador; **Platt e limiar da cabeça refeitos no fold 1**, o que prova que as linhas do fold 1 são as da
-calibração). Depois: média das três probabilidades por sistema, **limiar do ensemble pela regra do protocolo** e o
+comparador; Platt e limiar da cabeça refeitos no fold 1 — consistência numérica; a identidade das linhas vem de
+IDs e hashes, ver a sétima revisão abaixo). Depois: média das três probabilidades por sistema, **limiar do ensemble pela regra do protocolo** e o
 **ensemble final no desenvolvimento** (M0 = média de h11/h12/h13; MR = média de a₁+h11, a₂+h12, a₃+h13), descritivo e
 sem reabrir a composição. Grava `g6_construcao.json`, `g6_predicoes.parquet` e o **rascunho** do manifesto; só com
 `--congelar` e sem bloqueio grava `g6_manifesto.json` + `.sha256`.
@@ -938,3 +938,35 @@ sem reabrir a composição. Grava `g6_construcao.json`, `g6_predicoes.parquet` e
   Antes de mandar, um ensaio local sem torch (cabeças lineares no lugar do `.pt`, todo o resto real) passou nos seis
   casos: rascunho, `--congelar` com bloqueio recusado, congelamento resolvido com sha conferido, e as adulterações
   (cabeça trocada, caches de adapter trocados, M0 diferente num comparador) reprovando.
+
+**Sétima revisão (24/09), antes de rodar o rascunho: aceita inteira.**
+- **Bloqueio conferia o texto do estado, não o conteúdo.** Margens e bootstrap com só `{"estado": "DECLARADO"}`
+  passavam nessa parte (reproduzido pela revisão; reproduzido de novo num teste). Agora `g6.problemas_das_margens`
+  exige, em cada uma das três margens do Mosaic e na condição 3, estudos, delta, métrica, estatística (estimativa ou
+  `p2_5`) e limite **finito** com o sinal certo, e `criterio_proprio` explícito na interação; `problemas_do_bootstrap`
+  exige unidade principal e de sensibilidade entre as implementadas, réplicas ≥ 1000, seed e percentis;
+  `problemas_das_pendencias` exige `onde` no `FEITO` e `motivo` no `RETIRADO`. A declaração ganhou o modelo com os
+  campos nulos, que é o que o Eduardo preenche.
+- **Git que falha parecia "sem mudanças".** `estado_do_codigo` chama o git com `check=True`, confere também os
+  arquivos fora do git (`ls-files`) e devolve `erro` quando falha; `problemas_do_codigo` bloqueia com `erro`, com
+  revisão que não seja 40 hex, com código ausente, fora do git ou modificado.
+- **Linhas por IDs e hashes, não por calibração coincidente.** O construtor passa a conferir que os IDs do fold 1
+  são exatamente o papel `validation` do snapshot da política (1.575, declarado) e que os da seleção são exatamente
+  os de `selecao_comum.parquet` (novo `--selecao`, sha256 com o prefixo `693eb234`); a cadeia cabeça →
+  `cache_identidade_sha256` → hash de conteúdo da tabela já era conferida. Reproduzir Platt e limiar fica descrito
+  como consistência numérica.
+- **Baseline contínua: não retirar.** Minha justificativa ("não está na membership") não se sustentava: o release
+  traz `pb_annotations.parquet` e o Mosaic tem o comparador **oficial** `gnomad_rarity` (`config/comparators.yaml`,
+  `mosaic-comparators/v1`: `−gnomad_v4_af`, `not_found`/`ac0` com AF 0), calculado dessas colunas sem ler VCF. Papel
+  explícito da presença no ABraOM: no clínico, diagnóstico da diferença de composição; no populacional ela **define**
+  os grupos (`build_brazil_membership`: casos gold presentes, controles gold ausentes), é constante em cada grupo e
+  não se relata como discriminação. O pareamento casa `gnomad_af_bin`, então dentro do par o `gnomad_rarity` só
+  difere dentro da faixa. Próximo passo: `scripts/conferir_cobertura_das_baselines.py` (hash lógico do
+  `pb_annotations` e do `membership` recalculado com o `logical_contract` do Mosaic contra a referência declarada
+  — os hashes lógicos da ADR 0006 (`specs/PLAN-release-migration.md` §7.1: `pb_annotations` `7a6ae9b2…`,
+  `membership` `1c1cd65d…`, o do G1), que valem nos dois layouts — e contra o manifesto da cópia (a do notebook
+  ainda tem `bundle.manifest.json`, do layout anterior à ADR 0006);
+  especificação do `gnomad_rarity`; cobertura por estudo e papel), **só contagens, nenhuma métrica**.
+- Ensaio local sem torch refeito com os casos novos (seleção com um ID trocado, fold 1 sem um ID, git que falha com
+  todo o resto resolvido): todos recusados pelo motivo certo. Testes puros: 25 do G6 + 4 da declaração + 7 da
+  cobertura (1 só roda no notebook, com pyyaml).

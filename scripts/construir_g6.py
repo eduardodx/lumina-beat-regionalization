@@ -9,17 +9,23 @@ O QUE FAZ
        comparadores da a_2 e da a_3 tem de ter sido conferido identico ao da a_1 -- aqui ele e reconferido;
     3. confere os quatro caches (M0, MR_a1, MR_a2, MR_a3): sistema, adapter congelado da semente, o mesmo R03 da
        referencia, M0 x MR so diferindo pelo adapter, as mesmas linhas de fold 1 e de selecao;
-    4. recarrega as seis cabecas e confere metadados (decisao do G5, snapshot, cache, adapter, receita, Platt a > 0)
+    4. confere as LINHAS por IDs e hashes: cada cabeca aponta (cache_identidade_sha256) para a identidade do seu
+       cache, que fixa o hash de conteudo da tabela, papel incluido (reconferido ao carregar); os IDs do fold 1 sao
+       exatamente o papel `validation` do snapshot da politica, e os da selecao exatamente os de
+       `selecao_comum.parquet` (sha256 com o prefixo declarado), nas contagens declaradas;
+    5. recarrega as seis cabecas e confere metadados (decisao do G5, snapshot, cache, adapter, receita, Platt a > 0)
        e reproducao: probabilidades da selecao contra `predicoes_selecao.parquet`; metricas da selecao e do fold 1
-       contra o relatorio do comparador; Platt e limiar da cabeca refeitos no fold 1 -- o que prova que as linhas do
-       fold 1 de agora sao as da calibracao;
-    5. predicao do sistema = media das tres probabilidades calibradas; limiar do ensemble = a regra do Mosaic
+       contra o relatorio do comparador; Platt e limiar da cabeca refeitos no fold 1. Isso e consistencia NUMERICA;
+       a identidade das linhas vem do passo 4, nao de os valores coincidirem;
+    6. predicao do sistema = media das tres probabilidades calibradas; limiar do ensemble = a regra do Mosaic
        (`calibrate_threshold`) nessa media, no fold 1, por sistema;
-    6. compara o ensemble FINAL no conjunto de selecao, com IC por cluster. DESCRITIVO: nao muda composicao nem
+    7. compara o ensemble FINAL no conjunto de selecao, com IC por cluster. DESCRITIVO: nao muda composicao nem
        limiar, e os ICs sao condicionais aos sistemas treinados;
-    7. monta o manifesto. Com bloqueio (margens, unidade do bootstrap, pendencias, codigo do G7 ausente ou fora do
-       git, ABraOM nao reconferido), grava so o RASCUNHO; com --congelar e sem bloqueio, grava tambem
-       `g6_manifesto.json` e o sha256 dos bytes a parte.
+    8. monta o manifesto. Com bloqueio, grava so o RASCUNHO; com --congelar e sem bloqueio, grava tambem
+       `g6_manifesto.json` e o sha256 dos bytes a parte. Os bloqueios conferem CONTEUDO, nao o texto do estado:
+       margens com estudos, delta, metrica, estatistica e limite finito; unidade e configuracao do bootstrap;
+       pendencia FEITO com `onde` e RETIRADO com `motivo`; revisao do git conferida e codigo sem mudanca fora do
+       commit (um git que falha bloqueia, nao vale como `sem mudancas`); ABraOM reconferido no arquivo.
 
 SAIDAS (em --out-dir, que nao pode existir)
     g6_construcao.json           conferencias, reproducoes, limiares, ensemble final no desenvolvimento, bloqueios
@@ -36,6 +42,7 @@ USO (notebook)
         --cache-mr 20260923=~/artifacts/redesenho/g3_cache/MR_a3 \\
         --decisao-g5 ~/artifacts/redesenho/g5/g5_decisao.json \\
         --snapshot-da-politica ~/artifacts/redesenho/g2_final_janela2048/core_head_snapshot.parquet \\
+        --selecao ~/artifacts/redesenho/g5_comum/selecao_comum.parquet \\
         --proveniencia abraom=~/artifacts/redesenho/g0_fontes/SABE1171.Abraom.clean.tsv \\
         --out-dir ~/artifacts/redesenho/g6_rascunho
 """
@@ -80,18 +87,29 @@ def ler_pares(pares: list[str], opcao: str) -> dict[str, Path]:
     return saida
 
 
-def estado_do_codigo(arquivos: list[str]) -> tuple[str, list[str], list[str]]:
-    """(revisao do git, arquivos ausentes, arquivos com mudanca fora do commit -- modificados ou nao rastreados)."""
+def _git(*argumentos: str) -> str:
+    """Saida do git; codigo de saida diferente de zero LEVANTA (check=True): falha nunca vira saida vazia."""
+    return subprocess.run(["git", *argumentos], cwd=RAIZ, capture_output=True, text=True, timeout=30,
+                          check=True).stdout
+
+
+def estado_do_codigo(arquivos: list[str]) -> dict[str, Any]:
+    """Revisao do git, arquivos ausentes, fora do git (nao rastreados) e com mudanca fora do commit. Se o git falhar,
+    `erro` diz por que -- e o congelamento bloqueia (g6.problemas_do_codigo)."""
     ausentes = [a for a in arquivos if not (RAIZ / a).exists()]
+    presentes = [a for a in arquivos if a not in ausentes]
     try:
-        revisao = subprocess.run(["git", "rev-parse", "HEAD"], cwd=RAIZ, capture_output=True, text=True,
-                                 timeout=10).stdout.strip() or "desconhecida"
-        status = subprocess.run(["git", "status", "--porcelain", "--", *[a for a in arquivos if a not in ausentes]],
-                                cwd=RAIZ, capture_output=True, text=True, timeout=10).stdout
-        modificados = sorted(linha[3:].strip() for linha in status.splitlines() if linha.strip())
-    except Exception as exc:  # noqa: BLE001
-        revisao, modificados = f"desconhecida ({type(exc).__name__})", ["(git indisponivel)"]
-    return revisao, ausentes, modificados
+        revisao = _git("rev-parse", "HEAD").strip()
+        rastreados = set(_git("ls-files", "--", *presentes).split())
+        status = _git("status", "--porcelain", "--", *presentes)
+    except (OSError, subprocess.SubprocessError) as exc:
+        detalhe = getattr(exc, "stderr", None) or exc
+        return {"revisao": None, "ausentes": ausentes, "nao_rastreados": [], "modificados": [],
+                "erro": f"{type(exc).__name__}: {str(detalhe).strip()[:300]}"}
+    nao_rastreados = sorted(a for a in presentes if a not in rastreados)
+    modificados = sorted({linha[3:].strip() for linha in status.splitlines() if linha.strip()} - set(nao_rastreados))
+    return {"revisao": revisao, "ausentes": ausentes, "nao_rastreados": nao_rastreados, "modificados": modificados,
+            "erro": None}
 
 
 def conferir_proveniencia(campanha: dict[str, Any], arquivos: dict[str, Path]) -> tuple[dict[str, Any], list[str]]:
@@ -121,6 +139,32 @@ def conferir_proveniencia(campanha: dict[str, Any], arquivos: dict[str, Path]) -
     return saida, problemas
 
 
+def conferir_linhas(ids: dict[str, np.ndarray], *, snapshot: Path, selecao: Path,
+                    campanha: dict[str, Any]) -> list[str]:
+    """A identidade das linhas por IDs e hashes: o fold 1 do cache e exatamente o papel `validation` do snapshot da
+    politica e a selecao e exatamente `selecao_comum.parquet`, nas contagens declaradas. Do snapshot so se usam os
+    IDs do papel `validation`: o fold 0 (papel `test`) nao entra."""
+    problemas = []
+    recortes = campanha["recortes"]
+    tabela = pd.read_parquet(snapshot, columns=["variant_id", "role"])
+    do_snapshot = set(tabela.loc[tabela["role"] == "validation", "variant_id"].astype(str))
+    if len(ids["validation"]) != len(set(ids["validation"])) or set(ids["validation"]) != do_snapshot:
+        problemas.append(f"fold 1 do cache ({len(ids['validation'])}) nao e o papel validation do snapshot da politica "
+                         f"({len(do_snapshot)}; {len(set(ids['validation']) ^ do_snapshot)} ids diferem)")
+    esperado = recortes["parada_e_calibracao"].get("variantes")
+    if len(ids["validation"]) != esperado:
+        problemas.append(f"fold 1 com {len(ids['validation'])} variantes; a declaracao diz {esperado}")
+    prefixo = recortes["comparacao_de_desenvolvimento"]["sha256_prefixo"]
+    sha = sha256_do_arquivo(selecao)
+    if not sha.startswith(prefixo):
+        problemas.append(f"--selecao com sha256 {sha[:12]}, a declaracao diz {prefixo}")
+    comum = set(pd.read_parquet(selecao, columns=["variant_id"])["variant_id"].astype(str))
+    if len(ids["selecao"]) != len(set(ids["selecao"])) or set(ids["selecao"]) != comum:
+        problemas.append(f"selecao do cache ({len(ids['selecao'])}) nao e selecao_comum.parquet ({len(comum)}; "
+                         f"{len(set(ids['selecao']) ^ comum)} ids diferem)")
+    return problemas
+
+
 def ambiente_da_pontuacao() -> dict[str, Any]:
     import platform
 
@@ -145,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--decisao-g5", required=True, type=Path)
     parser.add_argument("--snapshot-da-politica", required=True, type=Path,
                         help="o core_head_snapshot.parquet da politica escolhida no G5")
+    parser.add_argument("--selecao", required=True, type=Path, help="g5_comum/selecao_comum.parquet")
     parser.add_argument("--proveniencia", action="append", default=[],
                         help="nome=arquivo para reconferir (abraom, pool_abraom, pool_global, plano, plano_treino, "
                              "plano_validacao)")
@@ -267,6 +312,8 @@ def main(argv: list[str] | None = None) -> int:
     if (len(ids["selecao"]), len(set(clusters))) != (declarado["variantes"], declarado["clusters"]):
         problemas.append(f"selecao com {len(ids['selecao'])} variantes em {len(set(clusters))} clusters; a declaracao "
                          f"diz {declarado['variantes']} em {declarado['clusters']}")
+    problemas += conferir_linhas(ids, snapshot=args.snapshot_da_politica.expanduser(),
+                                 selecao=args.selecao.expanduser(), campanha=campanha)
     for nome, tabela_pred in predicoes.items():
         if not np.array_equal(tabela_pred["variant_id"].astype(str).to_numpy(), ids["selecao"]):
             problemas.append(f"{nome}/predicoes_selecao.parquet nao esta na ordem das linhas de selecao do cache")
@@ -358,17 +405,17 @@ def main(argv: list[str] | None = None) -> int:
                                                 paineis["selecao"], clusters, limiares=limiares,
                                                 replicas=args.replicas, seed=args.seed_do_bootstrap)
 
-    revisao, ausentes, modificados = estado_do_codigo(sorted(set(g6.CODIGO_DO_G6) | set(g6.CODIGO_DO_G7)))
-    codigo = {"revisao": revisao, "ausentes": ausentes, "modificados": modificados,
-              "arquivos": {a: sha256_do_arquivo(RAIZ / a) for a in sorted(set(g6.CODIGO_DO_G6) | set(g6.CODIGO_DO_G7))
-                           if (RAIZ / a).exists()}}
-    bloqueios = g6.bloqueios(campanha, codigo_ausente=[a for a in g6.CODIGO_DO_G7 if a in ausentes],
-                             modificados=modificados, proveniencia=proveniencia)
+    arquivos_de_codigo = sorted(set(g6.CODIGO_DO_G6) | set(g6.CODIGO_DO_G7))
+    codigo = {**estado_do_codigo(arquivos_de_codigo),
+              "arquivos": {a: sha256_do_arquivo(RAIZ / a) for a in arquivos_de_codigo if (RAIZ / a).exists()}}
+    bloqueios = g6.bloqueios(campanha, estado_do_codigo=codigo, proveniencia=proveniencia)
     fold1 = {"papel": "validation", "descricao": "fold 1 gold (validation_gold do run 0)",
              "variantes": int(len(ids["validation"])), "n_P": int(rotulos["validation"].sum()),
-             "n_B": int((rotulos["validation"] == 0).sum()), "ids_sha256": g6.sha256_dos_ids(ids["validation"])}
+             "n_B": int((rotulos["validation"] == 0).sum()), "ids_sha256": g6.sha256_dos_ids(ids["validation"]),
+             "igual_ao_papel_validation_do_snapshot": True, "snapshot_sha256": sha_do_snapshot}
     selecao = {"variantes": int(len(ids["selecao"])), "clusters": int(len(set(clusters))),
-               "ids_sha256": g6.sha256_dos_ids(ids["selecao"])}
+               "ids_sha256": g6.sha256_dos_ids(ids["selecao"]), "igual_a_selecao_comum": True,
+               "selecao_comum_sha256": sha256_do_arquivo(args.selecao.expanduser())}
     caches = {chave: {"pasta": str(pastas[chave]), "identidade_sha256": sha_das_identidades[chave],
                       **{k: identidades[chave].get(k) for k in ("sistema", "semente_do_adapter", "adapter_sha256",
                                                                 "checkpoint_sha256", "tabela_sha256_conteudo",
