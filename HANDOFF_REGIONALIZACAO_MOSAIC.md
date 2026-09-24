@@ -729,21 +729,46 @@ sistemas congelados para conferir reprodução não invalida o estudo. Mudança 
 
 | Peça | O que faz |
 |---|---|
-| `--seed-da-validacao` no runner | a subamostra da validação tem semente própria, **obrigatória** com `--limite-validacao` (antes era `seed + 1`: a₂ seria validada em outro recorte). O recorte vai para o relatório e para o checkpoint (sha256 das chaves `fonte\|variant_id\|focal_index`) |
-| `--recorte-da-validacao-igual-a <pasta>` | lê o `detalhe_da_validacao.json` de uma corrida anterior (funciona na a₁) e **aborta antes de carregar o modelo** se o recorte sorteado for outro |
+| `--seed-da-validacao` no runner | a subamostra da validação tem semente própria, **obrigatória** com `--limite-validacao`. Antes era `seed + 1`: a₂ seria validada em outro recorte, o que acrescentaria uma fonte de variação e descumpriria o desenho acordado (não "tiraria o sentido" da comparação, como eu tinha dito). O recorte vai para o relatório e para o checkpoint (sha256 das chaves `fonte\|variant_id\|focal_index`) |
+| `--recorte-da-validacao-igual-a <pasta>` | **aborta antes de carregar o modelo** se, contra uma corrida anterior (funciona na a₁), diferir o recorte sorteado (do `detalhe_da_validacao.json`) **ou** o sha256 do plano de validação, do plano de treino ou do checkpoint (do `treino_do_adapter.json`). O recorte só identifica as janelas dentro do plano; as máscaras e o resto dos dados estão no plano (terceira revisão de 23/09) |
 | resumidor | imprime a semente e o recorte da validação; na a₁, calcula o recorte do detalhe |
 | `scripts/conferir_cabecas_salvas.py` | recarrega as 6 cabeças e confere formato, identidades (decisão do G5, snapshot, cache, adapter), Platt e limiar contra o relatório, `a > 0`, receita, **reprodução das probabilidades** (≤ 1e-6) e das métricas do ensemble; grava `conferencia_das_cabecas.json` com o sha256 de cada arquivo (entra no G6) |
 | `scripts/conferir_codigo_do_cache.py` | antes de uma extração longa, confere em segundos que código, pacote `lumina` e ambiente são os do cache do M0 |
 | comparador | textos corrigidos (ensemble, viés de tamanho desconhecido, cabeças não independentes); passa a imprimir Platt, limiar e onde salvou as cabeças, e marca painel frágil |
 | `eval/campanha/cabeca.py` | `montar_rede` (uma definição para treinar e recarregar), `carregar_cabeca_salva`, `pontuar_salva` |
 
+**Composição final, declarada em `g6` na declaração antes da a₂ e da a₃ (e travada por `tests/test_declaracao_g6.py`):**
+
+| Sistema | Componentes | Arquivos (em `~/artifacts/redesenho`) |
+|---|---|---|
+| M0 | M0 + h11, M0 + h12, M0 + h13 | `comparacao_dev_a1/cabeca_M0_h{11,12,13}.pt` (os comparadores da a₂ e da a₃ têm de reproduzi-las) |
+| MR | a₁ + h11, a₂ + h12, a₃ + h13 | `comparacao_dev_a1/cabeca_MR_h11.pt`, `comparacao_dev_a2/cabeca_MR_h12.pt`, `comparacao_dev_a3/cabeca_MR_h13.pt` |
+
+Os três comparadores produzem **nove** cabeças MR. Misturá-las daria outro ensemble; escolher uma depois de olhar
+resultado é proibido. Predição do sistema = média das três probabilidades calibradas.
+
+**Limiar do ensemble:** os limiares individuais não definem o da média. Se o G7 reportar MCC, sensibilidade ou
+especificidade do ensemble, o limiar é o de MCC na média das probabilidades no fold 1, por sistema, congelado no G6
+com proveniência (o Mosaic exige limiar externo congelado para métricas com limiar). Não bloqueia a₂/a₃.
+
+**Antes do G7, separar a decisão científica da implementação:**
+- **Margens (ABERTO, do Eduardo):** o protocolo do Mosaic (§13.5 do `PLAN.md`) exige, antes de ver scores, a
+  margem mínima de melhoria no coorte BR, a margem máxima de regressão no controle e os painéis em que regressão é
+  inaceitável. O "0,02" do plano não diz sobre qual quantidade incide: ganho absoluto, interação e não inferioridade
+  geral são perguntas diferentes.
+- **Bootstrap (PROPOSTO, §6.3):** reamostrar `overlap_cluster_id` em conjunto, com os mesmos sorteios para M0 e MR; o
+  consumidor implementa e testa a regra. A unidade é mudança em relação ao PDF (matched set) e merece alinhamento;
+  réplicas e seed são detalhe operacional da equipe.
+
 **Próximos passos, em ordem:**
-1. Conferir as 6 cabeças da a₁ (`conferir_cabecas_salvas.py`), antes de qualquer congelamento.
+1. Testes e conferências no notebook com interrupção na primeira falha (`set -euo pipefail`; `| tail` esconde
+   reprovação); conferir as 6 cabeças da a₁ antes de qualquer congelamento.
 2. Treinar a₂ e a₃ com a mesma receita e orçamento, mudando só `--seed`, com `--seed-da-validacao 20260922` e
-   `--recorte-da-validacao-igual-a ~/artifacts/redesenho/g4_corrida2`.
+   `--recorte-da-validacao-igual-a ~/artifacts/redesenho/g4_corrida2`; a₃ só começa se a₂ terminar com saída 0;
+   log com data e hora; pasta de saída nova.
 3. Congelar a₂ e a₃ pela regra (menor `focal_alt`, supera a base) em `adapters_congelados`.
 4. `conferir_codigo_do_cache.py` e extração de MR_a₂ e MR_a₃ (~3,5 h cada).
-5. Comparador por adapter: salva MR_2 = a₂ + h12 e MR_3 = a₃ + h13 (a declaração pareia MR_i = a_i + h_i); as
-   cabeças do M0 têm de sair idênticas às da a₁ (reprodução). Conferir as cabeças de novo.
+5. Comparador por adapter (`comparacao_dev_a2`, `comparacao_dev_a3`); as cabeças do M0 têm de sair idênticas às da
+   a₁. Conferir as cabeças de novo.
 6. Em paralelo, sem consultar o G7: consumidor dos estudos e manifesto do G6, com testes sintéticos.
-7. Congelar (G6) e avaliar (G7).
+7. Congelar (G6: composição, limiar do ensemble, margens, bootstrap) e avaliar (G7).
