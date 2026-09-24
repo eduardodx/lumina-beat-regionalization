@@ -221,7 +221,7 @@
     "codigo": "eval/campanha/g5.py e scripts/g5_escolher_extracao_e_politica.py"
   },
   "g6": {
-    "estado": "DECLARADO em 23/09, antes de a_2 e a_3 e de qualquer score dos estudos; margens e bootstrap a fechar antes do G7",
+    "estado": "DECLARADO em 23/09, antes de a_2 e a_3 e de qualquer score dos estudos; regra do limiar, proveniencia, exclusoes, sobreposicoes e pendencias acrescentadas em 24/09, antes do construtor rodar; margens e bootstrap a fechar antes do G7",
     "natureza": "protocolo DERIVADO: aplica as regras de avaliacao do Mosaic, mas a cabeca e treinada e calibrada no core_locus do release, com exclusoes proprias (autorizado pelo mantenedor em 15/09); nao descrever como cumprimento integral do protocolo publicado",
     "manifesto": "g6_manifesto.json, com o sha256 dos bytes num arquivo a parte (g6_manifesto.json.sha256)",
     "composicao_final": {
@@ -240,6 +240,15 @@
     },
     "predicao_do_sistema": "media das 3 probabilidades calibradas dos componentes",
     "limiar_do_ensemble": "MCC na media das probabilidades calibradas dos componentes, no fold 1, por sistema, congelado no G6 com proveniencia. Os limiares individuais das cabecas NAO definem o do ensemble; sem este, metricas com limiar do ensemble nao sao oficiais (protocolo do Mosaic: thresholded_metrics_require_external_frozen_threshold)",
+    "regra_do_limiar": {
+      "estado": "a do PROTOCOLO, conferida no codigo do Mosaic em 24/09: config/suite.yaml (threshold: metric mcc, on validation_gold, tiebreak [specificity, higher_threshold]) e src/mosaic/comparator_eval/stats.py:calibrate_threshold (commit 814e7f0)",
+      "candidatos": "logo abaixo do menor score, cada score distinto e logo acima do maior (threshold_candidates)",
+      "desempate": "maior MCC; empate -> maior especificidade -> maior limiar; MCC 0 quando o denominador e 0",
+      "previsao": "score >= limiar",
+      "onde": "fold 1 = validation_gold do run 0 (teste = fold 0, validacao = fold 1 na agenda do Mosaic)",
+      "codigo": "eval/campanha/g6.py:limiar_do_mosaic",
+      "nota": "os limiares individuais das cabecas (cabeca.limiar_de_mcc, primeiro maximo) ficam como registro e nao entram no G7"
+    },
     "margens": {
       "estado": "ABERTO: decisao cientifica do Eduardo, antes do G7 e antes de qualquer score dos estudos",
       "exigidas_pelo_mosaic": [
@@ -264,6 +273,61 @@
       "com_limiar_e_brier": "com os limiares e calibradores congelados; Brier a escrever",
       "baselines_diagnosticas": "presenca no ABraOM e AF (gnomAD, ABraOM) nos mesmos pares, fora dos sistemas: a escrever, ou retirar ANTES do G6 com o motivo",
       "sanidade_no_fold0": "AUROC/AUPRC de M0 e MR no teste do core_locus, so depois do G6"
-    }
+    },
+    "proveniencia": {
+      "estado": "DECLARADA em 24/09 a partir dos registros de 15 a 24/09. O construtor do G6 reconfere o que le (caches, cabecas, conferencias, decisao do G5, snapshot da politica e os arquivos passados em --proveniencia) e marca o resto como declarado, nao reconferido",
+      "pre_treino_do_r03": {
+        "checkpoint_id": "LUM-20260719-001-R03",
+        "arquivo": "s3://croma-bioai-lumina-artifacts-us-east-2/experiments/LUM-20260719-001/runs/R03/checkpoints/final/best_checkpoint.pt",
+        "passo": 71000,
+        "sha256": "f2983560f8f965d234df4f4d15e81337b9547a578d4d6b397ab640207d6a2f44",
+        "dataset_id": "desconhecido",
+        "dataset_hash": "desconhecido",
+        "cutoff": "desconhecido",
+        "nota": "corpus, receita e cutoff do pre-treino nao estao no repositorio de inferencia (estariam em experiments/LUM-20260719-001/README.md, no repositorio de treino): ficam desconhecidos, nunca preenchidos com a data do ClinVar"
+      },
+      "treino_da_cabeca": {
+        "dataset_id": "core_head_snapshot da politica escolhida no G5 (g2_final_<politica>/core_head_snapshot.parquet), papel train",
+        "origem": "derivado do core_locus do release v1 do Mosaic (clinvar-pb-capability-suite/v1, codigo 814e7f0), segundo a orientacao do mantenedor em 15/09/2026, com as exclusoes de exclusoes_aplicadas",
+        "cutoff_dos_rotulos": "ClinVar 2026-06, o do release v1: cutoff dos ROTULOS da cabeca, nao do pre-treino",
+        "hash": "sha256 do arquivo do snapshot, o registrado na decisao do G5 (o construtor reconfere no arquivo)"
+      },
+      "abraom": {
+        "fonte": "abraom_sabe1171",
+        "arquivo": "SABE1171.Abraom.clean.tsv",
+        "sha256": "3cd3378432909b80053d3a92a1b7d544053a51697623845f6a44f67ba7dbd9d6",
+        "origem_do_hash": "config/sources.yaml do Mosaic; a copia do notebook (g0_fontes) conferida igual em 20/09"
+      },
+      "dados_do_adapter": {
+        "pool_abraom": {"sha256_prefixo": "40bd0f79", "variantes": 1224029, "medido_em": "2026-09-20"},
+        "pool_global": {"sha256_prefixo": "ce749a6d", "variantes": 139495, "fonte": "gnomAD v4.1 joint (AF_joint)", "medido_em": "2026-09-21"},
+        "plano": {"sha256_prefixo": "c99e5dae", "janelas": 50000, "mistura": "30.000 globais e 20.000 do ABraOM", "medido_em": "2026-09-21"},
+        "separacao_por_loco": "planos de treino e validacao em adapter_do_mr.referencia (sha256 completos), reconferidos no congelamento dos tres adapters"
+      }
+    },
+    "exclusoes_aplicadas": {
+      "politica": "janela2048, a da decisao do G5. O manifesto descreve o que foi aplicado e nao promete isolamento maior",
+      "itens": [
+        {"o_que": "membros dos dois estudos (casos, casos sem par, controles)", "onde": "treino, validacao e teste da cabeca", "garantia": "nenhum membro em papel algum"},
+        {"o_que": "variantes com SCV de instituicao brasileira (regra ampla, 5.995)", "onde": "treino, validacao e teste", "garantia": "nenhuma"},
+        {"o_que": "nao sequence_eligible; chr8", "onde": "os tres papeis", "garantia": "nenhuma"},
+        {"o_que": "clusters da selecao comum (156)", "onde": "treino, cluster inteiro", "garantia": "nenhum locus da selecao no treino"},
+        {"o_que": "variantes de treino a ate 2.048 bp de um membro", "onde": "treino", "garantia": "nenhuma variante de treino dentro da janela de leitura de um membro", "nao_garante": "ausencia de sobreposicao de janelas (residua em ~25% dos membros) nem a remocao do cluster do membro: a exclusao por cluster dos estudos foi abandonada por inviavel (tirava 84,5% dos patogenicos do treino)"},
+        {"o_que": "alelos dos membros", "onde": "pool e janelas do adapter", "garantia": "nenhum alelo dos estudos no treino populacional"}
+      ],
+      "exposicao_residual": "medida no snapshot final (raio 4.096, benignas do clinico): 0,4832 de caso maior entre os pares diferentes, media +1,55, mediana absoluta 0; descritiva, efeito sobre os modelos desconhecido"
+    },
+    "sobreposicoes_declaradas": [
+      "gnomAD v4.1 joint e a segunda fonte da regionalizacao (60% das janelas do adapter): o MR nao e regionalizado so pelo abraom_sabe1171 que o Mosaic exige como fonte",
+      "br_population_observed e definido pela presenca no ABraOM, a fonte de 40% das janelas do adapter: sobreposto por construcao, nao e evidencia independente",
+      "os casos do estudo clinico estao 4,6x mais presentes no ABraOM que os controles (achado de 20/09): a interacao subtrai deltas e nao remove essa diferenca de composicao"
+    ],
+    "pendencias_antes_do_congelamento": [
+      {"item": "Brier do ensemble com os calibradores congelados (analises_secundarias.com_limiar_e_brier)", "estado": "A_ESCREVER"},
+      {"item": "baselines diagnosticas: presenca no ABraOM e AF (gnomAD, ABraOM) nos mesmos pares (analises_secundarias.baselines_diagnosticas)", "estado": "A_ESCREVER_OU_RETIRAR"},
+      {"item": "script de pontuacao e relatorio do G7 (scripts/avaliar_estudos.py), testado com dados sinteticos", "estado": "A_ESCREVER"},
+      {"item": "ensaio do consumidor na membership real com scores SINTETICOS, sem nenhum score dos estudos: confere a leitura dos artefatos da campanha antes da avaliacao unica", "estado": "A_FAZER"}
+    ],
+    "regra_das_pendencias": "o manifesto so congela com margens e unidade do bootstrap declaradas e com toda pendencia FEITO ou RETIRADO (com o motivo); o construtor recusa --congelar antes disso"
   }
 }

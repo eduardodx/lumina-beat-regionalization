@@ -1,6 +1,7 @@
 # G6 e G7 — congelamento e avaliação única nos estudos brasileiros
 
-Estado: **23/09**, revisado no mesmo dia. Escrito enquanto a₂ e a₃ treinam; nenhum score dos estudos foi calculado.
+Estado: **24/09** (escrito em 23/09, enquanto a₂ e a₃ treinavam; construtor do G6 em 24/09). Nenhum score dos
+estudos foi calculado.
 Separa o que as regras de avaliação do Mosaic **fixam**, o que já foi **declarado** por nós, o que está
 **proposto** (confirmar no G6) e o que está **aberto** (decisão do Eduardo, antes do G7).
 
@@ -37,7 +38,8 @@ por causa do resultado transforma a rodada seguinte em exploratória.
 | n_P, n_B e cobertura sempre; deltas na **interseção** de cobertura; sem imputação | `comparar()`: cobertura de cada sistema no coorte e métricas na interseção |
 | Relatório do coorte inteiro obrigatório; painéis como diagnóstico; **sem macro brasileira**; plof e synonymous como guarda; sem piso 50/50 | coorte inteiro + por painel no coorte completo (AUROC/AUPRC só em missense/splice/noncoding) + o coorte sem cada painel |
 | Métricas com limiar só com limiar externo congelado, com proveniência | sem limiar declarado, são omitidas |
-| Bootstrap pareado por `overlap_cluster_id`, 1.000 réplicas, seed 20260901, percentis 2,5/97,5 | os **mesmos sorteios** para os dois sistemas (teste: transformação monótona dá delta 0 em toda réplica) |
+| Limiar: maior MCC na `validation_gold`; empate → maior especificidade → maior limiar (`config/suite.yaml`, `calibrate_threshold`) | `g6.limiar_do_mosaic` na média das probabilidades do ensemble, no fold 1 (a `validation_gold` do run 0), por sistema; congelado no manifesto |
+| Bootstrap pareado por `overlap_cluster_id`, 1.000 réplicas, seed 20260901, percentis 2,5/97,5 | os **mesmos sorteios** para os dois sistemas (teste: transformação monótona dá delta 0 em toda réplica). Os ICs são **condicionais aos sistemas congelados**: reamostram variantes, não o treino dos adapters e das cabeças |
 | No estudo clínico, relatar o subconjunto `present_abraom` | coorte completo com `present_abraom = true` |
 | Taxa de pareamento e composição antes e depois | `pareamento` e `composicao` por coorte |
 
@@ -69,7 +71,11 @@ valores absolutos de cada grupo e com as sensibilidades da seção 4.
 |---|---|---|
 | IC da interação, principal | clusters sorteados **em conjunto** sobre casos pareados + controles | preserva a dependência genômica (cluster inteiro); **não** preserva os pares — caso e controle em clusters diferentes saem em sorteios independentes |
 | IC da interação, sensibilidade | sorteio por **par** | preserva o pareamento; **não** preserva a dependência entre pares do mesmo cluster |
-| Regra do limiar do ensemble | a do `calibrate_threshold` do Mosaic: maior MCC; empate → maior especificidade → maior limiar | alinhar com o protocolo; a regra das cabeças individuais (primeiro máximo) era nossa |
+
+A regra do limiar do ensemble saiu desta tabela em 24/09: não é proposta nossa. O `config/suite.yaml` do Mosaic a
+fixa (`threshold: metric mcc, on validation_gold, tiebreak [specificity, higher_threshold]`), conferida no código
+(`calibrate_threshold`, candidatos logo abaixo do menor score, cada score distinto e logo acima do maior); a regra
+das cabeças individuais (primeiro máximo) era nossa e não entra no G7.
 
 Os dois ICs da interação saem juntos, como métodos de pressupostos diferentes. Uma unidade que preservasse as duas
 coisas seria o componente conexo do grafo cluster–par; a viabilidade depende do tamanho desses componentes, que se
@@ -113,7 +119,25 @@ diversidade por repetição. Serve como ordem de grandeza, e não deve virar out
 ## 5. O manifesto do G6
 
 Arquivo `g6_manifesto.json` e, **à parte**, `g6_manifesto.json.sha256` com o sha256 dos bytes do manifesto (um
-arquivo não contém o próprio hash). O consumidor recusa um manifesto cujo sha256 não confira.
+arquivo não contém o próprio hash). O consumidor recusa um manifesto cujo sha256 não confira
+(`g6.ler_manifesto_congelado`).
+
+**Construtor: `scripts/construir_g6.py`** (regras puras em `eval/campanha/g6.py`). Não treina nada nem lê o fold 0
+ou os estudos. Confere, antes de qualquer número: a composição contra o pareamento de sementes; cada componente
+contra a conferência do seu comparador (mesmo sha256); o M0 dos comparadores da a₂ e da a₃ idêntico ao da a₁
+(reconferido); os quatro caches (sistema, adapter congelado, o mesmo R03, M0 × MR só diferindo pelo adapter,
+mesmas linhas). Recarrega as seis cabeças e confere a reprodução: probabilidades da seleção contra
+`predicoes_selecao.parquet`, métricas da seleção e do fold 1 contra o relatório do comparador, **Platt e limiar da
+cabeça refeitos no fold 1** (prova que as linhas do fold 1 são as da calibração). Então: média das três
+probabilidades por sistema, limiar do ensemble pela regra do Mosaic, e o **ensemble final no desenvolvimento**,
+descritivo, com IC por cluster condicional aos sistemas treinados — o resultado não muda composição nem limiar.
+Saídas: `g6_construcao.json`, `g6_predicoes.parquet`, `g6_manifesto_rascunho.json`; com `--congelar` e sem
+bloqueio, `g6_manifesto.json` e o sha256. **Bloqueios** (o congelamento é recusado com qualquer um): margens e
+unidade do bootstrap não declaradas; pendências da declaração (`g6.pendencias_antes_do_congelamento`: Brier,
+baselines, script de pontuação do G7, ensaio do consumidor na membership real com scores sintéticos); código do G7
+ausente ou com mudança fora do git; `abraom_snapshot_hash` não reconferido no arquivo. Testes: regras puras
+(`tests/test_campanha_g6.py`, sem torch) e ponta a ponta sobre caches sintéticos com G5, três comparadores e três
+conferências (`tests/test_construir_g6.py`, com torch).
 
 **Os campos do `required_consumer_manifest`, adaptados ao nosso desenho.** O Mosaic supõe um sistema base treinado
 num snapshot global; aqui há três fontes de treino, que o manifesto declara separadas:
@@ -171,6 +195,6 @@ estudos é um script próprio, que exige o manifesto do G6.
 |---|---|
 | núcleo do consumidor (`eval/campanha/estudos.py`) | escrito e testado com dados **sintéticos** (`tests/test_campanha_estudos.py`); ~5 a 8 min por estudo com 1.000 réplicas. Ainda não validado ponta a ponta nos artefatos da campanha |
 | script de extração dos estudos | a escrever |
-| construtor do manifesto do G6 (inclui os limiares do ensemble) | a escrever; testes sintéticos antes de a₂/a₃ terminarem |
+| construtor do G6 (`scripts/construir_g6.py`, `eval/campanha/g6.py`) | escrito em 24/09 e testado com dados sintéticos (regras puras no Windows; ponta a ponta com torch no notebook); rascunho a rodar nos artefatos; congelamento bloqueado até as margens, a unidade do bootstrap e as pendências |
 | script de pontuação e relatório do G7 | a escrever |
 | Brier, baselines diagnósticas, sanidade no fold 0 | a escrever, ou retirar antes do G6 com o motivo |

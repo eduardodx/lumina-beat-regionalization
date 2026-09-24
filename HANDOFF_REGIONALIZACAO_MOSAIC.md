@@ -777,7 +777,7 @@ com proveniência (o Mosaic exige limiar externo congelado para métricas com li
 
 **Início da a₂/a₃ (23/09):** a trava passou (`recorte 0891cf615c3d7461`, planos e checkpoint iguais aos da a₁).
 Conferência das 6 cabeças da a₁ **passou**: reprodução exata (max |Δp| = 0), ensemble idêntico ao relatório, Platt
-`a` de 0,56 a 0,86 (nenhuma inverte a ordem), `b` de 3,1 a 3,5 nas seis (o ponto de 50% cai em logits bem
+`a` de 0,56 a 0,86 (nenhuma inverte a ordem), `b` de 3,12 a 3,45 nas seis (o ponto de 50% cai em logits bem
 negativos: o Platt compensa uma diferença grande entre treino e fold 1, compatível com proporções de classe
 diferentes — não medido), limiares de 0,46 a 0,56, épocas de 190 a 520. A conferência de código caiu no import do
 `lumina` sem o shim do tilelang; corrigida (`fc48ab4`).
@@ -831,7 +831,9 @@ em `PY` — candidato: o `.venv` do `lumina-inference`, que mora na home e tem o
 
 **Segunda queda (24/09) e o que ficou fixo.** A retomada com o ambiente reinstalado pelo Gabriel (mamba da ponta do
 `main`, `e9594ce1`, 22/07 — a mesma versão declarada `2.3.2.post1` do commit fixado, por isso só a conferência
-numérica decide) reproduziu o M0 e o MR_a₂ com **diferença exatamente zero** e retomou o MR_a₂ em 49.152 — e parou de
+numérica decide) reproduziu **exatamente a amostra conferida** (as 64 primeiras variantes do fragmento 0, nos lotes
+originais) do M0 e do MR_a₂ e retomou o MR_a₂ em 49.152 — é reprodução da amostra, não re-extração do cache
+inteiro; com a identidade e a integridade dos fragmentos, basta para não descartar o cache retomado — e parou de
 novo. A documentação da AWS explica: no JupyterLab o espaço é ocioso quando **não há sessão ativa de kernel nem de
 terminal** (mínimo de 60 min; `nohup` não conta), e o tempo é configurado pelo administrador no domínio ou no perfil.
 Peças novas: `scripts/cadeia_mr_a2_a3.sh` (a cadeia versionada, retomável e autoverificada; `PY` = interpretador),
@@ -842,10 +844,13 @@ mamba fixado em `e9594ce1`, para o ambiente morar na home e sobreviver a reiníc
 **Cadeia completa (24/09, 19:04).** Conferência de ambiente e reprodução do M0 e do MR_a₂ passaram; MR_a₂ e MR_a₃
 completos (171.720 de 171.720 cada, zero falha de janela; o MR_a₂ saiu em três sessões — fragmentos 0–11, 12–35 e
 36–41 —, cada uma aberta pela conferência de reprodução); comparadores e conferências das cabeças passaram (max |Δp| = 0; ensemble
-igual ao relatório); **as cabeças do M0 saíram idênticas às do comparador da a₁ nos dois** (o treino da cabeça é
-determinístico, e a composição final tem as suas cabeças do M0 bem definidas). Platt `a` 0,60–0,90 em todas
-(nenhuma inverte a ordem), `b` 3,2–3,4; limiares 0,50–0,65. A tentativa das 14:17 parou antes de extrair por
-falta do `pyfaidx` depois do reinício (registro acima); a relançada seguinte passou em todas as conferências.
+igual ao relatório); **as cabeças do M0 saíram idênticas às do comparador da a₁ nos dois** — as execuções
+conferidas, com essas sementes, dados e ambiente, reproduziram exatamente o M0 (não é garantia para outro ambiente
+ou configuração). Platt `a` 0,60–0,90 em todas (nenhuma inverte a ordem), `b` 3,23–3,45; limiares 0,49–0,65
+(o menor é o do M0 h12, 0,4883); épocas 100–530. Nas doze cabeças distintas dos três comparadores (o M0 contado
+uma vez): `a` 0,5598–0,9005, `b` 3,1242–3,4501, limiares 0,4574–0,6488, épocas 100–530. A tentativa das 14:17
+parou antes de extrair por falta do `pyfaidx` depois do reinício (registro acima); a relançada seguinte passou em
+todas as conferências.
 
 | Desenvolvimento, conjunto de seleção, ensemble de 3 cabeças por adapter | macro Δ [IC] | AUROC geral Δ [IC] | AUPRC Δ [IC] |
 |---|---|---|---|
@@ -861,8 +866,14 @@ Leitura (exploratória, classificação geral, sem participação brasileira): a
 com IC que inclui zero; a a₁ foi a mais negativa, e o IC da AUROC geral abaixo de zero **não se repetiu** em a₂ e a₃.
 A variação entre sementes de adapter (0,0028 na macro) é da ordem do próprio delta. As três comparações **não são
 independentes**: dividem as cabeças do M0 e o conjunto de seleção (que escolheu a configuração do M0) e variam só o
-lado MR; h12 é sempre o par mais negativo porque o M0 h12 é a melhor cabeça do M0 nesse conjunto. Sem sinal de
-melhora na classificação geral e, no máximo, piora pequena; nada disso responde a pergunta regional (G7).
+lado MR. O par com h12 é sempre o mais negativo; o M0 h12 ser a melhor cabeça do M0 nesse conjunto pode contribuir,
+mas as cabeças MR também variam e a causa não foi demonstrada. **Leitura (revisão de 24/09): as estimativas indicam
+pequenas quedas na macro, sem evidência consistente de melhora; os intervalos incluem zero e não demonstram
+equivalência nem ausência de degradação.** A AUPRC positiva da a₃ não é vitória (IC com zero, as outras métricas
+não acompanham), e um IC que exclui zero numa semente e inclui noutra não demonstra diferença entre adapters. A
+média dos deltas dos pares da composição final (−0,0025) não é a macro do ensemble final, que depende da ordem
+depois de combinar as probabilidades: ela sai no G6, descritiva, sem reabrir seleção. Nada disso responde a
+pergunta regional (G7).
 
 **Proveniência do MR_a₂ (em andamento, 24/09).** Extraído em sessões separadas por reinícios, cada uma aberta pela
 conferência de reprodução contra o M0 e o `fragmento_00000` do próprio MR_a₂: fragmentos 0–11 na sessão original
@@ -890,3 +901,40 @@ da reamostragem são do Eduardo.
 - o consumidor agora conta os pares com os dois membros cobertos, e as **análises secundárias pré-declaradas** (fora
   do ABraOM, 44 controles com SCV brasileira, exposição empatada, pares completos) estão implementadas; as que faltam
   (Brier, baselines de AF, fold 0) estão declaradas, para escrever ou retirar **antes** do G6.
+
+**Sexta revisão (24/09), aceita inteira.** Além das correções de leitura já aplicadas acima (a conferência de
+reprodução é da **amostra conferida**, não do cache inteiro; sai "no máximo, piora pequena"; a AUPRC da a₃ não é
+vitória; o M0 idêntico vale para as execuções conferidas; a causa do par com h12 não foi demonstrada; faixas de Platt
+e de limiar corrigidas), retiro o que eu tinha dito na conversa: nenhuma causa para a a₁ ter sido a mais negativa
+foi medida — atribuí-la "em parte à semente" era explicação sem medida. E fica registrado: **os ICs do bootstrap por
+cluster são condicionais aos sistemas treinados** — reamostram variantes com adapters e cabeças fixos e não incluem a
+variação de treino.
+
+**Construtor do G6 (24/09): `scripts/construir_g6.py`, regras puras em `eval/campanha/g6.py`.** Não treina nada e
+não lê o fold 0 nem os estudos. Confere a composição contra o pareamento; cada componente contra a conferência do
+seu comparador (mesmo sha256); o M0 dos comparadores da a₂ e da a₃ idêntico ao da a₁ (reconferido); os quatro
+caches (sistema, adapter congelado, o mesmo R03, só o adapter diferindo, mesmas linhas); recarrega as seis cabeças e
+confere a reprodução (seleção contra `predicoes_selecao.parquet`; métricas da seleção e do fold 1 contra o
+comparador; **Platt e limiar da cabeça refeitos no fold 1**, o que prova que as linhas do fold 1 são as da
+calibração). Depois: média das três probabilidades por sistema, **limiar do ensemble pela regra do protocolo** e o
+**ensemble final no desenvolvimento** (M0 = média de h11/h12/h13; MR = média de a₁+h11, a₂+h12, a₃+h13), descritivo e
+sem reabrir a composição. Grava `g6_construcao.json`, `g6_predicoes.parquet` e o **rascunho** do manifesto; só com
+`--congelar` e sem bloqueio grava `g6_manifesto.json` + `.sha256`.
+
+- **Regra do limiar = a do protocolo**, não proposta nossa: `config/suite.yaml` do Mosaic (`threshold: metric mcc,
+  on validation_gold, tiebreak [specificity, higher_threshold]`) e `calibrate_threshold` (candidatos logo abaixo do
+  menor score, cada score distinto e logo acima do maior), conferidos no código em 24/09; o fold 1 é a
+  `validation_gold` do run 0.
+- **Declaração ampliada (`g6`)**: `regra_do_limiar`, `proveniencia` (pré-treino do R03 com corpus, hash e cutoff
+  "desconhecido"; treino da cabeça com o cutoff **dos rótulos**, ClinVar 2026-06; ABraOM `3cd33784…`; dados do
+  adapter por prefixo), `exclusoes_aplicadas` (o que foi aplicado, com o que **não** garante),
+  `sobreposicoes_declaradas` e `pendencias_antes_do_congelamento`.
+- **Bloqueios de hoje (o congelamento é recusado):** margens e unidade do bootstrap (Eduardo); Brier; baselines
+  (escrever ou retirar com o motivo); `scripts/avaliar_estudos.py`; ensaio do consumidor na membership real com scores
+  **sintéticos**; ABraOM reconferido no arquivo; código do G7 commitado. A sanidade no fold 0 fica para depois do
+  congelamento, como declarado, e não bloqueia.
+- **Testes:** regras puras (`tests/test_campanha_g6.py`, 20, no Windows); ponta a ponta com G5, três comparadores e
+  três conferências sobre caches sintéticos (`tests/test_construir_g6.py`, precisa de torch: roda no notebook).
+  Antes de mandar, um ensaio local sem torch (cabeças lineares no lugar do `.pt`, todo o resto real) passou nos seis
+  casos: rascunho, `--congelar` com bloqueio recusado, congelamento resolvido com sha conferido, e as adulterações
+  (cabeça trocada, caches de adapter trocados, M0 diferente num comparador) reprovando.
