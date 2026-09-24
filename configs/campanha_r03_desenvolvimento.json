@@ -157,5 +157,38 @@
       "por_que": "o plano so dizia 'criterio declarado antes'. Comparar as extracoes no que de fato seria usado (a politica que a regra escolhe) e o analogo direto da regra da politica"
     },
     "codigo": "eval/campanha/g5.py e scripts/g5_escolher_extracao_e_politica.py"
+  },
+  "g6": {
+    "estado": "DECLARADO em 23/09, antes de a_2 e a_3 e de qualquer score dos estudos; margens e bootstrap a fechar antes do G7",
+    "composicao_final": {
+      "M0": [
+        {"cabeca": 11, "arquivo": "comparacao_dev_a1/cabeca_M0_h11.pt"},
+        {"cabeca": 12, "arquivo": "comparacao_dev_a1/cabeca_M0_h12.pt"},
+        {"cabeca": 13, "arquivo": "comparacao_dev_a1/cabeca_M0_h13.pt"}
+      ],
+      "MR": [
+        {"adapter": 20260921, "cabeca": 11, "arquivo": "comparacao_dev_a1/cabeca_MR_h11.pt"},
+        {"adapter": 20260922, "cabeca": 12, "arquivo": "comparacao_dev_a2/cabeca_MR_h12.pt"},
+        {"adapter": 20260923, "cabeca": 13, "arquivo": "comparacao_dev_a3/cabeca_MR_h13.pt"}
+      ],
+      "regra": "a de sementes.combinacoes, sem excecao: MR_i = a_i + h_i, M0_i = h_i. As cabecas do M0 vem do comparador da a_1; os comparadores da a_2 e da a_3 tem de reproduzi-las",
+      "proibido": "misturar as 9 cabecas MR que os tres comparadores produzem (seria outro ensemble) ou escolher cabeca depois de olhar resultado"
+    },
+    "predicao_do_sistema": "media das 3 probabilidades calibradas dos componentes",
+    "limiar_do_ensemble": "MCC na media das probabilidades calibradas dos componentes, no fold 1, por sistema, congelado no G6 com proveniencia. Os limiares individuais das cabecas NAO definem o do ensemble; sem este, metricas com limiar do ensemble nao sao oficiais (protocolo do Mosaic: thresholded_metrics_require_external_frozen_threshold)",
+    "margens": {
+      "estado": "ABERTO: decisao cientifica do Eduardo, antes do G7 e antes de qualquer score dos estudos",
+      "exigidas_pelo_mosaic": [
+        "margem pratica minima de melhoria no coorte BR",
+        "margem maxima de regressao no controle",
+        "paineis em que uma regressao e inaceitavel"
+      ],
+      "nota": "o 0,02 do plano (secao 6.5) nao diz sobre qual quantidade incide. Ganho absoluto no coorte BR, interacao delta_br_matched - delta_control e nao inferioridade geral sao perguntas diferentes, cada uma com a sua margem"
+    },
+    "bootstrap_da_interacao": {
+      "estado": "PROPOSTO (plano, secao 6.3)",
+      "regra": "reamostrar overlap_cluster_id EM CONJUNTO sobre a uniao de casos pareados e controles, com os mesmos sorteios para M0 e MR; reamostragem por par como sensibilidade",
+      "alinhar_com_o_eduardo": "a unidade: o PDF previa reamostragem por matched set (10.000 replicas); replicas e seed sao detalhe operacional da equipe"
+    }
   }
 }

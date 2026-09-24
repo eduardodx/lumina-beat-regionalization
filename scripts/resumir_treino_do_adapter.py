@@ -89,7 +89,8 @@ def _recorte(entradas: dict[str, Any], lido_do_detalhe: dict[str, Any] | None) -
     if not recorte:
         return "recorte nao disponivel (sem registro e sem detalhe_da_validacao.json)"
     origem = "" if registrado else ", lido do detalhe_da_validacao.json"
-    confere = " | IDENTICO ao da referencia" if (registrado or {}).get("confere_com") else ""
+    confere = (" | recorte, planos e checkpoint IDENTICOS aos da referencia"
+               if (registrado or {}).get("confere_com") else "")
     return f"recorte {recorte['sha256'][:16]} ({recorte['janelas']} janelas{origem}){confere}"
 
 

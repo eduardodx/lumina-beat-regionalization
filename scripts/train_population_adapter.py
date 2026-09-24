@@ -596,6 +596,34 @@ def recorte_de_referencia(caminho: Path) -> dict[str, Any]:
     return {**hash_do_recorte(chave_do_exemplo(r) for r in registros), "origem": str(caminho)}
 
 
+#: O que, alem do recorte, tem de ser o MESMO arquivo da corrida de referencia. O recorte identifica as janelas
+#: DENTRO do plano; o plano carrega tambem as mascaras (spans) e o resto dos dados, e o checkpoint e a base adaptada.
+ARQUIVOS_DA_REFERENCIA = ("plano_validacao_sha256", "plano_treino_sha256", "checkpoint_sha256")
+
+
+def referencia_da_corrida(caminho: Path) -> dict[str, Any]:
+    """Recorte da validacao (do detalhe) e sha256 dos planos e do checkpoint (do relatorio) de uma corrida feita."""
+    caminho = caminho.expanduser()
+    pasta = caminho if caminho.is_dir() else caminho.parent
+    entradas = json.loads((pasta / "treino_do_adapter.json").read_text(encoding="utf-8")).get("entradas") or {}
+    return {**recorte_de_referencia(pasta), **{campo: entradas.get(campo) for campo in ARQUIVOS_DA_REFERENCIA}}
+
+
+def diferencas_da_referencia(referencia: dict[str, Any], recorte: dict[str, Any],
+                             atuais: dict[str, str]) -> list[str]:
+    """O que difere da corrida de referencia: o recorte sorteado e os arquivos. Pura."""
+    problemas = []
+    if referencia["sha256"] != recorte["sha256"]:
+        problemas.append(f"recorte da validacao {recorte['sha256'][:16]} ({recorte['janelas']} janelas) contra "
+                         f"{referencia['sha256'][:16]} ({referencia['janelas']} janelas)")
+    for campo in ARQUIVOS_DA_REFERENCIA:
+        if not referencia.get(campo):
+            problemas.append(f"{campo} ausente no relatorio da referencia")
+        elif referencia[campo] != atuais.get(campo):
+            problemas.append(f"{campo} {str(atuais.get(campo))[:16]} contra {referencia[campo][:16]}")
+    return problemas
+
+
 def carregar_exemplos(caminho: Path, fetch, *, window_bp: int, limite: int | None,
                       seed: int = 0) -> tuple[list, dict]:
     """Le o plano e reconstroi os exemplos. `ref_mismatch` interrompe: e erro de dado, nao estatistica."""
@@ -684,9 +712,10 @@ def carregar_validacao(config: argparse.Namespace, fetch) -> tuple[list, dict, d
     """(exemplos, falhas, recorte, problema) da validacao; `problema` None quando pode seguir.
 
     A subamostra tem semente PROPRIA (`--seed-da-validacao`). Antes era `--seed + 1`: cada semente de adapter seria
-    validada -- e teria o checkpoint escolhido -- num recorte diferente (revisao de 23/09). Com
-    `--recorte-da-validacao-igual-a`, o recorte sorteado e conferido contra o de uma corrida anterior ANTES de
-    carregar o modelo.
+    validada -- e teria o checkpoint escolhido -- num recorte diferente, o que acrescentaria uma fonte de variacao
+    e descumpriria o desenho (revisao de 23/09). Com `--recorte-da-validacao-igual-a`, ANTES de carregar o modelo,
+    conferem-se contra uma corrida anterior o recorte sorteado e o sha256 dos dois planos e do checkpoint: o recorte
+    so identifica as janelas dentro do plano, nao as mascaras nem o resto dos dados.
     """
     if not config.plano_validacao:
         return [], {}, None, None
@@ -695,12 +724,18 @@ def carregar_validacao(config: argparse.Namespace, fetch) -> tuple[list, dict, d
         seed=config.seed_da_validacao if config.seed_da_validacao is not None else 0)
     recorte = recorte_dos_exemplos(exemplos)
     if config.recorte_da_validacao_igual_a:
-        referencia = recorte_de_referencia(config.recorte_da_validacao_igual_a)
-        if referencia["sha256"] != recorte["sha256"]:
+        try:
+            referencia = referencia_da_corrida(config.recorte_da_validacao_igual_a)
+        except (OSError, ValueError, KeyError) as exc:
+            return exemplos, falhas, recorte, f"referencia ilegivel em {config.recorte_da_validacao_igual_a}: {exc}"
+        atuais = {"plano_validacao_sha256": sha256_file(config.plano_validacao.expanduser()),
+                  "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
+                  "checkpoint_sha256": sha256_file(config.checkpoint.expanduser())}
+        problemas = diferencas_da_referencia(referencia, recorte, atuais)
+        if problemas:
             return exemplos, falhas, recorte, (
-                f"a validacao sorteada ({recorte['janelas']} janelas, {recorte['sha256'][:16]}) nao e a de "
-                f"{referencia['origem']} ({referencia['janelas']} janelas, {referencia['sha256'][:16]}). Adapters "
-                f"da campanha so se comparam e so se escolhem na MESMA validacao")
+                f"esta corrida nao usa a MESMA validacao e os MESMOS arquivos de {referencia['origem']}: "
+                f"{'; '.join(problemas)}. Adapters da campanha so se comparam e so se escolhem na MESMA validacao")
         recorte["confere_com"] = referencia
     return exemplos, falhas, recorte, None
 
@@ -1103,8 +1138,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="semente da subamostra da validacao, SEPARADA da do adapter; obrigatoria com "
                              "--limite-validacao (a campanha fixa 20260922 nas tres sementes de adapter)")
     parser.add_argument("--recorte-da-validacao-igual-a", type=Path,
-                        help="pasta (ou detalhe_da_validacao.json) de uma corrida anterior: aborta antes do modelo "
-                             "se a validacao sorteada nao for o mesmo conjunto de janelas")
+                        help="pasta de uma corrida anterior: aborta antes do modelo se a validacao sorteada nao for o "
+                             "mesmo conjunto de janelas, ou se os planos ou o checkpoint nao forem os mesmos arquivos "
+                             "(sha256 do relatorio dela)")
     parser.add_argument("--retomar", type=Path, help="adapter.pt de onde continuar; o otimizador NAO e restaurado")
     parser.add_argument("--smoke-exemplos", type=int, default=8)
     parser.add_argument("--modulos-esperados", type=Path,

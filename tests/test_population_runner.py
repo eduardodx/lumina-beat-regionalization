@@ -248,34 +248,63 @@ class RunnerTests(unittest.TestCase):
         self.assertNotEqual(a, runner.hash_do_recorte([(chaves[0][0], chaves[0][1], 1501)] + chaves[1:]))
         self.assertEqual(a, runner.recorte_dos_exemplos(self._janelas(chaves)))
 
-    def test_recorte_de_referencia_confere_ou_aborta_antes_do_modelo(self):
+    def test_referencia_confere_recorte_planos_e_checkpoint_antes_do_modelo(self):
         import json
         import tempfile
 
         chaves = [("abraom", "chr1:100:A:G", 1500), ("global", "chr3:300:G:A", 3000)]
+
+        def sorteio(chaves_sorteadas):
+            return lambda caminho, fetch, *, window_bp, limite, seed=0: (self._janelas(chaves_sorteadas), {})
+
         with tempfile.TemporaryDirectory() as pasta:
-            detalhe = {"chave": "fonte|variant_id|focal_index", "linha_de_base": [
+            pasta = Path(pasta)
+            arquivos = {}
+            for nome in ("plano_validacao.parquet", "plano_treino.parquet", "best_checkpoint.pt"):
+                (pasta / nome).write_bytes(nome.encode())
+                arquivos[nome] = runner.sha256_file(pasta / nome)
+            a1 = pasta / "a1"
+            a1.mkdir()
+            (a1 / "detalhe_da_validacao.json").write_text(json.dumps({"linha_de_base": [
                 {"fonte": f, "variant_id": v, "focal_index": i, "locus_id": "L0", "focal_ce": 1.0}
-                for f, v, i in reversed(chaves)], "melhor": None, "final": None}
-            Path(pasta, "detalhe_da_validacao.json").write_text(json.dumps(detalhe), encoding="utf-8")
-            self.assertEqual(runner.recorte_de_referencia(Path(pasta))["sha256"],
-                             runner.hash_do_recorte(chaves)["sha256"])
+                for f, v, i in reversed(chaves)], "melhor": None, "final": None}), encoding="utf-8")
+            (a1 / "treino_do_adapter.json").write_text(json.dumps({"entradas": {
+                "plano_validacao_sha256": arquivos["plano_validacao.parquet"],
+                "plano_treino_sha256": arquivos["plano_treino.parquet"],
+                "checkpoint_sha256": arquivos["best_checkpoint.pt"]}}), encoding="utf-8")
+            self.assertEqual(runner.recorte_de_referencia(a1)["sha256"], runner.hash_do_recorte(chaves)["sha256"])
+            config = self._config(recorte_da_validacao_igual_a=a1, plano_validacao=pasta / "plano_validacao.parquet",
+                                  plano_treino=pasta / "plano_treino.parquet", checkpoint=pasta / "best_checkpoint.pt")
 
-            def mesmas(caminho, fetch, *, window_bp, limite, seed=0):
-                return self._janelas(chaves), {}
-
-            def outras(caminho, fetch, *, window_bp, limite, seed=0):
-                return self._janelas(chaves[:1] + [("global", "chr9:9:T:C", 5)]), {}
-
-            with patch.object(runner, "carregar_exemplos", mesmas):
-                _, _, recorte, problema = runner.carregar_validacao(
-                    self._config(recorte_da_validacao_igual_a=Path(pasta)), fetch=None)
+            with patch.object(runner, "carregar_exemplos", sorteio(chaves)):
+                _, _, recorte, problema = runner.carregar_validacao(config, fetch=None)
             self.assertIsNone(problema)
-            self.assertIn("confere_com", recorte)
-            with patch.object(runner, "carregar_exemplos", outras):
-                _, _, _, problema = runner.carregar_validacao(
-                    self._config(recorte_da_validacao_igual_a=Path(pasta)), fetch=None)
+            self.assertEqual(recorte["confere_com"]["plano_treino_sha256"], arquivos["plano_treino.parquet"])
+
+            with patch.object(runner, "carregar_exemplos", sorteio(chaves[:1] + [("global", "chr9:9:T:C", 5)])):
+                _, _, _, problema = runner.carregar_validacao(config, fetch=None)
+            self.assertIn("recorte da validacao", problema)
             self.assertIn("MESMA validacao", problema)
+
+            # Mesmas janelas num plano com outras mascaras: o recorte nao pega, o hash do plano pega.
+            (pasta / "plano_validacao.parquet").write_bytes(b"mesmas janelas, outras mascaras")
+            with patch.object(runner, "carregar_exemplos", sorteio(chaves)):
+                _, _, _, problema = runner.carregar_validacao(config, fetch=None)
+            self.assertIn("plano_validacao_sha256", problema)
+            self.assertNotIn("recorte da validacao", problema)
+
+            # Referencia sem relatorio: recusa com o motivo, sem traceback.
+            (a1 / "treino_do_adapter.json").unlink()
+            with patch.object(runner, "carregar_exemplos", sorteio(chaves)):
+                _, _, _, problema = runner.carregar_validacao(config, fetch=None)
+            self.assertIn("referencia ilegivel", problema)
+
+    def test_referencia_sem_hash_no_relatorio_nao_passa(self):
+        referencia = {"sha256": "a" * 64, "janelas": 2, "plano_validacao_sha256": None,
+                      "plano_treino_sha256": "b" * 64, "checkpoint_sha256": "c" * 64}
+        atuais = {"plano_validacao_sha256": "x" * 64, "plano_treino_sha256": "b" * 64, "checkpoint_sha256": "c" * 64}
+        self.assertEqual(runner.diferencas_da_referencia(referencia, {"sha256": "a" * 64, "janelas": 2}, atuais),
+                         ["plano_validacao_sha256 ausente no relatorio da referencia"])
 
     def test_rodar_treino_confere_a_validacao_antes_de_montar_o_modelo(self):
         # A ordem importa: descobrir a validacao errada depois de carregar o R03 e so desperdicio; depois do

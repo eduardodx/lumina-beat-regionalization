@@ -102,7 +102,8 @@ class ResumoTests(unittest.TestCase):
                                                     "confere_com": {"sha256": "cd34" * 16}}
         texto = "\n".join(resumo.resumir(novo))
         self.assertIn("semente da subamostra 20260922", texto)
-        self.assertIn("recorte cd34cd34cd34cd34 (800 janelas) | IDENTICO ao da referencia", texto)
+        self.assertIn("recorte cd34cd34cd34cd34 (800 janelas) | recorte, planos e checkpoint IDENTICOS aos da "
+                      "referencia", texto)
 
     def test_main_calcula_o_recorte_do_detalhe_quando_o_relatorio_nao_o_tem(self):
         with tempfile.TemporaryDirectory() as pasta:
