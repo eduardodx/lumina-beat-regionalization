@@ -492,6 +492,19 @@ MG × MR**.
   consulta repetidamente para escolher receita.
 - **MG:** "se der certo a gente volta e tenta explicar" define a **prioridade**, não autoriza execução nem
   orçamento. O MG é a ablação de atribuição **proposta**.
+- **"99 camadas LoRA" está errado: são 99 módulos adaptados** (projeções distribuídas pela arquitetura). O MR mais
+  lento é compatível com o custo do adapter, mas o tempo também depende das condições da execução.
+- **Ensemble ≠ média das macros por semente.** O G5 mede a média das macros das três cabeças; o comparador mede a
+  macro da média das probabilidades calibradas. As individuais do M0 é que devem reproduzir o G5.
+- **Consistência entre sementes de cabeça** mostra consistência nessas execuções; não estima o otimismo da seleção
+  e não substitui replicação do adapter.
+- **"Mesmo sinal em todos os painéis"** vale para os três da macro; plof (1 benigna) é frágil e synonymous não tem
+  AUROC.
+- **Comparação exploratória não é critério de aprovação.** Um delta negativo merece registro e investigação, não
+  autoriza concluir fracasso; um positivo não demonstraria benefício brasileiro. Uma regra de não degradação só vale
+  com métrica, margem e conjunto definidos **antes**.
+- **"Os números são confiáveis"** → "a execução e os números apresentados são consistentes": coerência interna não é
+  auditoria completa, e a confiança científica depende também do desenho e da amostra.
 
 ### 14.6 Decisões de 22/09 e próximos passos
 
@@ -622,8 +635,9 @@ na política escolhida; empate exato fica com `cabecas_172`. Quem roda o G5 conf
 | G5 registrava o caminho dos snapshots, não o conteúdo | G5 grava o sha256 dos três; o comparador recusa snapshot diferente do da decisão |
 | cabeças não eram salvas | o comparador salva cada cabeça inteira (pesos, padronização, Platt, limiar, identidades), para pontuar os estudos sem retreinar |
 
-Viés conhecido e declarado no comparador: o conjunto de seleção escolheu a configuração do M0 no G5 (a melhor de
-6), então a macro do M0 ali tende a estar sorteada para cima e o delta MR − M0, se tanto, puxado para baixo.
+Viés declarado no comparador: o conjunto de seleção foi usado para escolher, só com M0, a extração e a política
+(1 de 6, pela regra do G5). A comparação nele **pode favorecer o M0, com viés de tamanho desconhecido** — que não
+serve para descontar uma queda do MR (revisão de 23/09).
 
 **Extração MR (23/09): completa.** 171.720 de 171.720, zero falha, `exit_MR=0`, 0,074 s/variante.
 
@@ -636,30 +650,51 @@ Macro-AUROC (missense/splice/noncoding) no conjunto de seleção, 3 sementes:
 | `leitura_antiga_1344` | 0,9056 | **0,9144** | 0,9193 | `janela2048` (a 0,0049; `janela4096` fica a 0,0137, fora) |
 
 A leitura antiga vence nas três políticas (+0,005 a +0,012), e na escolhida a pior semente dela (0,9133) passa a
-melhor da de 172 (0,9044) — coerente com a pesquisa de extração, onde as 172 dims eram candidata, não vencedora. A
-política troca ~0,005 de macro por mais isolamento de locus, como a regra prevê. Decisão em
-`~/artifacts/redesenho/g5/g5_decisao.json`, com o sha da identidade do cache do M0 e dos três snapshots.
+melhor da de 172 (0,9044). Isso é consistência **nessas três execuções, no mesmo conjunto de seleção**: não elimina a
+incerteza do conjunto nem cobre outras inicializações. A escolha vale entre os candidatos testados, com esta receita
+de cabeça — não diz que a leitura antiga é superior em qualquer conjunto — e não contradiz a pesquisa de extração,
+onde as 172 dims eram candidata compacta, não vencedora. A macro na faixa da pesquisa é **checagem de
+plausibilidade**, não validação da reprodução (recortes e composição são outros); a implementação se valida pelos
+testes e pela conferência do processamento. A política troca ~0,005 de macro por mais isolamento de locus, como a
+regra prevê. Decisão em `~/artifacts/redesenho/g5/g5_decisao.json`, com o sha da identidade do cache do M0 e dos três
+snapshots.
 
-**Comparação exploratória M0 × MR (23/09; leitura antiga + `janela2048`; adapter a₁; cabeças 11/12/13):**
+**Comparação exploratória M0 × MR (23/09; leitura antiga + `janela2048`; adapter a₁; cabeças 11/12/13;
+`exit_comparacao=0`; saída em `~/artifacts/redesenho/comparacao_dev_a1`):**
 
-| No conjunto de seleção (média das 3 cabeças) | M0 | MR | delta | IC 95% exploratório (1.000, por cluster) |
+| Ensemble no conjunto de seleção (média das probabilidades calibradas das 3 cabeças) | M0 | MR | delta | IC 95% exploratório (1.000, por cluster) |
 |---|---:|---:|---:|---|
-| macro (missense/splice/noncoding) | 0,9178 | 0,9137 | **−0,0041** | [−0,0090; +0,0010] |
-| AUROC geral | 0,9683 | 0,9658 | −0,0025 | [−0,0051; −0,0006] |
-| AUPRC geral | 0,9228 | 0,9206 | −0,0022 | [−0,0057; +0,0013] |
+| **macro (missense/splice/noncoding) — critério declarado** | 0,9178 | 0,9137 | **−0,0041** | [−0,0090; +0,0010] |
+| AUROC geral (secundária) | 0,9683 | 0,9658 | −0,0025 | [−0,0051; −0,0006] |
+| AUPRC geral (secundária) | 0,9228 | 0,9206 | −0,0022 | [−0,0057; +0,0013] |
 
-Por painel: missense −0,0037, splice −0,0005, noncoding −0,0083. Por semente (macro): −0,0036, −0,0098, −0,0002.
-As cabeças do M0 reproduzem exatamente as do G5 (mesmas sementes e linhas).
+| Painel (ensemble) | P | B | M0 | MR | delta |
+|---|---:|---:|---:|---:|---:|
+| missense | 197 | 345 | 0,8451 | 0,8414 | −0,0037 |
+| splice | 158 | 144 | 0,9883 | 0,9878 | −0,0005 |
+| noncoding | 100 | 1.014 | 0,9201 | 0,9118 | −0,0083 |
+| plof | 212 | **1** | 0,9575 | 0,9575 | empate na precisão mostrada; com 1 benigna, **frágil** |
+| synonymous | 0 | 628 | — | — | sem AUROC (só benignas) |
 
-**Leitura, pela regra combinada antes de ver o número:** na classificação geral o MR fica **levemente abaixo** do M0,
-com o mesmo sinal em todas as sementes e painéis, e o IC do critério declarado (macro) cruza zero. **Não há sinal de
-melhora.** A AUROC geral tem IC abaixo de zero, mas ela é dominada pela separação entre painéis (plof quase só P,
-synonymous só B) e não é o critério. Ressalvas: IC exploratório, um único adapter, e o conjunto de seleção favorece o
-M0 (escolheu a configuração dele). **Isto não é a pergunta regional**, que só existe no G7.
+Por semente (macro sobre os logits): h11 −0,0036, h12 −0,0098, h13 −0,0002. As cabeças do M0 reproduzem as do G5
+(0,9134 / 0,9166 / 0,9133) — coerência interna entre os dois caminhos, não auditoria completa dos artefatos.
+**A macro do ensemble (0,9178) não é a média das macros por semente (0,9144, a medida do G5):** são medidas
+diferentes e não precisam coincidir.
 
-**Falta:** decidir com o Eduardo, antes das sementes a₂/a₃ (~10 h de GPU) e da avaliação única, se o G7 segue com esta
-receita; e, em qualquer caso, o consumidor do Mosaic para o G7 (interação e bootstrap conjunto por cluster, nos dois
-estudos), o manifesto do G6 e a flag da semente da validação do adapter.
+**Leitura (corrigida pelas revisões de 23/09):** **pequena piora estimada** na classificação geral, com incerteza que
+**inclui ausência de diferença** — o IC da macro contém zero, com a maior parte no lado negativo. Não demonstra
+equivalência nem ausência de dano.
+- As três cabeças deram delta negativo, mas **compartilham adapter, dados e conjunto**: não são replicações
+  independentes do treino populacional.
+- A queda é maior em noncoding (−0,0083): registrado, **não** é motivo para mudar a receita nem para escolher outra
+  métrica.
+- A AUROC geral, com IC inteiro abaixo de zero, é **sinal secundário de piora**, relatado sem substituir o critério.
+  Ela mistura pares de painéis diferentes (plof quase só P, synonymous só B); quanto isso pesa **não foi medido**.
+- O conjunto de seleção pode favorecer o M0, com viés de tamanho desconhecido, que não desconta a queda. Consistência
+  entre sementes **não** estima esse viés: todas foram avaliadas no conjunto que escolheu a configuração.
+- **Isto não é a pergunta regional**, que só o G7 mede. Não havia condição de parada para este resultado.
+
+Continua em §14.9 (decisão e caminho até o G7).
 
 ### 14.8 O padrão de erro a não repetir
 
@@ -667,3 +702,48 @@ As revisões pegaram, mais de uma vez, **mecanismo afirmado a partir de diagnós
 "CONFIRMADO", "soube qual alelo"), **comparação confundida** tratada como causal, **v11 usada como evidência sobre
 o R03**, e bug de pareamento que teste feliz não pega. Medir antes de concluir; diagnóstico não é portão; e não
 trocar a pergunta clínica por uma sequência indefinida de diagnósticos do MLM.
+
+Em 23/09, o mesmo padrão do outro lado: **uma comparação exploratória virando portão informal** ("decidir com o
+Eduardo antes de seguir") e **justificativas mais fortes que a evidência** ("dominada", "sugere viés pequeno",
+"confiáveis"). O resultado exploratório se registra com estimativa e limites; a receita só muda por regra declarada
+antes.
+
+### 14.9 Depois da comparação: decisão e caminho até o G7 (23/09, após duas revisões)
+
+**Decisão: manter a receita e seguir o plano.** A comparação M0 × MR foi declarada exploratória e o delta não era
+condição de parada. Migrar para o resíduo mudaria o objetivo; o MG é ablação de atribuição útil, não correção
+obrigatória. Configuração mantida: `leitura_antiga_1344`, `janela2048`, mesma receita de cabeça. Confirmar o
+orçamento (~10 h de GPU) com o Eduardo é razoável, mas **o resultado sozinho não cria necessidade científica de
+autorização nem exige redesenhar a campanha.**
+
+**A pergunta continua aberta:** a adaptação mista ajuda mais os casos brasileiros que os controles, e quais são os
+ganhos ou perdas absolutos em cada grupo? Uma interação positiva pode vir de os controles piorarem mais, então o
+G7 mostra **a interação e o desempenho absoluto de cada grupo juntos**, como o plano prevê.
+
+**O G7 continua protegido.** Não consultar o G7 para ajustar nada. "Avaliação única" significa não usar o resultado
+para adaptar a receita e depois tratar a mesma avaliação como confirmação independente. Reexecutar exatamente os
+sistemas congelados para conferir reprodução não invalida o estudo. Mudança motivada pelo resultado vira rodada
+**exploratória**, ou pede outra avaliação independente.
+
+**Feito depois das revisões (sem tocar nos 12 arquivos da identidade do cache):**
+
+| Peça | O que faz |
+|---|---|
+| `--seed-da-validacao` no runner | a subamostra da validação tem semente própria, **obrigatória** com `--limite-validacao` (antes era `seed + 1`: a₂ seria validada em outro recorte). O recorte vai para o relatório e para o checkpoint (sha256 das chaves `fonte\|variant_id\|focal_index`) |
+| `--recorte-da-validacao-igual-a <pasta>` | lê o `detalhe_da_validacao.json` de uma corrida anterior (funciona na a₁) e **aborta antes de carregar o modelo** se o recorte sorteado for outro |
+| resumidor | imprime a semente e o recorte da validação; na a₁, calcula o recorte do detalhe |
+| `scripts/conferir_cabecas_salvas.py` | recarrega as 6 cabeças e confere formato, identidades (decisão do G5, snapshot, cache, adapter), Platt e limiar contra o relatório, `a > 0`, receita, **reprodução das probabilidades** (≤ 1e-6) e das métricas do ensemble; grava `conferencia_das_cabecas.json` com o sha256 de cada arquivo (entra no G6) |
+| `scripts/conferir_codigo_do_cache.py` | antes de uma extração longa, confere em segundos que código, pacote `lumina` e ambiente são os do cache do M0 |
+| comparador | textos corrigidos (ensemble, viés de tamanho desconhecido, cabeças não independentes); passa a imprimir Platt, limiar e onde salvou as cabeças, e marca painel frágil |
+| `eval/campanha/cabeca.py` | `montar_rede` (uma definição para treinar e recarregar), `carregar_cabeca_salva`, `pontuar_salva` |
+
+**Próximos passos, em ordem:**
+1. Conferir as 6 cabeças da a₁ (`conferir_cabecas_salvas.py`), antes de qualquer congelamento.
+2. Treinar a₂ e a₃ com a mesma receita e orçamento, mudando só `--seed`, com `--seed-da-validacao 20260922` e
+   `--recorte-da-validacao-igual-a ~/artifacts/redesenho/g4_corrida2`.
+3. Congelar a₂ e a₃ pela regra (menor `focal_alt`, supera a base) em `adapters_congelados`.
+4. `conferir_codigo_do_cache.py` e extração de MR_a₂ e MR_a₃ (~3,5 h cada).
+5. Comparador por adapter: salva MR_2 = a₂ + h12 e MR_3 = a₃ + h13 (a declaração pareia MR_i = a_i + h_i); as
+   cabeças do M0 têm de sair idênticas às da a₁ (reprodução). Conferir as cabeças de novo.
+6. Em paralelo, sem consultar o G7: consumidor dos estudos e manifesto do G6, com testes sintéticos.
+7. Congelar (G6) e avaliar (G7).
