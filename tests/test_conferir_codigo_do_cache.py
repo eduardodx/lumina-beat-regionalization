@@ -28,6 +28,16 @@ class DiferencasTests(unittest.TestCase):
         self.assertEqual(diferencas({"torch": "2.5.1", "gpu": "NVIDIA A10G"}, {"torch": "2.6.0", "gpu": "NVIDIA A10G"}),
                          ["torch: '2.5.1' -> '2.6.0'"])
 
+    def test_shim_do_tilelang_vem_antes_de_importar_o_lumina(self):
+        # No notebook, `import lumina` sem o shim caiu no tilelang/tvm_ffi (AttributeError). O extrator instala o
+        # shim em `montar_sistema`, antes de calcular a identidade; a conferencia tem de seguir a mesma ordem.
+        from scripts import conferir_codigo_do_cache as conferencia
+
+        fonte = Path(conferencia.__file__).read_text(encoding="utf-8")
+        corpo = fonte[fonte.index("def main"):]
+        self.assertLess(corpo.index("install_tilelang_fallback_shim()"), corpo.index("codigo_da_extracao()"))
+        self.assertLess(corpo.index("install_tilelang_fallback_shim()"), corpo.index("ambiente_de_execucao("))
+
 
 if __name__ == "__main__":
     unittest.main()

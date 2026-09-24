@@ -44,8 +44,12 @@ def main(argv: list[str] | None = None) -> int:
 
     import torch
 
+    from eval.clinvar.r03_adapter import install_tilelang_fallback_shim
     from scripts.extract_campaign_features import ambiente_de_execucao, codigo_da_extracao
 
+    # Na MESMA ordem do extrator (`montar_sistema`): o shim vem antes do primeiro `import lumina`, que puxa o
+    # mamba_ssm; com o tilelang quebrado no notebook (tvm_ffi), importar sem ele derruba o processo.
+    install_tilelang_fallback_shim()
     identidade = json.loads((args.cache.expanduser() / "identidade.json").read_text(encoding="utf-8"))
     problemas = (diferencas(identidade.get("codigo") or {}, codigo_da_extracao(), "codigo.")
                  + diferencas(identidade.get("ambiente") or {}, ambiente_de_execucao(torch.device(args.device)),
