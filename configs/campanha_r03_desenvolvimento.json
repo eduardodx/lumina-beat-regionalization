@@ -348,7 +348,7 @@
     ],
     "pendencias_antes_do_congelamento": [
       {"item": "Brier do ensemble com os calibradores congelados (analises_secundarias.com_limiar_e_brier)", "estado": "A_ESCREVER"},
-      {"item": "baselines diagnosticas (analises_secundarias.baselines_diagnosticas): conferir cobertura e proveniencia das anotacoes do release nos membros (scripts/conferir_cobertura_das_baselines.py: hash logico contra g6.proveniencia.release_do_mosaic e o manifesto da copia, so contagens, nenhuma metrica) e depois escrever no consumidor; retirar so com motivo que se sustente", "estado": "A_CONFERIR"},
+      {"item": "baselines diagnosticas (analises_secundarias.baselines_diagnosticas): escrever no consumidor (gnomad_rarity oficial, raridade no ABraOM, presenca no ABraOM com papel explicito)", "estado": "A_ESCREVER", "conferido": "24/09, scripts/conferir_cobertura_das_baselines.py (g6_baselines/cobertura.json): hashes logicos de pb_annotations (7a6ae9b2...) e membership (1c1cd65d...) iguais a referencia e ao bundle.manifest.json; Mosaic 814e7f0, comparators.yaml cd7654bf...; gnomad_rarity definido em 100% dos 8.875 membros; present_abraom sem discordancia; so contagens, nenhuma metrica"},
       {"item": "script de pontuacao e relatorio do G7 (scripts/avaliar_estudos.py), testado com dados sinteticos", "estado": "A_ESCREVER"},
       {"item": "ensaio do consumidor na membership real com scores SINTETICOS, sem nenhum score dos estudos: confere a leitura dos artefatos da campanha antes da avaliacao unica", "estado": "A_FAZER"}
     ],

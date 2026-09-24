@@ -970,3 +970,57 @@ sem reabrir a composição. Grava `g6_construcao.json`, `g6_predicoes.parquet` e
 - Ensaio local sem torch refeito com os casos novos (seleção com um ID trocado, fold 1 sem um ID, git que falha com
   todo o resto resolvido): todos recusados pelo motivo certo. Testes puros: 25 do G6 + 4 da declaração + 7 da
   cobertura (1 só roda no notebook, com pyyaml).
+
+**Rascunho do G6 nos artefatos reais (24/09, 20:33; revisão `f1fb3dd`).** Testes no notebook: 25 + 4 + 7 + 24 + 7
+(cobertura, inclusive o script inteiro com pyyaml) e o ponta a ponta com torch, todos passando. Os testes no notebook
+rodam **como script** (`python3 tests/test_x.py`): `-m unittest tests.x` falha lá porque outro pacote `tests` do
+`/opt/conda` sombreia o namespace. Construtor: `exit_g6=0`, todas as conferências passaram — seis componentes com
+max |Δp| = 0 e os mesmos sha e Platt de antes; M0 idêntico nos comparadores da a₂ e da a₃ (3/3); fold 1 = 1.575
+(P 1.038, B 537) igual ao papel `validation` do snapshot; seleção = 2.799 em 156 clusters igual à `selecao_comum`;
+ABraOM reconferido no arquivo (o bloqueio sumiu); código sem mudança fora do commit.
+
+| Limiar do ensemble (fold 1, regra do Mosaic) | limiar | MCC | especificidade | sensibilidade |
+|---|---:|---:|---:|---:|
+| M0 = média de h11, h12, h13 | 0,474562 | 0,8878 | 0,9125 | 0,9692 |
+| MR = média de a₁+h11, a₂+h12, a₃+h13 | 0,552163 | 0,8880 | 0,9181 | 0,9663 |
+
+O fold 1 é o mesmo em que as cabeças pararam, foram calibradas e o limiar foi escolhido: esses valores são
+otimistas por construção e servem só de registro do limiar.
+
+| Ensemble FINAL, conjunto de seleção (exploratório; IC por cluster, 1.000 réplicas) | M0 | MR | Δ [IC] |
+|---|---:|---:|---|
+| macro | 0,9178 | 0,9172 | −0,0006 [−0,0048; +0,0033] |
+| AUROC geral | 0,9683 | 0,9679 | −0,0004 [−0,0019; +0,0010] |
+| AUPRC | 0,9228 | 0,9210 | −0,0018 [−0,0051; +0,0018] |
+
+Painéis (AUROC M0 → MR): missense 0,8451 → 0,8421; splice 0,9883 → 0,9880; noncoding 0,9201 → 0,9216; plof com 1
+benigna, sem leitura. Com o limiar do fold 1, na seleção: M0 MCC 0,7319 (sens. 0,9460, esp. 0,8621); MR MCC 0,7403
+(0,9310; 0,8766) — a queda em relação ao fold 1 acompanha a outra composição do conjunto (muitas benignas em
+noncoding e synonymous) e o fold 1 ter servido à calibração; é descritivo.
+
+**Leitura:** estimativas próximas de zero, levemente negativas nas três métricas, com ICs que incluem zero — não
+demonstram equivalência nem ausência de piora. O delta do ensemble final é menor em módulo que o dos ensembles por
+adapter (−0,0041/−0,0018/−0,0013) e que a média dos pares (−0,0025); não atribuo causa (as comparações dividem o M0 e
+o conjunto de seleção, e os ICs são condicionais aos sistemas treinados). A composição e o limiar não mudam por causa
+disto. Continua sem resposta a pergunta regional (G7).
+
+**Cobertura das baselines (24/09): PASSOU.** Hashes lógicos recalculados com o `logical_contract` do Mosaic:
+`pb_annotations` `7a6ae9b2…` (n 326.826) e `membership` `1c1cd65d…` (n 8.875), iguais à referência declarada e ao
+`bundle.manifest.json` da cópia; Mosaic `814e7f0`, `comparators.yaml` `cd7654bf…`, especificação do `gnomad_rarity`
+a declarada. `gnomad_rarity` definido em **100%** dos membros; `present_abraom` sem discordância. Só contagens:
+
+| Grupo | n | gnomAD present / not_found / ac0 | ABraOM presente |
+|---|---:|---|---:|
+| clínico, case | 3.116 | 2.239 / 772 / 105 | 323 (10,4%) |
+| clínico, control | 3.116 | 2.239 / 772 / 105 | 71 (2,3%) |
+| clínico, unmatched_case | 3 | 3 / 0 / 0 | 1 |
+| populacional, case | 751 | 747 / 3 / 1 | 751 |
+| populacional, control | 751 | 747 / 3 / 1 | 0 |
+| populacional, unmatched_case | 1.138 | 1.138 / 0 / 0 | 1.138 |
+
+Três fatos de construção, agora medidos: (1) no clínico, casos e controles têm **a mesma** distribuição de status do
+gnomAD (o pareamento casa `gnomad_af_bin`), e 877 de 3.116 (28%) em cada grupo recebem AF 0 pela regra oficial —
+empates grandes no topo do `gnomad_rarity`, que o AUROC trata como meio ponto; (2) a presença no ABraOM é 323 × 71
+(≈ 4,5×, o achado de 20/09); (3) no populacional a presença é 100% nos casos e 0% nos controles, e a raridade no
+ABraOM é constante (0) nos controles. A pendência das baselines passa a `A_ESCREVER` (conferência registrada na
+declaração).

@@ -98,15 +98,14 @@ def cobertura(membros: pd.DataFrame, anotacoes: pd.DataFrame,
         definidos = sum(pontuar(r) is not None for r in registros)
         abraom = pd.to_numeric(grupo["abraom_af"], errors="coerce").to_numpy(dtype=float)
         da_membership = grupo["present_abraom"].astype(bool)
-        da_anotacao = grupo["present_abraom_anotacao"]
+        da_anotacao = grupo["present_abraom_anotacao"].astype("boolean").fillna(False).astype(bool)
         saida[f"{estudo}/{papel}"] = {
             "membros": int(len(grupo)), "com_anotacao": int(anotado.sum()),
             "gnomad_rarity_definido": int(definidos), "gnomad_status": _contagem(grupo["gnomad_status"]),
             "abraom_af_finito": int(np.isfinite(abraom).sum()), "abraom_status": _contagem(grupo["abraom_status"]),
             "present_abraom": {"na_membership": int(da_membership.sum()),
-                               "nas_anotacoes": int(da_anotacao.fillna(False).astype(bool).sum()),
-                               "discordantes": int((anotado & (da_membership != da_anotacao.fillna(False)
-                                                               .astype(bool))).sum())}}
+                               "nas_anotacoes": int(da_anotacao.sum()),
+                               "discordantes": int((anotado & (da_membership != da_anotacao)).sum())}}
     return saida
 
 
