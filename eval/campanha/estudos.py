@@ -1,0 +1,406 @@
+"""G7: o consumidor dos estudos brasileiros -- coortes, cobertura, deltas, interacao e bootstrap pareado. Sem torch.
+
+Recebe as probabilidades de dois sistemas JA congelados (G6) e mede. Nada aqui escolhe, ajusta ou calibra.
+
+PROTOCOLO DO MOSAIC (commit 814e7f0: `specs/PLAN.md` 13.3-13.5 e `src/mosaic/protocol.py:brazil_protocol_section`)
+    - cada estudo separado: `br_clinical_evidence` e `br_population_observed` nunca se unem;
+    - coorte completo = `case` + `unmatched_case` (delta_br_full); casos pareados = `case` com controle
+      bidirecional (delta_br_matched); controles = `control` (delta_control); interacao = delta_br_matched -
+      delta_control, SEM `unmatched_case`;
+    - AUROC e AUPRC (precisao media, a `average_precision_score` do Mosaic) so com as duas classes; n_P, n_B e
+      cobertura sempre; deltas na INTERSECAO de cobertura dos dois sistemas; variante sem score entra na cobertura
+      e nunca e imputada;
+    - o relatorio do coorte inteiro e obrigatorio; os paineis de discriminacao sao diagnostico; nao ha macro
+      brasileira; plof e synonymous sao guarda; sem piso 50/50;
+    - metricas com limiar so com limiar externo congelado por sistema; sem ele, sao omitidas;
+    - bootstrap pareado por `overlap_cluster_id` (os MESMOS sorteios para os dois sistemas), 1.000 replicas, seed
+      20260901, percentis 2,5 e 97,5.
+
+O QUE O MOSAIC NAO DEFINE E FICA DECLARADO AQUI (plano, secao 6.3; PROPOSTO ate o G6)
+    - a reamostragem da interacao: clusters sorteados EM CONJUNTO sobre a uniao de casos pareados e controles -- um
+      cluster com caso e controle entra inteiro, com os dois --; a reamostragem por PAR e sensibilidade;
+    - cada analise tem o proprio gerador, com a seed declarada, para o resultado de uma nao depender de quais outras
+      rodam;
+    - no estudo clinico: o subconjunto `present_abraom` do coorte completo (exigido pelo Mosaic) e, como
+      sensibilidade, a interacao so nos pares em que caso E controle estao fora do ABraOM, sem desfazer pares.
+"""
+from __future__ import annotations
+
+from typing import Any, Callable
+
+import numpy as np
+import pandas as pd
+
+from eval.campanha import metricas
+
+ESTUDO_CLINICO = "br_clinical_evidence"
+ESTUDO_POPULACIONAL = "br_population_observed"
+ESTUDOS = (ESTUDO_CLINICO, ESTUDO_POPULACIONAL)
+CASO, SEM_PAR, CONTROLE = "case", "unmatched_case", "control"
+COORTE_COMPLETO, CASOS_PAREADOS, CONTROLES = "full_cohort", "matched_cases", "controls"
+BASE, REGIONALIZADO = "base", "regionalized"
+SISTEMAS = (BASE, REGIONALIZADO)
+CONTINUAS = ("auroc", "auprc")
+PAINEIS_DE_DISCRIMINACAO = metricas.PAINEIS_DE_DISCRIMINACAO
+PAINEIS_DE_GUARDA = metricas.PAINEIS_DE_GUARDA
+REPLICAS = 1000
+SEED = 20260901
+PERCENTIS = (2.5, 97.5)
+COLUNAS_DOS_MEMBROS = ("variant_id", "study_id", "member_role", "matched_variant_id", "binary_label",
+                       "primary_panel", "overlap_cluster_id", "present_abraom")
+
+
+class EstudoInvalido(ValueError):
+    """O membership nao e o que o protocolo promete: nada e medido."""
+
+
+# ------------------------------------------------------------------------------------------------ coortes
+
+def _parceiro(valor: Any) -> str | None:
+    return None if valor is None or pd.isna(valor) or str(valor) == "" else str(valor)
+
+
+def visoes(membros: pd.DataFrame, estudo: str) -> dict[str, pd.DataFrame]:
+    """As tres visoes do Mosaic (`comparator_eval/cohorts.py:brazil_views`), com o pareamento CONFERIDO.
+
+    O G1 ja validou o membership; aqui a conferencia se repete porque a interacao depende dela: caso sem controle
+    bidirecional, controle orfao ou `unmatched_case` com par mudariam a interacao em silencio.
+    """
+    faltando = [c for c in COLUNAS_DOS_MEMBROS if c not in membros.columns]
+    if faltando:
+        raise EstudoInvalido(f"colunas ausentes no membership: {faltando}")
+    if estudo not in ESTUDOS:
+        raise EstudoInvalido(f"estudo {estudo!r} fora de {ESTUDOS}")
+    linhas = membros[membros["study_id"] == estudo].reset_index(drop=True)
+    if linhas.empty:
+        raise EstudoInvalido(f"{estudo} sem membros")
+    ids = linhas["variant_id"].astype(str)
+    if ids.duplicated().any():
+        raise EstudoInvalido(f"{estudo}: variante com mais de um papel, ex.: {ids[ids.duplicated()].tolist()[:3]}")
+    papeis = set(linhas["member_role"].astype(str))
+    if papeis - {CASO, SEM_PAR, CONTROLE}:
+        raise EstudoInvalido(f"{estudo}: papeis fora do protocolo {sorted(papeis - {CASO, SEM_PAR, CONTROLE})}")
+    clusters = linhas["overlap_cluster_id"]
+    if clusters.isna().any() or (clusters.astype(str).str.strip() == "").any():
+        raise EstudoInvalido(f"{estudo}: membro sem overlap_cluster_id (a unidade do bootstrap)")
+    if not set(linhas["binary_label"].astype(int)) <= {0, 1}:
+        raise EstudoInvalido(f"{estudo}: binary_label fora de {{0, 1}}")
+    if linhas["present_abraom"].isna().any():
+        raise EstudoInvalido(f"{estudo}: present_abraom nulo (o subconjunto e a sensibilidade dependem dele)")
+
+    papel_de = dict(zip(ids, linhas["member_role"].astype(str)))
+    par_de = {vid: _parceiro(par) for vid, par in zip(ids, linhas["matched_variant_id"])}
+    problemas = []
+    for vid, papel in papel_de.items():
+        par = par_de[vid]
+        if papel == SEM_PAR:
+            if par is not None:
+                problemas.append(f"unmatched_case {vid} com par {par}")
+            continue
+        esperado = CONTROLE if papel == CASO else CASO
+        if par is None or papel_de.get(par) != esperado or par_de.get(par) != vid:
+            problemas.append(f"{papel} {vid} sem par bidirecional ({par})")
+    if problemas:
+        raise EstudoInvalido(f"{estudo}: {len(problemas)} problema(s) de pareamento, ex.: {problemas[:3]}")
+    papel = linhas["member_role"].astype(str)
+    return {COORTE_COMPLETO: linhas[papel.isin([CASO, SEM_PAR])].reset_index(drop=True),
+            CASOS_PAREADOS: linhas[papel == CASO].reset_index(drop=True),
+            CONTROLES: linhas[papel == CONTROLE].reset_index(drop=True)}
+
+
+def composicao(frame: pd.DataFrame) -> dict[str, Any]:
+    """n, P e B no coorte e por painel, ANTES da cobertura."""
+    y = frame["binary_label"].astype(int)
+    por_painel = {}
+    for painel, grupo in frame.groupby("primary_panel", sort=True):
+        rotulos = grupo["binary_label"].astype(int)
+        por_painel[str(painel)] = {"n": int(len(grupo)), "n_P": int(rotulos.sum()),
+                                   "n_B": int((rotulos == 0).sum())}
+    return {"n": int(len(frame)), "n_P": int(y.sum()), "n_B": int((y == 0).sum()),
+            "clusters": int(frame["overlap_cluster_id"].nunique()), "por_painel": por_painel}
+
+
+# ------------------------------------------------------------------------------------------------ metricas
+
+def suporte(y: np.ndarray, pontuadas: np.ndarray) -> dict[str, Any]:
+    """Contagens e cobertura como o Mosaic (`stats.support_counts`)."""
+    y = np.asarray(y, dtype=int)
+    n_total, n_p, n_b = int(y.size), int((y == 1).sum()), int((y == 0).sum())
+    n_s = int(pontuadas.sum())
+    n_ps, n_bs = int(((y == 1) & pontuadas).sum()), int(((y == 0) & pontuadas).sum())
+    return {"n_total": n_total, "n_P_total": n_p, "n_B_total": n_b, "n_scored": n_s, "n_P_scored": n_ps,
+            "n_B_scored": n_bs, "coverage": n_s / n_total if n_total else None,
+            "coverage_P": n_ps / n_p if n_p else None, "coverage_B": n_bs / n_b if n_b else None,
+            "prevalence_scored": n_ps / n_s if n_s else None}
+
+
+def continuas(y: np.ndarray, s: np.ndarray) -> dict[str, float | None]:
+    """AUROC e AUPRC (precisao media); None sem as duas classes."""
+    return {"auroc": metricas.auroc(s, y), "auprc": metricas.auprc(s, y)}
+
+
+def com_limiar(y: np.ndarray, s: np.ndarray, limiar: float) -> dict[str, float | None]:
+    """MCC, sensibilidade e especificidade com a regra do Mosaic (`score >= limiar`; MCC 0 com denominador 0)."""
+    y = np.asarray(y, dtype=int)
+    previsto = np.asarray(s, dtype=float) >= limiar
+    vp, vn = int(((y == 1) & previsto).sum()), int(((y == 0) & ~previsto).sum())
+    fp, fn = int(((y == 0) & previsto).sum()), int(((y == 1) & ~previsto).sum())
+    denominador = (vp + fp) * (vp + fn) * (vn + fp) * (vn + fn)
+    if not y.size:
+        mcc = None
+    else:
+        mcc = (vp * vn - fp * fn) / float(denominador) ** 0.5 if denominador else 0.0
+    return {"mcc": mcc, "sensitivity": vp / (vp + fn) if vp + fn else None,
+            "specificity": vn / (vn + fp) if vn + fp else None,
+            "n_false_negative": float(fn), "n_false_positive": float(fp)}
+
+
+def _delta(a: float | None, b: float | None) -> float | None:
+    return None if a is None or b is None else float(b - a)
+
+
+def comparar(y: np.ndarray, base: np.ndarray, regionalizado: np.ndarray,
+             limiares: dict[str, float] | None = None) -> dict[str, Any]:
+    """Cada sistema na INTERSECAO de cobertura e o delta regionalizado - base; a cobertura de cada sistema no
+    proprio coorte vem a parte, porque variante sem score conta como nao coberta."""
+    y = np.asarray(y, dtype=int)
+    base, regionalizado = np.asarray(base, dtype=float), np.asarray(regionalizado, dtype=float)
+    ambos = np.isfinite(base) & np.isfinite(regionalizado)
+    saida: dict[str, Any] = {"intersecao": suporte(y, ambos),
+                             "cobertura": {BASE: suporte(y, np.isfinite(base)),
+                                           REGIONALIZADO: suporte(y, np.isfinite(regionalizado))}}
+    for sistema, s in ((BASE, base), (REGIONALIZADO, regionalizado)):
+        saida[sistema] = continuas(y[ambos], s[ambos])
+        if limiares is not None:
+            saida[sistema].update(com_limiar(y[ambos], s[ambos], limiares[sistema]))
+    chaves = CONTINUAS + (("mcc", "sensitivity", "specificity") if limiares is not None else ())
+    saida["delta"] = {k: _delta(saida[BASE][k], saida[REGIONALIZADO][k]) for k in chaves}
+    return saida
+
+
+# ------------------------------------------------------------------------------------------------ bootstrap
+
+def grupos(clusters: np.ndarray) -> list[np.ndarray]:
+    """Linhas de cada cluster (o `unique_unit_groups` do Mosaic, sem descartar linha: cluster vazio foi recusado
+    nas visoes)."""
+    _, inverso = np.unique(np.asarray(clusters).astype(str), return_inverse=True)
+    ordem = np.argsort(inverso, kind="stable")
+    limites = np.cumsum(np.bincount(inverso))[:-1]
+    return np.split(ordem, limites)
+
+
+def sortear(grupos_: list[np.ndarray], rng: np.random.Generator) -> np.ndarray:
+    """Clusters com reposicao, todas as linhas de cada um (o `resample_indices` do Mosaic)."""
+    escolhidos = rng.integers(0, len(grupos_), size=len(grupos_))
+    return np.concatenate([grupos_[i] for i in escolhidos])
+
+
+def intervalo(valores: list[float]) -> dict[str, Any]:
+    if not valores:
+        return {"p2_5": None, "p97_5": None, "replicas_validas": 0}
+    baixo, alto = np.percentile(np.asarray(valores, dtype=float), PERCENTIS)
+    return {"p2_5": float(baixo), "p97_5": float(alto), "replicas_validas": len(valores)}
+
+
+class _Acumulador:
+    def __init__(self) -> None:
+        self.valores: dict[tuple, list[float]] = {}
+
+    def guardar(self, chave: tuple, valor: float | None) -> None:
+        lista = self.valores.setdefault(chave, [])
+        if valor is not None and np.isfinite(valor):
+            lista.append(float(valor))
+
+    def intervalo(self, chave: tuple) -> dict[str, Any]:
+        return intervalo(self.valores.get(chave, []))
+
+
+# ------------------------------------------------------------------------------------------------ analises
+
+def _arrays(frame: pd.DataFrame, pontos: dict[str, pd.Series]) -> dict[str, np.ndarray]:
+    ids = frame["variant_id"].astype(str)
+    return {"y": frame["binary_label"].astype(int).to_numpy(),
+            BASE: pontos[BASE].reindex(ids).to_numpy(dtype=float),
+            REGIONALIZADO: pontos[REGIONALIZADO].reindex(ids).to_numpy(dtype=float),
+            "clusters": frame["overlap_cluster_id"].astype(str).to_numpy(),
+            "paineis": frame["primary_panel"].astype(str).to_numpy()}
+
+
+def analise_do_coorte(frame: pd.DataFrame, pontos: dict[str, pd.Series], *, replicas: int = REPLICAS,
+                      seed: int = SEED, limiares: dict[str, float] | None = None,
+                      por_painel: bool = False) -> dict[str, Any]:
+    """Um coorte: sistemas e delta na intersecao, com IC do bootstrap pareado por cluster (os MESMOS sorteios para
+    os dois sistemas). Com `por_painel`, repete por painel (diagnostico) e mede o delta SEM cada painel com suporte
+    -- a informacao da condicao "beneficio nao explicado por um unico painel"."""
+    a = _arrays(frame, pontos)
+    celulas: dict[str, np.ndarray] = {"coorte": np.ones(len(frame), dtype=bool)}
+    if por_painel:
+        for painel in sorted(set(a["paineis"])):
+            celulas[f"painel:{painel}"] = a["paineis"] == painel
+        for painel in PAINEIS_DE_DISCRIMINACAO + PAINEIS_DE_GUARDA:
+            if (a["paineis"] == painel).any() and (a["paineis"] != painel).any():
+                celulas[f"sem_painel:{painel}"] = a["paineis"] != painel
+
+    def medir(indices: np.ndarray) -> dict[str, dict[str, Any]]:
+        saida = {}
+        for nome, mascara in celulas.items():
+            linhas = indices[mascara[indices]]
+            resultado = comparar(a["y"][linhas], a[BASE][linhas], a[REGIONALIZADO][linhas], limiares)
+            painel = nome[len("painel:"):] if nome.startswith("painel:") else None
+            if painel is not None and painel not in PAINEIS_DE_DISCRIMINACAO:
+                # Como no Mosaic: AUROC e AUPRC so nos paineis de discriminacao; plof e synonymous sao guarda
+                # (contagem e metricas com limiar), `other` e descritivo.
+                for sistema in SISTEMAS + ("delta",):
+                    resultado[sistema]["auroc"] = resultado[sistema]["auprc"] = None
+            saida[nome] = resultado
+        return saida
+
+    observado = medir(np.arange(len(frame)))
+    acumulador = _Acumulador()
+    todas = grupos(a["clusters"])
+    rng = np.random.default_rng(seed)
+    chaves = CONTINUAS + (("mcc", "sensitivity", "specificity") if limiares is not None else ())
+    for _ in range(replicas):
+        replica = medir(sortear(todas, rng))
+        for nome, resultado in replica.items():
+            for chave in chaves:
+                for sistema in SISTEMAS:
+                    acumulador.guardar((nome, sistema, chave), resultado[sistema].get(chave))
+                acumulador.guardar((nome, "delta", chave), resultado["delta"].get(chave))
+
+    saida: dict[str, Any] = {"composicao": composicao(frame)}
+    for nome, resultado in observado.items():
+        for sistema in SISTEMAS + ("delta",):
+            for chave in chaves:
+                valor = resultado[sistema].get(chave)
+                resultado[sistema][chave] = {"estimativa": valor, **acumulador.intervalo((nome, sistema, chave))}
+        saida[nome] = resultado
+    return saida
+
+
+def _indices_do_par(casos: pd.DataFrame, controles: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Para cada caso, a linha do seu controle (o pareamento ja foi conferido nas visoes)."""
+    linha_do_controle = {vid: i for i, vid in enumerate(controles["variant_id"].astype(str))}
+    parceiros = [linha_do_controle[str(par)] for par in casos["matched_variant_id"]]
+    return np.arange(len(casos)), np.asarray(parceiros, dtype=int)
+
+
+def interacao(casos: pd.DataFrame, controles: pd.DataFrame, pontos: dict[str, pd.Series], *,
+              replicas: int = REPLICAS, seed: int = SEED) -> dict[str, Any]:
+    """delta_br_matched - delta_control, cada delta na intersecao de cobertura do proprio grupo.
+
+    IC principal (PROPOSTO, plano 6.3): clusters sorteados EM CONJUNTO sobre a uniao de casos pareados e controles,
+    com os mesmos sorteios para os dois sistemas; um cluster que tem caso e controle entra com os dois. Sensibilidade:
+    reamostragem por PAR (sorteia pares; ignora a dependencia entre pares do mesmo cluster).
+    """
+    if len(casos) != len(controles):
+        raise EstudoInvalido(f"{len(casos)} casos pareados e {len(controles)} controles: o pareamento e 1:1")
+    ac, ak = _arrays(casos, pontos), _arrays(controles, pontos)
+
+    def estimar(ic: np.ndarray, ik: np.ndarray) -> dict[str, dict[str, float | None]]:
+        dm = comparar(ac["y"][ic], ac[BASE][ic], ac[REGIONALIZADO][ic])["delta"]
+        dc = comparar(ak["y"][ik], ak[BASE][ik], ak[REGIONALIZADO][ik])["delta"]
+        return {k: {"delta_br_matched": dm[k], "delta_control": dc[k], "interacao": _delta(dc[k], dm[k])}
+                for k in CONTINUAS}
+
+    observado = estimar(np.arange(len(casos)), np.arange(len(controles)))
+
+    # Uniao: as primeiras len(casos) linhas sao casos, as demais controles.
+    clusters = np.concatenate([ac["clusters"], ak["clusters"]])
+    conjunta, por_par = _Acumulador(), _Acumulador()
+    todas = grupos(clusters)
+    rng = np.random.default_rng(seed)
+    for _ in range(replicas):
+        indices = sortear(todas, rng)
+        ic, ik = indices[indices < len(casos)], indices[indices >= len(casos)] - len(casos)
+        replica = estimar(ic, ik) if ic.size and ik.size else {k: {} for k in CONTINUAS}
+        for k in CONTINUAS:
+            for nome in ("delta_br_matched", "delta_control", "interacao"):
+                conjunta.guardar((k, nome), replica[k].get(nome))
+
+    linhas_caso, linhas_controle = _indices_do_par(casos, controles)
+    rng_par = np.random.default_rng(seed)
+    for _ in range(replicas):
+        pares = rng_par.integers(0, len(linhas_caso), size=len(linhas_caso))
+        replica = estimar(linhas_caso[pares], linhas_controle[pares])
+        for k in CONTINUAS:
+            por_par.guardar((k, "interacao"), replica[k].get("interacao"))
+
+    saida: dict[str, Any] = {
+        "definicao": "delta_br_matched - delta_control (sem unmatched_case), deltas regionalized - base",
+        "reamostragem": "overlap_cluster_id em CONJUNTO sobre casos pareados + controles, mesmos sorteios para os "
+                        "dois sistemas (PROPOSTO, plano 6.3); por par como sensibilidade",
+        "pares": int(len(casos)),
+        "clusters_na_uniao": int(len(todas)),
+    }
+    for k in CONTINUAS:
+        saida[k] = {nome: {"estimativa": observado[k][nome], **conjunta.intervalo((k, nome))}
+                    for nome in ("delta_br_matched", "delta_control", "interacao")}
+        saida[k]["interacao_sensibilidade_por_par"] = {"estimativa": observado[k]["interacao"],
+                                                        **por_par.intervalo((k, "interacao"))}
+    return saida
+
+
+def _pares_ambos_fora_do_abraom(casos: pd.DataFrame, controles: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Pares com caso E controle fora do ABraOM, sem desfazer pares (plano, achado de 20/09): selecionar casos
+    ausentes e controles ausentes separadamente descasaria os pares do Mosaic."""
+    presente = dict(zip(controles["variant_id"].astype(str), controles["present_abraom"].astype(bool)))
+    manter = [(not bool(p)) and (not presente[str(par)])
+              for p, par in zip(casos["present_abraom"], casos["matched_variant_id"])]
+    casos_mantidos = casos[np.asarray(manter, dtype=bool)].reset_index(drop=True)
+    parceiros = set(casos_mantidos["matched_variant_id"].astype(str))
+    return casos_mantidos, controles[controles["variant_id"].astype(str).isin(parceiros)].reset_index(drop=True)
+
+
+def avaliar_estudo(membros: pd.DataFrame, estudo: str, pontos: dict[str, pd.Series], *,
+                   replicas: int = REPLICAS, seed: int = SEED,
+                   limiares: dict[str, float] | None = None,
+                   progresso: Callable[[str], None] | None = None) -> dict[str, Any]:
+    """Tudo o que o protocolo pede de UM estudo, mais as analises declaradas para ele.
+
+    `pontos[sistema]` e uma Series indexada por `variant_id` com a probabilidade do sistema congelado; variante
+    ausente ou NaN conta como nao pontuada (cobertura), nunca e imputada.
+    """
+    avisar = progresso or (lambda _texto: None)
+    for sistema in SISTEMAS:
+        if sistema not in pontos:
+            raise EstudoInvalido(f"sem scores do sistema {sistema!r}")
+        if pontos[sistema].index.has_duplicates:
+            raise EstudoInvalido(f"scores do sistema {sistema!r} com variant_id repetido")
+    v = visoes(membros, estudo)
+    completo, casos, controles = v[COORTE_COMPLETO], v[CASOS_PAREADOS], v[CONTROLES]
+    saida: dict[str, Any] = {
+        "estudo": estudo,
+        "pareamento": {"casos": int(len(completo)), "pareados": int(len(casos)),
+                       "sem_par": int(len(completo) - len(casos)),
+                       "taxa_de_pareamento": len(casos) / len(completo) if len(completo) else None},
+        "metricas_com_limiar": ("com o limiar do ensemble congelado no G6" if limiares is not None
+                                else "omitidas: sem limiar externo congelado"),
+        "coortes": {},
+    }
+    avisar(f"{estudo}: coorte completo")
+    saida["coortes"][COORTE_COMPLETO] = analise_do_coorte(completo, pontos, replicas=replicas, seed=seed,
+                                                          limiares=limiares, por_painel=True)
+    for nome, frame in ((CASOS_PAREADOS, casos), (CONTROLES, controles)):
+        avisar(f"{estudo}: {nome}")
+        saida["coortes"][nome] = analise_do_coorte(frame, pontos, replicas=replicas, seed=seed, limiares=limiares)
+    avisar(f"{estudo}: interacao")
+    saida["interacao"] = interacao(casos, controles, pontos, replicas=replicas, seed=seed)
+
+    if estudo == ESTUDO_CLINICO:
+        presentes = completo[completo["present_abraom"].astype(bool)].reset_index(drop=True)
+        avisar(f"{estudo}: subconjunto present_abraom")
+        casos_fora, controles_fora = _pares_ambos_fora_do_abraom(casos, controles)
+        saida["subconjuntos"] = {
+            "present_abraom": {
+                "exigido_por": "Mosaic (source_overlap_by_study: report_present_abraom_overlap)",
+                "coorte": "coorte completo com present_abraom = true",
+                **analise_do_coorte(presentes, pontos, replicas=replicas, seed=seed, limiares=limiares)},
+            "pares_ambos_fora_do_abraom": {
+                "natureza": "sensibilidade PROPOSTA (plano, achado de 20/09); nao e teste decisivo",
+                "pares": int(len(casos_fora)),
+                "composicao": {CASOS_PAREADOS: composicao(casos_fora), CONTROLES: composicao(controles_fora)},
+                "interacao": (interacao(casos_fora, controles_fora, pontos, replicas=replicas, seed=seed)
+                              if len(casos_fora) else None)},
+        }
+    return saida

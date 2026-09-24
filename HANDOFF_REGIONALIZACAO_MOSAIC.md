@@ -772,3 +772,16 @@ com proveniência (o Mosaic exige limiar externo congelado para métricas com li
    a₁. Conferir as cabeças de novo.
 6. Em paralelo, sem consultar o G7: consumidor dos estudos e manifesto do G6, com testes sintéticos.
 7. Congelar (G6: composição, limiar do ensemble, margens, bootstrap) e avaliar (G7).
+
+**Início da a₂/a₃ (23/09):** a trava passou (`recorte 0891cf615c3d7461`, planos e checkpoint iguais aos da a₁).
+Conferência das 6 cabeças da a₁ **passou**: reprodução exata (max |Δp| = 0), ensemble idêntico ao relatório, Platt
+`a` de 0,56 a 0,86 (nenhuma inverte a ordem), `b` de 3,1 a 3,5 nas seis (o ponto de 50% cai em logits bem
+negativos: o Platt compensa uma diferença grande entre treino e fold 1, compatível com proporções de classe
+diferentes — não medido), limiares de 0,46 a 0,56, épocas de 190 a 520. A conferência de código caiu no import do
+`lumina` sem o shim do tilelang; corrigida (`fc48ab4`).
+
+**Desenho do G6/G7: `docs/g6_g7_desenho.md`.** O consumidor segue o protocolo do Mosaic (PLAN §13.3–13.5), e o
+núcleo está escrito e testado com dados sintéticos (`eval/campanha/estudos.py`, 19 testes). Ponto a não perder: **no
+G7 o Mosaic manda relatar o coorte inteiro** (AUROC/AUPRC), com painéis como diagnóstico e sem macro — não a macro
+do desenvolvimento. As margens (três, exigidas pelo Mosaic §13.5, cada uma com quantidade e regra) e a unidade da
+reamostragem são do Eduardo.
