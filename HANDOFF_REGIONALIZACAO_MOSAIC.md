@@ -839,6 +839,31 @@ Peças novas: `scripts/cadeia_mr_a2_a3.sh` (a cadeia versionada, retomável e au
 contorno, não garantia) e `scripts/instalar_ambiente_gpu_na_home.sh` (os mesmos passos do Gabriel com `--user` e o
 mamba fixado em `e9594ce1`, para o ambiente morar na home e sobreviver a reinícios; rodar com o `/opt/conda` limpo).
 
+**Cadeia completa (24/09, 19:04).** Conferência de ambiente e reprodução do M0 e do MR_a₂ passaram; MR_a₂ e MR_a₃
+completos (171.720 de 171.720 cada, zero falha de janela; o MR_a₂ foi feito em três lançamentos, todos com o
+ambiente conferido contra o fragmento 0); comparadores e conferências das cabeças passaram (max |Δp| = 0; ensemble
+igual ao relatório); **as cabeças do M0 saíram idênticas às do comparador da a₁ nos dois** (o treino da cabeça é
+determinístico, e a composição final tem as suas cabeças do M0 bem definidas). Platt `a` 0,60–0,90 em todas
+(nenhuma inverte a ordem), `b` 3,2–3,4; limiares 0,50–0,65. A falha de montagem do modelo às 14:17 não foi
+diagnosticada (o traceback não veio); a relançada seguinte passou em todas as conferências.
+
+| Desenvolvimento, conjunto de seleção, ensemble de 3 cabeças por adapter | macro Δ [IC] | AUROC geral Δ [IC] | AUPRC Δ [IC] |
+|---|---|---|---|
+| a₁ | −0,0041 [−0,0090; +0,0010] | −0,0025 [−0,0051; −0,0006] | −0,0022 [−0,0057; +0,0013] |
+| a₂ | −0,0018 [−0,0056; +0,0022] | −0,0009 [−0,0024; +0,0007] | −0,0023 [−0,0053; +0,0008] |
+| a₃ | −0,0013 [−0,0075; +0,0045] | −0,0001 [−0,0023; +0,0020] | +0,0017 [−0,0023; +0,0055] |
+
+Painéis (Δ AUROC, a₁/a₂/a₃): missense −0,0037/−0,0031/−0,0017; splice −0,0005/−0,0003/+0,0008; noncoding
+−0,0083/−0,0022/−0,0029; plof com 1 benigna, sem leitura. Pares da **composição final** (os que vão ao G7): a₁+h11
+−0,0036, a₂+h12 −0,0064, a₃+h13 +0,0025 (média −0,0025, sinais mistos); o ensemble da composição final sai no G6.
+
+Leitura (exploratória, classificação geral, sem participação brasileira): as três macro são pequenas e negativas,
+com IC que inclui zero; a a₁ foi a mais negativa, e o IC da AUROC geral abaixo de zero **não se repetiu** em a₂ e a₃.
+A variação entre sementes de adapter (0,0028 na macro) é da ordem do próprio delta. As três comparações **não são
+independentes**: dividem as cabeças do M0 e o conjunto de seleção (que escolheu a configuração do M0) e variam só o
+lado MR; h12 é sempre o par mais negativo porque o M0 h12 é a melhor cabeça do M0 nesse conjunto. Sem sinal de
+melhora na classificação geral e, no máximo, piora pequena; nada disso responde a pergunta regional (G7).
+
 **Proveniência do MR_a₂ (em andamento, 24/09).** Extraído em sessões separadas por reinícios, cada uma aberta pela
 conferência de reprodução contra o M0 e o `fragmento_00000` do próprio MR_a₂: fragmentos 0–11 na sessão original
 (noite); 12–35 na sessão das 11:49 (ambiente reinstalado pelo Gabriel; reprodução com **diferença zero**), que caiu

@@ -44,8 +44,9 @@ por causa do resultado transforma a rodada seguinte em exploratória.
 **A métrica principal do G7 não é a do desenvolvimento.** No desenvolvimento, o critério declarado foi a macro de
 missense/splice/noncoding. No G7 o Mosaic manda relatar o **coorte inteiro** (AUROC e AUPRC) e trata os painéis como
 diagnóstico, sem macro obrigatória. Na comparação exploratória, a métrica de coorte inteiro (a "AUROC geral") teve
-IC todo abaixo de zero (−0,0025 [−0,0051; −0,0006]). Não é portão — o desenvolvimento não mede a pergunta regional —
-e pesa na discussão das margens (seção 4).
+IC todo abaixo de zero com a₁ (−0,0025 [−0,0051; −0,0006]), mas **não com a₂ nem com a₃** (−0,0009 [−0,0024;
++0,0007] e −0,0001 [−0,0023; +0,0020]; 24/09). Não é portão — o desenvolvimento não mede a pergunta regional —, e
+o conjunto das três sementes, não a primeira sozinha, é o que entra na discussão das margens (seção 4).
 
 **A interação subtrai os deltas observados.** Não remove, por si, confundimento nem diferenças de composição entre
 casos e controles (por exemplo, a presença no ABraOM, 4,6× maior nos casos clínicos). Por isso ela sai sempre com os
