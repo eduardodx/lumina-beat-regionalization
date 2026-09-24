@@ -92,9 +92,15 @@
       "seed_da_validacao": 20260922,
       "validar_a_cada": 250,
       "backbone_em_eval": true,
+      "window_bp": 4096,
+      "limite_treino": null,
+      "retomar": null,
+      "model_version": "r03",
+      "modulos_esperados": "configs/adapter_r03_superficie.json",
       "lora": {
         "rank": 8,
         "alpha": 16,
+        "dropout": 0.0,
         "rslora": true
       }
     },
@@ -102,6 +108,13 @@
     "planos_sha256_prefixo": {
       "treino": "c76d08d4",
       "validacao": "034eca34"
+    },
+    "referencia": {
+      "descricao": "referencia EXTERNA fixada para conferir as tres sementes (revisao de 24/09): sha256 completos dos planos (saida do split_adapter_plan_by_locus.py no notebook, 21/09) e do R03 (contrato); o recorte de validacao esperado e RE-SORTEADO do plano de validacao com seed_da_validacao e limite_validacao, nao lido de outra corrida",
+      "plano_treino_sha256": "c76d08d4747f81761776994da2799fc11ae33acb9f4deb78c606eace6e869c9c",
+      "plano_validacao_sha256": "034eca340e3921a862498e2ff030df325d6607151deae4f373618781897cee7f",
+      "checkpoint_sha256": "f2983560f8f965d234df4f4d15e81337b9547a578d4d6b397ab640207d6a2f44",
+      "janelas_de_treino": 44645
     },
     "checkpoint": "adapter_melhor.pt de cada semente: o de menor focal_alt na validacao do adapter (criterio primario declarado)",
     "se_nenhum_checkpoint_supera_a_base": "nao ha MR com esta receita: parar e rediscutir, sem trocar de receita olhando metrica clinica",
@@ -127,7 +140,7 @@
       "supera_a_base": true,
       "congelado_em": "2026-09-23",
       "pela_regra": "adapter_do_mr.checkpoint: menor focal_alt na validacao do adapter; nenhuma metrica clinica consultada",
-      "nota": "adapter.pt da mesma corrida tem outro sha256. O codigo sugere que a diferenca e so de proveniencia gravada (o adapter.pt nao grava o hash do plano de validacao), mas isso NAO foi verificado comparando tensores. Nao bloqueia: a regra e o extrator apontam para adapter_melhor.pt"
+      "nota": "adapter.pt da mesma corrida tem outro sha256; os estados ainda NAO foram comparados. Pendente: reconferir esta corrida com scripts/congelar_adapter.py (receita, planos, R03, recorte re-sorteado, melhor recalculado e estados), como a_2 e a_3. Nao bloqueia: a regra e o extrator apontam para adapter_melhor.pt"
     }
   },
   "cabeca": {

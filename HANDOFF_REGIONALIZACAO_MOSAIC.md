@@ -539,12 +539,14 @@ fechamento do terminal. Log completo em `~/artifacts/redesenho/g4_corrida2.log`;
 | perda nas posições de referência | +0,009 | +0,006 |
 
 - **Critério primário:** 1,7331 → **1,6008** (−0,132) nas 800 janelas; curva monotônica, achatando depois de ~1.750
-  passos (quando o cosseno leva a taxa perto de zero); melhor = último. Pela regra, **a₁ = `adapter_melhor.pt`
-  `6327a9fa…` está congelado** (registrado em `adapters_congelados` na declaração).
+  passos; melhor = último. (Corrigido em 24/09: no passo 1.750 a taxa **não** está perto de zero — pelo cosseno do
+  runner é ~1,89e-6, 38% da inicial —, então o achatamento não se explica só pelo scheduler.) Pela regra, **a₁ =
+  `adapter_melhor.pt` `6327a9fa…` está congelado** (registrado em `adapters_congelados` na declaração).
 - **Diagnósticos (descrição):** 82–89% do ganho está no termo de massa (global e ABraOM); a **ordem** entre as alternativas não se
   moveu de forma distinguível; entropia subiu e a referência piorou. O que mudou no MLM foi sobretudo a confiança
   nas posições mascaradas.
-- **Fontes:** nenhuma diferença distinguível (`focal_ce` −0,004 [−0,051; +0,042]). Não substitui o MG × MR.
+- **Fontes:** não detectamos diferença de melhora entre ABraOM e global (`focal_ce` −0,004 [−0,051; +0,042]) — o
+  IC inclui zero, o que **não** é equivalência. Não substitui o MG × MR.
 - **Linha de base útil:** o R03 já põe o ALT verdadeiro em 1º entre as três não-referência em 44,7% (ABraOM) e
   48,3% (global) das janelas (acaso: 33,3%).
 
@@ -789,13 +791,24 @@ checkpoint idênticos aos da a₁ (a trava confirmou no relatório); zero falha 
 | a₂ 20260922 | 1,7331 → 1,6044 | −0,1287 | 2999 (final) | 77 min |
 | a₃ 20260923 | 1,7331 → 1,5978 | −0,1353 | 2999 (final) | 76 min |
 
-O efeito no critério primário se **replica entre as sementes** (amplitude 0,0066). Diagnósticos, só descrição, iguais
-aos da a₁: 82–91% do ganho no termo de massa; ordem do ALT sem mudança distinguível (ICs cruzam zero); termo de
-escolha cai com IC abaixo de zero, compatível com suavização, não com reordenação; entropia +0,065 a +0,071;
-referência +0,006 a +0,007; fontes indistinguíveis (ABraOM − global no `focal_ce`: −0,0096 [−0,054; +0,030] e −0,0028
-[−0,050; +0,042]). Nada disso diz algo sobre classificação clínica ou sobre a pergunta regional. Congelamento pela
-regra: as duas superam a base; as entradas saem de `scripts/congelar_adapter.py` (confere receita, orçamento, planos,
-recorte, sha do arquivo e tensores do `adapter.pt`), não de hash copiado à mão.
+A melhora de reconstrução **se repetiu nas três sementes** (amplitude 0,0066): estabilidade do treino, não melhora
+clínica nem regional. Diagnósticos, só descrição, iguais aos da a₁: 82–91% do ganho no termo de massa; ordem do ALT
+sem mudança distinguível (ICs cruzam zero); termo de escolha cai com IC abaixo de zero — compatível com mudanças nas
+probabilidades sem grandes alterações de ordem, **sem identificar um mecanismo único**; entropia +0,065 a +0,071;
+perdas de contexto (+0,005) e de referência (+0,006 a +0,007) sobem um pouco; ABraOM − global no `focal_ce`:
+−0,0096 [−0,054; +0,030] e −0,0028 [−0,050; +0,042] — **não detectamos diferença** entre as fontes, o que não é
+equivalência. O melhor no último passo não pede mais orçamento: as 3.000 atualizações estavam fixadas para as três.
+
+**Congelamento (revisão de 24/09):** a primeira versão de `scripts/congelar_adapter.py` confiava no que a corrida
+dizia de si — aprovava `supera_a_base: true` com o melhor pior que a base, janela e dropout do LoRA fora da receita,
+e outro recorte de 800 janelas coerente só consigo mesmo; e tratava dois checkpoints sem estado como idênticos.
+Agora: melhora **recalculada do histórico** (finita, menor que a base; passo e valor conferidos); receita completa
+(inclui janela, dropout, treino inteiro, sem retomada, versão e superfície) conferida no relatório **e** no
+checkpoint, que têm de concordar; planos (sha registrado **e** recalculado dos arquivos) e R03 contra a **referência
+externa** declarada (`adapter_do_mr.referencia`, sha256 completos); recorte contra o **re-sorteado** do plano
+declarado; estados do `adapter.pt` com estado não vazio e chaves declaradas — iguais os estados, os arquivos ainda
+têm hashes diferentes, e o script lista os campos que diferem sem atribuir a eles a diferença inteira. As três
+corridas (inclusive a a₁) são reconferidas antes do registro.
 
 **Desenho do G6/G7: `docs/g6_g7_desenho.md`.** O consumidor aplica as regras de avaliação do Mosaic (PLAN
 §13.3–13.5), e o núcleo está escrito e testado com dados sintéticos (`eval/campanha/estudos.py`). Ponto a não perder:
