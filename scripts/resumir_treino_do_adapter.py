@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 FOCAL = "focal_alt"
 REFERENCIA = "referencia"
 FONTES = ("abraom", "global")
@@ -81,11 +83,24 @@ def _bootstrap(rotulo: str, bloco: Any) -> list[str]:
     return linhas
 
 
-def resumir(relatorio: dict[str, Any]) -> list[str]:
-    """Linhas do resumo. Funcao pura: recebe o relatorio ja lido."""
+def _recorte(entradas: dict[str, Any], lido_do_detalhe: dict[str, Any] | None) -> str:
+    registrado = entradas.get("recorte_da_validacao")
+    recorte = registrado or lido_do_detalhe
+    if not recorte:
+        return "recorte nao disponivel (sem registro e sem detalhe_da_validacao.json)"
+    origem = "" if registrado else ", lido do detalhe_da_validacao.json"
+    confere = " | IDENTICO ao da referencia" if (registrado or {}).get("confere_com") else ""
+    return f"recorte {recorte['sha256'][:16]} ({recorte['janelas']} janelas{origem}){confere}"
+
+
+def resumir(relatorio: dict[str, Any], recorte_lido: dict[str, Any] | None = None) -> list[str]:
+    """Linhas do resumo. Funcao pura: recebe o relatorio ja lido (e, para corridas anteriores ao registro do
+    recorte, o recorte calculado do detalhe da validacao)."""
     receita = relatorio.get("receita") or {}
     entradas = relatorio.get("entradas") or {}
     custo = relatorio.get("custo") or {}
+    semente_da_validacao = receita.get("seed_da_validacao",
+                                       "nao registrada (antes da flag era seed + 1)")
     saida = [
         "== receita ==",
         f"  lr {receita.get('lr')} | passos {receita.get('passos')} | exemplos/passo "
@@ -95,6 +110,7 @@ def resumir(relatorio: dict[str, Any]) -> list[str]:
         f"  treino {entradas.get('exemplos_de_treino')} {((entradas.get('mistura_do_treino') or {}).get('fracao'))}"
         f" | validacao {entradas.get('exemplos_de_validacao')} "
         f"{((entradas.get('mistura_da_validacao') or {}).get('fracao'))}",
+        f"  validacao: semente da subamostra {semente_da_validacao} | {_recorte(entradas, recorte_lido)}",
         f"  falhas treino {entradas.get('falhas_treino')} | falhas validacao {entradas.get('falhas_validacao')}",
         f"  plano_treino {str(entradas.get('plano_treino_sha256'))[:12]} | plano_validacao "
         f"{str(entradas.get('plano_validacao_sha256'))[:12]} | checkpoint {str(entradas.get('checkpoint_sha256'))[:12]}",
@@ -150,7 +166,13 @@ def main(argv: list[str] | None = None) -> int:
               f"veja o log e os adapter_passo*.pt")
         return 2
     relatorio = json.loads(caminho.read_text(encoding="utf-8"))
-    print("\n".join(resumir(relatorio)))
+    recorte_lido = None
+    detalhe = caminho.parent / "detalhe_da_validacao.json"
+    if not (relatorio.get("entradas") or {}).get("recorte_da_validacao") and detalhe.exists():
+        from scripts.train_population_adapter import recorte_de_referencia
+
+        recorte_lido = recorte_de_referencia(detalhe)
+    print("\n".join(resumir(relatorio, recorte_lido)))
     return 0
 
 

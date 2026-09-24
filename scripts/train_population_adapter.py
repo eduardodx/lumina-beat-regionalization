@@ -54,6 +54,7 @@ O LACO DE TREINO (`--treinar`) acrescenta, e nada disso e verificado pelo smoke:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -568,6 +569,33 @@ def _mistura(exemplos: list) -> dict[str, Any]:
             "fracao": {f: round(q / total, 4) for f, q in sorted(contagem.items())}}
 
 
+def hash_do_recorte(chaves) -> dict[str, Any]:
+    """Identidade de um recorte de validacao: sha256 das chaves `fonte|variant_id|focal_index`, ordenadas.
+
+    E a mesma chave do pareamento do bootstrap. Dois adapters so se comparam na validacao se ela for o MESMO
+    conjunto de janelas; a ordem nao entra, porque a agregacao e por soma e contagem.
+    """
+    linhas = sorted(f"{fonte}|{variant_id}|{int(focal)}" for fonte, variant_id, focal in chaves)
+    return {"sha256": hashlib.sha256("\n".join(linhas).encode("utf-8")).hexdigest(), "janelas": len(linhas)}
+
+
+def recorte_dos_exemplos(exemplos: list) -> dict[str, Any]:
+    return hash_do_recorte((e.fonte, e.variant_id, e.focal_index) for e in exemplos)
+
+
+def recorte_de_referencia(caminho: Path) -> dict[str, Any]:
+    """O recorte de validacao de uma corrida ja feita, lido do `detalhe_da_validacao.json` dela (a linha de base
+    cobre todas as janelas validadas). Aceita a pasta da corrida ou o proprio arquivo; funciona tambem na a_1, que
+    e anterior ao registro do recorte no relatorio."""
+    caminho = caminho.expanduser()
+    if caminho.is_dir():
+        caminho = caminho / "detalhe_da_validacao.json"
+    registros = json.loads(caminho.read_text(encoding="utf-8")).get("linha_de_base") or []
+    if not registros:
+        raise ValueError(f"{caminho} nao tem o detalhe da linha de base")
+    return {**hash_do_recorte(chave_do_exemplo(r) for r in registros), "origem": str(caminho)}
+
+
 def carregar_exemplos(caminho: Path, fetch, *, window_bp: int, limite: int | None,
                       seed: int = 0) -> tuple[list, dict]:
     """Le o plano e reconstroi os exemplos. `ref_mismatch` interrompe: e erro de dado, nao estatistica."""
@@ -642,11 +670,50 @@ def avaliar(adapter, exemplos, *, pesos, batch: int, device) -> dict[str, Any]:
     }
 
 
+def problema_da_validacao(config: argparse.Namespace) -> str | None:
+    """O que impede de sortear a validacao de forma declarada. Funcao pura, testavel sem GPU."""
+    if config.limite_validacao and config.seed_da_validacao is None:
+        return ("--limite-validacao sorteia um subconjunto: declare --seed-da-validacao. Ela era --seed + 1, e "
+                "cada semente de adapter teria outra validacao (a campanha fixa 20260922, a da a_1)")
+    if config.recorte_da_validacao_igual_a and not config.plano_validacao:
+        return "--recorte-da-validacao-igual-a sem --plano-validacao"
+    return None
+
+
+def carregar_validacao(config: argparse.Namespace, fetch) -> tuple[list, dict, dict[str, Any] | None, str | None]:
+    """(exemplos, falhas, recorte, problema) da validacao; `problema` None quando pode seguir.
+
+    A subamostra tem semente PROPRIA (`--seed-da-validacao`). Antes era `--seed + 1`: cada semente de adapter seria
+    validada -- e teria o checkpoint escolhido -- num recorte diferente (revisao de 23/09). Com
+    `--recorte-da-validacao-igual-a`, o recorte sorteado e conferido contra o de uma corrida anterior ANTES de
+    carregar o modelo.
+    """
+    if not config.plano_validacao:
+        return [], {}, None, None
+    exemplos, falhas = carregar_exemplos(
+        config.plano_validacao, fetch, window_bp=config.window_bp, limite=config.limite_validacao,
+        seed=config.seed_da_validacao if config.seed_da_validacao is not None else 0)
+    recorte = recorte_dos_exemplos(exemplos)
+    if config.recorte_da_validacao_igual_a:
+        referencia = recorte_de_referencia(config.recorte_da_validacao_igual_a)
+        if referencia["sha256"] != recorte["sha256"]:
+            return exemplos, falhas, recorte, (
+                f"a validacao sorteada ({recorte['janelas']} janelas, {recorte['sha256'][:16]}) nao e a de "
+                f"{referencia['origem']} ({referencia['janelas']} janelas, {referencia['sha256'][:16]}). Adapters "
+                f"da campanha so se comparam e so se escolhem na MESMA validacao")
+        recorte["confere_com"] = referencia
+    return exemplos, falhas, recorte, None
+
+
 def rodar_treino(config: argparse.Namespace) -> int:
     import torch
 
     from eval.adapter import mlm, treino
 
+    problema = problema_da_validacao(config)
+    if problema:
+        print(f"FALHOU: {problema}")
+        return 2
     inicializar_aleatoriedade(config.seed)
     import time
 
@@ -663,12 +730,15 @@ def rodar_treino(config: argparse.Namespace) -> int:
     if not treino_exemplos:
         print("FALHOU: nenhum exemplo de treino")
         return 2
-    validacao_exemplos: list = []
-    falhas_validacao: dict = {}
-    if config.plano_validacao:
-        validacao_exemplos, falhas_validacao = carregar_exemplos(
-            config.plano_validacao, fetch, window_bp=config.window_bp, limite=config.limite_validacao,
-            seed=config.seed + 1)
+    validacao_exemplos, falhas_validacao, recorte_validacao, problema = carregar_validacao(config, fetch)
+    if recorte_validacao:
+        print(f"  [validacao] {recorte_validacao['janelas']} janelas, semente da subamostra "
+              f"{config.seed_da_validacao}, recorte {recorte_validacao['sha256'][:16]}"
+              + (f", identico ao de {recorte_validacao['confere_com']['origem']}"
+                 if recorte_validacao.get("confere_com") else ""))
+    if problema:
+        print(f"FALHOU: {problema}")
+        return 2
 
     sem_loco = sum(1 for exemplo in validacao_exemplos if not exemplo.locus_id)
     if sem_loco:
@@ -699,6 +769,7 @@ def rodar_treino(config: argparse.Namespace) -> int:
         "plano_treino_sha256": sha256_file(config.plano_treino.expanduser()),
         "plano_validacao_sha256": sha256_file(config.plano_validacao.expanduser())
         if config.plano_validacao else None,
+        "recorte_da_validacao_sha256": recorte_validacao["sha256"] if recorte_validacao else None,
         "revisao_do_codigo": proveniencia["revisao_do_codigo"],
     }
 
@@ -929,6 +1000,7 @@ def rodar_treino(config: argparse.Namespace) -> int:
             "plano_validacao_sha256": sha256_file(config.plano_validacao.expanduser())
             if config.plano_validacao else None,
             "exemplos_de_treino": len(treino_exemplos), "exemplos_de_validacao": len(validacao_exemplos),
+            "recorte_da_validacao": recorte_validacao,
             "mistura_do_treino": _mistura(treino_exemplos),
             "mistura_da_validacao": _mistura(validacao_exemplos),
             "falhas_treino": falhas_treino, "falhas_validacao": falhas_validacao,
@@ -939,6 +1011,11 @@ def rodar_treino(config: argparse.Namespace) -> int:
                     "weight_decay": config.weight_decay, "clip_norma": config.clip_norma,
                     "passos": config.passos, "exemplos_por_passo": config.exemplos_por_passo,
                     "batch": config.batch, "aquecimento": config.aquecimento, "seed": config.seed,
+                    "seed_da_validacao": config.seed_da_validacao, "limite_validacao": config.limite_validacao,
+                    "validar_a_cada": config.validar_a_cada, "window_bp": config.window_bp,
+                    "backbone_em_eval": config.backbone_em_eval,
+                    "lora": {"rank": config.lora_rank, "alpha": config.lora_alpha, "dropout": config.lora_dropout,
+                             "rslora": not config.sem_rslora},
                     "unidade_do_scheduler": "atualizacoes do otimizador, nao lotes",
                     "referencia_uniforme": {
                         "valor": round(math.log(4), 4),
@@ -1022,6 +1099,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="checkpoint parcial a cada N passos; 0 salva so no fim")
     parser.add_argument("--limite-treino", type=int, help="subamostra N linhas preservando a proporcao por fonte (piloto)")
     parser.add_argument("--limite-validacao", type=int)
+    parser.add_argument("--seed-da-validacao", type=int,
+                        help="semente da subamostra da validacao, SEPARADA da do adapter; obrigatoria com "
+                             "--limite-validacao (a campanha fixa 20260922 nas tres sementes de adapter)")
+    parser.add_argument("--recorte-da-validacao-igual-a", type=Path,
+                        help="pasta (ou detalhe_da_validacao.json) de uma corrida anterior: aborta antes do modelo "
+                             "se a validacao sorteada nao for o mesmo conjunto de janelas")
     parser.add_argument("--retomar", type=Path, help="adapter.pt de onde continuar; o otimizador NAO e restaurado")
     parser.add_argument("--smoke-exemplos", type=int, default=8)
     parser.add_argument("--modulos-esperados", type=Path,

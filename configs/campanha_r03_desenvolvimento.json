@@ -71,7 +71,7 @@
     ],
     "regra": "MR_i = adapter de semente a_i + cabeca de semente h_i. M0_i = R03 sem adapter + cabeca h_i: as MESMAS sementes de cabeca nos dois sistemas, para o par (M0_i, MR_i) compartilhar inicializacao e ordem dos dados. Predicao de cada sistema = media das 3 probabilidades calibradas; metricas tambem por combinacao. Cruzar 3 x 3 daria 9 cabecas ao MR e 3 ao M0, e ensembles de tamanhos diferentes nao se comparam",
     "desenvolvimento": "enquanto so houver o adapter a_1, MR_dev = a_1 com h_1, h_2 e h_3: a variacao entre sementes de adapter nao entra, e os intervalos nao a incluem",
-    "subamostra_da_validacao_do_adapter": "semente 20260922 para as tres sementes de adapter (a corrida a_1 ja usa: e seed + 1). Antes de a_2, o runner precisa de uma flag que desacople essa semente da do adapter",
+    "subamostra_da_validacao_do_adapter": "semente 20260922 para as tres sementes de adapter: o MESMO recorte de 800 janelas (a corrida a_1 usou seed + 1 = 20260922). Desde 23/09 o runner separa as duas: --seed-da-validacao e obrigatoria com --limite-validacao, e --recorte-da-validacao-igual-a <pasta da a_1> aborta antes de carregar o modelo se o recorte sorteado nao for o mesmo conjunto de janelas (sha256 das chaves fonte|variant_id|focal_index)",
     "origem": "sementes de cabeca arbitrarias, fixadas aqui antes de qualquer uso"
   },
   "adapter_do_mr": {
@@ -89,6 +89,7 @@
         "referencia": 0.5
       },
       "limite_validacao": 800,
+      "seed_da_validacao": 20260922,
       "validar_a_cada": 250,
       "backbone_em_eval": true,
       "lora": {
@@ -105,7 +106,8 @@
     "checkpoint": "adapter_melhor.pt de cada semente: o de menor focal_alt na validacao do adapter (criterio primario declarado)",
     "se_nenhum_checkpoint_supera_a_base": "nao ha MR com esta receita: parar e rediscutir, sem trocar de receita olhando metrica clinica",
     "proibido": "escolher adapter, receita ou checkpoint por metrica clinica ou por diagnostico do MLM",
-    "estado": "receita candidata de desenvolvimento; a corrida a_1 (g4_corrida2) e a primeira execucao dela"
+    "estado": "receita candidata de desenvolvimento; a corrida a_1 (g4_corrida2) e a primeira execucao dela",
+    "demais_sementes": "a_2 e a_3 com a MESMA receita e o MESMO orcamento da a_1 (mesmos planos, passos, exemplos por passo, taxa, cadencia e validacao); muda so --seed. Mantida em 23/09 depois da comparacao exploratoria M0 x MR com a_1, que nao tinha condicao de parada e nao altera a receita"
   },
   "intervalos": {
     "natureza": "exploratoria",

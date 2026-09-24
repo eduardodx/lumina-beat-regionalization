@@ -21,6 +21,8 @@ RECEITA: dict[str, Any] = {"oculta": 64, "dropout": 0.1, "lr": 3e-3, "weight_dec
                            "parada": "macro-AUROC de missense/splice/noncoding na validacao",
                            "padronizacao": "media e desvio do treino; desvio < 1e-8 vira 1",
                            "origem": "mlp_scores de scripts/probe_feature_eval.py (embedding-probe-mosaic)"}
+#: Formato do arquivo que o comparador grava por cabeca (`cabeca_{sistema}_h{semente}.pt`).
+FORMATO_DA_CABECA = "campanha_r03_cabeca_v1"
 
 
 class CabecaSemSelecao(RuntimeError):
@@ -32,6 +34,16 @@ def padronizador(treino: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     desvio = treino.std(axis=0)
     desvio[desvio < 1e-8] = 1.0  # dimensao constante no treino: nao escala, nao explode
     return media, desvio
+
+
+def montar_rede(dimensao: int, receita: dict[str, Any] = RECEITA) -> Any:
+    """A arquitetura da cabeca. Uma so definicao para treinar e para recarregar o que foi salvo."""
+    import torch
+
+    return torch.nn.Sequential(
+        torch.nn.Linear(dimensao, receita["oculta"]), torch.nn.GELU(),
+        torch.nn.Dropout(receita["dropout"]), torch.nn.Linear(receita["oculta"], 1),
+    )
 
 
 def treinar(X_treino: np.ndarray, y_treino: np.ndarray, X_validacao: np.ndarray, y_validacao: np.ndarray,
@@ -46,10 +58,7 @@ def treinar(X_treino: np.ndarray, y_treino: np.ndarray, X_validacao: np.ndarray,
     xt = torch.tensor((X_treino - media) / desvio, dtype=torch.float32, device=dispositivo)
     yt = torch.tensor(np.asarray(y_treino, dtype=np.float32), device=dispositivo).unsqueeze(1)
     xv = torch.tensor((X_validacao - media) / desvio, dtype=torch.float32, device=dispositivo)
-    rede = torch.nn.Sequential(
-        torch.nn.Linear(xt.shape[1], receita["oculta"]), torch.nn.GELU(),
-        torch.nn.Dropout(receita["dropout"]), torch.nn.Linear(receita["oculta"], 1),
-    ).to(dispositivo)
+    rede = montar_rede(xt.shape[1], receita).to(dispositivo)
     otimizador = torch.optim.Adam(rede.parameters(), lr=receita["lr"], weight_decay=receita["weight_decay"])
     perda = torch.nn.BCEWithLogitsLoss()
     melhor: dict[str, Any] | None = None
@@ -214,4 +223,22 @@ def rodar_sementes(matriz: np.ndarray, tabela: Any, linhas: dict[str, np.ndarray
 def sem_matrizes(rodada: dict[str, Any]) -> dict[str, Any]:
     """A parte de uma rodada que vai para JSON: sem as probabilidades nem o modelo."""
     return {k: v for k, v in rodada.items() if not k.startswith("prob_") and k != "modelo"}
+
+
+def carregar_cabeca_salva(caminho: Any) -> dict[str, Any]:
+    """Uma cabeca gravada pelo comparador, pronta para `pontuar_salva`: rede em `eval()`, com as chaves exatas."""
+    import torch
+
+    carga = torch.load(caminho, map_location="cpu", weights_only=False)
+    if carga.get("formato") != FORMATO_DA_CABECA:
+        raise ValueError(f"{caminho}: formato {carga.get('formato')!r}, esperado {FORMATO_DA_CABECA!r}")
+    rede = montar_rede(int(carga["estado"]["0.weight"].shape[1]), carga["receita"])
+    rede.load_state_dict(carga["estado"], strict=True)
+    return {**carga, "rede": rede.eval()}
+
+
+def pontuar_salva(cabeca: dict[str, Any], X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(logits, probabilidade calibrada) de uma cabeca recarregada: o MESMO caminho de `rodar_sementes`."""
+    logits = pontuar(cabeca, X)
+    return logits, calibrar(logits, cabeca["platt"]["a"], cabeca["platt"]["b"])
 

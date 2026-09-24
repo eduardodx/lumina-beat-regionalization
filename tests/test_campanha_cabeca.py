@@ -164,6 +164,25 @@ def test_g5_e_comparador_de_ponta_a_ponta_num_cache_sintetico():
         assert {"estado", "media", "desvio", "platt", "limiar_de_mcc", "snapshot_sha256",
                 "cache_identidade_sha256", "semente_do_adapter"} <= set(guardada)
 
+        # Recarregadas, as seis cabecas tem de reproduzir o que o comparador mediu (antes do G6).
+        from scripts import conferir_cabecas_salvas as conferencia
+
+        args_conferencia = ["--comparacao", str(pasta / "comparacao"), "--cache-m0", str(pasta / "M0"),
+                            "--cache-mr", str(pasta / "MR"), "--decisao-g5", str(pasta / "g5" / "g5_decisao.json"),
+                            "--campanha", str(raiz / "configs" / "campanha_r03_desenvolvimento.json")]
+        assert conferencia.main(args_conferencia) == 0
+        resultado = json.loads((pasta / "comparacao" / "conferencia_das_cabecas.json").read_text(encoding="utf-8"))
+        assert resultado["passou"] and len(resultado["cabecas"]) == 6
+        assert all(c["diferenca_maxima_da_probabilidade"] <= 1e-6 for c in resultado["cabecas"])
+        assert all(not c["platt"]["inverte_a_ordem"] for c in resultado["cabecas"])
+        # Um peso adulterado carrega sem erro, mas nao reproduz as predicoes: tem de reprovar.
+        adulterada = dict(guardada, estado={k: v.clone() for k, v in guardada["estado"].items()})
+        adulterada["estado"]["3.bias"] += 0.5
+        torch.save(adulterada, pasta / "comparacao" / "cabeca_MR_h11.pt")
+        assert conferencia.main(args_conferencia) == 2
+        torch.save(guardada, pasta / "comparacao" / "cabeca_MR_h11.pt")
+        assert conferencia.main(args_conferencia) == 0
+
         # Trocar um snapshot entre a decisao e a comparacao tem de ser recusado.
         pd.DataFrame({"variant_id": treino[:10], "role": "train"}).to_parquet(pasta / "janela4096.parquet",
                                                                              index=False)

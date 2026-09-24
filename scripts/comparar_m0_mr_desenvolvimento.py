@@ -3,15 +3,19 @@
 
 Treina H0 sobre o cache do M0 e HR sobre o cache do MR com a MESMA receita, as MESMAS sementes de cabeca (pareadas:
 M0_i e MR_i usam h_i) e a extracao e a politica que o G5 escolheu SO COM M0. Mede AUROC, AUPRC e a macro dos paineis
-no conjunto de selecao, por semente e na media das probabilidades calibradas, e o delta MR - M0 com IC por
-bootstrap de `overlap_cluster_id`, com os mesmos sorteios para os dois sistemas.
+no conjunto de selecao, por semente e no ENSEMBLE (a media das probabilidades calibradas das 3 cabecas), e o delta
+MR - M0 do ensemble com IC por bootstrap de `overlap_cluster_id`, com os mesmos sorteios para os dois sistemas.
+
+A macro do ensemble NAO e a media das macros por semente (a medida do G5): as duas nao precisam coincidir.
 
 O QUE ISTO NAO MEDE
     A interacao regional: os recortes de desenvolvimento excluem os membros dos estudos e a regra ampla brasileira,
-    entao nao ha casos de participacao brasileira aqui. Isto e classificacao geral. Com um so adapter (a_1), a
-    variacao entre sementes de adapter nao entra. Os IC sao exploratorios e nao sao criterio de avanco.
-    E o conjunto de selecao ja escolheu a extracao e a politica do M0 (a melhor de 6 configuracoes): a macro do M0
-    ali tende a estar sorteada para cima, o que, se tanto, puxa o delta MR - M0 para baixo.
+    entao nao ha casos de participacao brasileira aqui. Isto e classificacao geral. Com um so adapter, a variacao
+    entre sementes de adapter nao entra, e as tres cabecas de um sistema compartilham adapter, dados e conjunto:
+    nao sao replicacoes independentes. Os IC sao exploratorios e nao sao criterio de avanco nem de parada.
+    E o conjunto de selecao ja foi usado para escolher, so com M0, a extracao e a politica (1 de 6, pela regra do
+    G5): a comparacao nele pode favorecer o M0, com vies de tamanho DESCONHECIDO -- que nao serve para descontar uma
+    queda do MR.
 
 O QUE O CODIGO EXIGE ANTES DE TREINAR
     - a decisao do G5, feita com o MESMO cache do M0 (sha256 da identidade);
@@ -174,9 +178,15 @@ def main(argv: list[str] | None = None) -> int:
         "identidades": {"M0": str(args.cache_m0), "MR": str(args.cache_mr),
                         "decisao_g5": str(args.decisao_g5)},
         "o_que_nao_mede": ("a interacao regional (sem casos de participacao brasileira nos recortes de "
-                           "desenvolvimento); a variacao entre sementes de adapter (so a_1)"),
-        "vies_conhecido": ("o conjunto de selecao escolheu a configuracao do M0 no G5 (a melhor de 6): a macro do M0 "
-                           "tende a estar sorteada para cima e o delta MR - M0, se tanto, puxado para baixo"),
+                           "desenvolvimento); a variacao entre sementes de adapter (um adapter por comparacao); as "
+                           "tres cabecas compartilham adapter, dados e conjunto e nao sao replicacoes independentes"),
+        "vies_conhecido": ("o conjunto de selecao foi usado para escolher, so com M0, a extracao e a politica (1 de 6, "
+                           "pela regra do G5): a comparacao nele pode favorecer o M0, com vies de tamanho "
+                           "desconhecido, que nao serve para descontar uma queda do MR"),
+        "como_ler": ("`media_das_probabilidades` e o ENSEMBLE (media das probabilidades calibradas das 3 cabecas); a "
+                     "macro dele nao e a media das macros por semente, que e a medida do G5. Criterio declarado: a "
+                     "macro; AUROC e AUPRC gerais sao secundarias. Painel com menos de 10 de uma classe (plof, "
+                     "synonymous) e fragil ou indefinido"),
         "segundos": round(time.perf_counter() - inicio, 1),
     }
     destino = args.out_dir.expanduser()
@@ -200,21 +210,30 @@ def main(argv: list[str] | None = None) -> int:
 
     media = resultado["media_das_probabilidades"]
     boot = resultado["bootstrap_da_media"]
-    print("\n== conjunto de selecao, media das 3 cabecas (EXPLORATORIO) ==")
+    valor = lambda x: "-" if x is None else f"{x:.4f}"  # noqa: E731
+    print("\n== conjunto de selecao: ENSEMBLE = media das probabilidades calibradas das 3 cabecas (EXPLORATORIO) ==")
     for chave in ("macro", "auroc", "auprc"):
         faixa = boot[chave]
         print(f"  {chave:<6} M0 {media['M0'][chave]:.4f}  MR {media['MR'][chave]:.4f}  delta "
               f"{media['delta'][chave]:+.4f}  IC [{faixa['p2_5']:+.4f}; {faixa['p97_5']:+.4f}] "
-              f"({faixa['replicas_validas']} replicas)")
+              f"({faixa['replicas_validas']} replicas){'  <- criterio declarado' if chave == 'macro' else ''}")
     print("  por painel (AUROC):")
     for painel in metricas.PAINEIS_DE_DISCRIMINACAO + metricas.PAINEIS_DE_GUARDA:
         a, b = media["M0"]["por_painel"][painel], media["MR"]["por_painel"][painel]
-        valor = lambda x: "-" if x is None else f"{x:.4f}"  # noqa: E731
-        print(f"    {painel:<11} M0 {valor(a['auroc'])}  MR {valor(b['auroc'])}  (P {a['n_pos']}, B {a['n_neg']})")
-    print("  por semente (macro):")
+        fragil = "  fragil: < 10 de uma classe" if a["auroc"] is not None and min(a["n_pos"], a["n_neg"]) < 10 else ""
+        print(f"    {painel:<11} M0 {valor(a['auroc'])}  MR {valor(b['auroc'])}  (P {a['n_pos']}, B {a['n_neg']})"
+              f"{fragil}")
+    print("  por semente (macro sobre os logits; a media delas e a medida do G5, nao a do ensemble):")
     for linha in resultado["por_semente"]:
-        print(f"    h{linha['semente']}: M0 {linha['M0']['macro']:.4f}  MR {linha['MR']['macro']:.4f}  "
+        print(f"    h{linha['semente']}: M0 {valor(linha['M0']['macro'])}  MR {valor(linha['MR']['macro'])}  "
               f"delta {linha['delta']['macro']:+.4f}")
+    print("  cabecas salvas (Platt a, b; a <= 0 inverteria a ordem):")
+    for sistema, rodadas in (("M0", rodadas_m0), ("MR", rodadas_mr)):
+        for r in rodadas:
+            aviso = "  INVERTE A ORDEM" if r["platt"]["inverte_a_ordem"] else ""
+            print(f"    {sistema} h{r['semente']}: epoca {r['epoca']}  a {r['platt']['a']:.4f}  "
+                  f"b {r['platt']['b']:.4f}  limiar {r['limiar_de_mcc']['limiar']:.4f}{aviso}")
+    print(f"    em {destino}")
     return 0
 
 

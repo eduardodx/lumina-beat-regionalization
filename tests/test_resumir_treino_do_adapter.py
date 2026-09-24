@@ -90,6 +90,28 @@ class ResumoTests(unittest.TestCase):
             self.assertEqual(resumo.main([pasta]), 0)
             self.assertEqual(resumo.main([str(Path(pasta, "nao_existe"))]), 2)
 
+    def test_recorte_da_validacao_sai_no_resumo(self):
+        # A a_1 e anterior ao registro: o recorte vem do detalhe da validacao, e a semente aparece como nao
+        # registrada. Uma corrida nova traz os dois no relatorio.
+        antigo = "\n".join(resumo.resumir(_relatorio(), {"sha256": "ab12" * 16, "janelas": 800}))
+        self.assertIn("nao registrada (antes da flag era seed + 1)", antigo)
+        self.assertIn("recorte ab12ab12ab12ab12 (800 janelas, lido do detalhe_da_validacao.json)", antigo)
+        novo = _relatorio()
+        novo["receita"]["seed_da_validacao"] = 20260922
+        novo["entradas"]["recorte_da_validacao"] = {"sha256": "cd34" * 16, "janelas": 800,
+                                                    "confere_com": {"sha256": "cd34" * 16}}
+        texto = "\n".join(resumo.resumir(novo))
+        self.assertIn("semente da subamostra 20260922", texto)
+        self.assertIn("recorte cd34cd34cd34cd34 (800 janelas) | IDENTICO ao da referencia", texto)
+
+    def test_main_calcula_o_recorte_do_detalhe_quando_o_relatorio_nao_o_tem(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            Path(pasta, "treino_do_adapter.json").write_text(json.dumps(_relatorio()), encoding="utf-8")
+            Path(pasta, "detalhe_da_validacao.json").write_text(json.dumps({"linha_de_base": [
+                {"fonte": "abraom", "variant_id": "chr1:1:A:G", "focal_index": 10, "locus_id": "L0"}]}),
+                encoding="utf-8")
+            self.assertEqual(resumo.main([pasta]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

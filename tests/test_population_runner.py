@@ -203,6 +203,89 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue(all("detalhe" not in linha["validacao"] for linha in historico),
                         "o detalhe nao pode inchar o historico")
 
+    # ------------------------------------------------------------------ semente da validacao (revisao de 23/09)
+
+    @staticmethod
+    def _config(**mudancas):
+        valores = {"plano_validacao": Path("plano_validacao.parquet"), "limite_validacao": 800,
+                   "seed": 20260922, "seed_da_validacao": 20260922, "recorte_da_validacao_igual_a": None,
+                   "window_bp": 4096}
+        valores.update(mudancas)
+        return SimpleNamespace(**valores)
+
+    @staticmethod
+    def _janelas(chaves):
+        return [SimpleNamespace(fonte=f, variant_id=v, focal_index=i, locus_id=f"L{n}")
+                for n, (f, v, i) in enumerate(chaves)]
+
+    def test_subamostra_da_validacao_exige_semente_propria(self):
+        self.assertIsNotNone(runner.problema_da_validacao(self._config(seed_da_validacao=None)))
+        self.assertIsNone(runner.problema_da_validacao(self._config()))
+        # Sem subamostra (validacao inteira), a semente nao entra.
+        self.assertIsNone(runner.problema_da_validacao(self._config(limite_validacao=None, seed_da_validacao=None)))
+        self.assertIsNotNone(runner.problema_da_validacao(
+            self._config(plano_validacao=None, recorte_da_validacao_igual_a=Path("x"))))
+
+    def test_validacao_usa_a_semente_propria_e_nao_a_do_adapter(self):
+        # Antes: seed + 1. A a_2 (seed 20260922) seria validada com 20260923, outro recorte.
+        chamadas = []
+
+        def carregar(caminho, fetch, *, window_bp, limite, seed=0):
+            chamadas.append(seed)
+            return self._janelas([("abraom", "chr1:1:A:G", 10)]), {}
+
+        with patch.object(runner, "carregar_exemplos", carregar):
+            for seed_do_adapter in (20260921, 20260922, 20260923):
+                runner.carregar_validacao(self._config(seed=seed_do_adapter), fetch=None)
+        self.assertEqual(chamadas, [20260922, 20260922, 20260922])
+
+    def test_recorte_ignora_ordem_e_distingue_fonte_e_janela(self):
+        chaves = [("abraom", "chr1:100:A:G", 1500), ("global", "chr1:100:A:G", 2100), ("global", "chr2:5:C:T", 7)]
+        a = runner.hash_do_recorte(chaves)
+        self.assertEqual(a, runner.hash_do_recorte(list(reversed(chaves))))
+        self.assertEqual(a["janelas"], 3)
+        self.assertNotEqual(a, runner.hash_do_recorte([("global", *chaves[0][1:])] + chaves[1:]))
+        self.assertNotEqual(a, runner.hash_do_recorte([(chaves[0][0], chaves[0][1], 1501)] + chaves[1:]))
+        self.assertEqual(a, runner.recorte_dos_exemplos(self._janelas(chaves)))
+
+    def test_recorte_de_referencia_confere_ou_aborta_antes_do_modelo(self):
+        import json
+        import tempfile
+
+        chaves = [("abraom", "chr1:100:A:G", 1500), ("global", "chr3:300:G:A", 3000)]
+        with tempfile.TemporaryDirectory() as pasta:
+            detalhe = {"chave": "fonte|variant_id|focal_index", "linha_de_base": [
+                {"fonte": f, "variant_id": v, "focal_index": i, "locus_id": "L0", "focal_ce": 1.0}
+                for f, v, i in reversed(chaves)], "melhor": None, "final": None}
+            Path(pasta, "detalhe_da_validacao.json").write_text(json.dumps(detalhe), encoding="utf-8")
+            self.assertEqual(runner.recorte_de_referencia(Path(pasta))["sha256"],
+                             runner.hash_do_recorte(chaves)["sha256"])
+
+            def mesmas(caminho, fetch, *, window_bp, limite, seed=0):
+                return self._janelas(chaves), {}
+
+            def outras(caminho, fetch, *, window_bp, limite, seed=0):
+                return self._janelas(chaves[:1] + [("global", "chr9:9:T:C", 5)]), {}
+
+            with patch.object(runner, "carregar_exemplos", mesmas):
+                _, _, recorte, problema = runner.carregar_validacao(
+                    self._config(recorte_da_validacao_igual_a=Path(pasta)), fetch=None)
+            self.assertIsNone(problema)
+            self.assertIn("confere_com", recorte)
+            with patch.object(runner, "carregar_exemplos", outras):
+                _, _, _, problema = runner.carregar_validacao(
+                    self._config(recorte_da_validacao_igual_a=Path(pasta)), fetch=None)
+            self.assertIn("MESMA validacao", problema)
+
+    def test_rodar_treino_confere_a_validacao_antes_de_montar_o_modelo(self):
+        # A ordem importa: descobrir a validacao errada depois de carregar o R03 e so desperdicio; depois do
+        # treino, seria perder a corrida.
+        fonte = Path(runner.__file__).read_text(encoding="utf-8")
+        corpo = fonte[fonte.index("def rodar_treino"):]
+        self.assertLess(corpo.index("problema_da_validacao(config)"), corpo.index("carregar_exemplos("))
+        self.assertLess(corpo.index("carregar_validacao(config, fetch)"), corpo.index("montar(config, device)"))
+        self.assertNotIn("config.seed + 1", fonte)
+
     def test_rodar_treino_seleciona_sempre_por_registrar_validacao(self):
         # A regressao era de FLUXO: um `pop` do detalhe fora de lugar. A selecao no treino passa toda por
         # `registrar_validacao`, que guarda o detalhe do final e do melhor.
