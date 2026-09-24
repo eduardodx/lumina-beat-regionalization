@@ -839,6 +839,12 @@ Peças novas: `scripts/cadeia_mr_a2_a3.sh` (a cadeia versionada, retomável e au
 contorno, não garantia) e `scripts/instalar_ambiente_gpu_na_home.sh` (os mesmos passos do Gabriel com `--user` e o
 mamba fixado em `e9594ce1`, para o ambiente morar na home e sobreviver a reinícios; rodar com o `/opt/conda` limpo).
 
+**Proveniência do MR_a₂ (em andamento, 24/09).** Extraído em sessões separadas por reinícios, cada uma aberta pela
+conferência de reprodução contra o M0 e o `fragmento_00000` do próprio MR_a₂: fragmentos 0–11 na sessão original
+(noite); 12–35 na sessão das 11:49 (ambiente reinstalado pelo Gabriel; reprodução com **diferença zero**), que caiu
+às 13:49 por ociosidade com 147.456 de 171.720. A tentativa das 14:17 parou **antes de extrair**, na conferência de
+reprodução, por falta do `pyfaidx` depois do reinício — a proteção funcionando. GPU: NVIDIA L4 (24 GB).
+
 **Desenho do G6/G7: `docs/g6_g7_desenho.md`.** O consumidor aplica as regras de avaliação do Mosaic (PLAN
 §13.3–13.5), e o núcleo está escrito e testado com dados sintéticos (`eval/campanha/estudos.py`). Ponto a não perder:
 **no G7 o Mosaic manda relatar o coorte inteiro** (AUROC/AUPRC), com painéis como diagnóstico e sem macro — não a
