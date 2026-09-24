@@ -818,6 +818,17 @@ Registrados em `adapters_congelados`: a₂ `8850e19c…`, a₃ `f2e547e7…`; a 
 e a conferência, sem mudar o sha. Próximo: extrações MR_a₂ e MR_a₃, comparadores e conferência das cabeças (com o M0
 contra o do comparador da a₁).
 
+**Queda noturna (24/09) e ambiente perdido.** A cadeia lançada às 03:48 morreu às 04:49 (~61 min) com 49.152 de
+171.720 variantes do MR_a₂ (12 fragmentos), sem nenhuma linha `exit_`: o shell inteiro foi morto de fora. O
+container só voltou às 11:28 — compatível com desligamento por ociosidade de ~60 min do espaço do SageMaker (a
+conferir na configuração). O reinício **apagou o `mamba_ssm` do `/opt/conda`** (`ambiente.mamba_ssm: 2.3.2.post1 →
+None`): o que é instalado fora da home não sobrevive. A checagem de código barrou a retomada, como devia — um
+MR_a₂ extraído noutro ambiente não parearia com o M0. Resposta: `scripts/conferir_reproducao_do_cache.py` re-extrai
+as primeiras 64 variantes de um cache nos MESMOS lotes da extração original e compara número a número (tolerância
+1e-5 do extrator), e a cadeia passou a começar por ela (M0 e todo cache MR já começado) e a receber o interpretador
+em `PY` — candidato: o `.venv` do `lumina-inference`, que mora na home e tem o `mamba_ssm` fixado no commit
+`0048fbf2` (2.3.2.post1).
+
 **Desenho do G6/G7: `docs/g6_g7_desenho.md`.** O consumidor aplica as regras de avaliação do Mosaic (PLAN
 §13.3–13.5), e o núcleo está escrito e testado com dados sintéticos (`eval/campanha/estudos.py`). Ponto a não perder:
 **no G7 o Mosaic manda relatar o coorte inteiro** (AUROC/AUPRC), com painéis como diagnóstico e sem macro — não a
