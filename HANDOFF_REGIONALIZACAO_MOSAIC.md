@@ -840,12 +840,12 @@ contorno, não garantia) e `scripts/instalar_ambiente_gpu_na_home.sh` (os mesmos
 mamba fixado em `e9594ce1`, para o ambiente morar na home e sobreviver a reinícios; rodar com o `/opt/conda` limpo).
 
 **Cadeia completa (24/09, 19:04).** Conferência de ambiente e reprodução do M0 e do MR_a₂ passaram; MR_a₂ e MR_a₃
-completos (171.720 de 171.720 cada, zero falha de janela; o MR_a₂ foi feito em três lançamentos, todos com o
-ambiente conferido contra o fragmento 0); comparadores e conferências das cabeças passaram (max |Δp| = 0; ensemble
+completos (171.720 de 171.720 cada, zero falha de janela; o MR_a₂ saiu em três sessões — fragmentos 0–11, 12–35 e
+36–41 —, cada uma aberta pela conferência de reprodução); comparadores e conferências das cabeças passaram (max |Δp| = 0; ensemble
 igual ao relatório); **as cabeças do M0 saíram idênticas às do comparador da a₁ nos dois** (o treino da cabeça é
 determinístico, e a composição final tem as suas cabeças do M0 bem definidas). Platt `a` 0,60–0,90 em todas
-(nenhuma inverte a ordem), `b` 3,2–3,4; limiares 0,50–0,65. A falha de montagem do modelo às 14:17 não foi
-diagnosticada (o traceback não veio); a relançada seguinte passou em todas as conferências.
+(nenhuma inverte a ordem), `b` 3,2–3,4; limiares 0,50–0,65. A tentativa das 14:17 parou antes de extrair por
+falta do `pyfaidx` depois do reinício (registro acima); a relançada seguinte passou em todas as conferências.
 
 | Desenvolvimento, conjunto de seleção, ensemble de 3 cabeças por adapter | macro Δ [IC] | AUROC geral Δ [IC] | AUPRC Δ [IC] |
 |---|---|---|---|
