@@ -829,6 +829,16 @@ as primeiras 64 variantes de um cache nos MESMOS lotes da extração original e 
 em `PY` — candidato: o `.venv` do `lumina-inference`, que mora na home e tem o `mamba_ssm` fixado no commit
 `0048fbf2` (2.3.2.post1).
 
+**Segunda queda (24/09) e o que ficou fixo.** A retomada com o ambiente reinstalado pelo Gabriel (mamba da ponta do
+`main`, `e9594ce1`, 22/07 — a mesma versão declarada `2.3.2.post1` do commit fixado, por isso só a conferência
+numérica decide) reproduziu o M0 e o MR_a₂ com **diferença exatamente zero** e retomou o MR_a₂ em 49.152 — e parou de
+novo. A documentação da AWS explica: no JupyterLab o espaço é ocioso quando **não há sessão ativa de kernel nem de
+terminal** (mínimo de 60 min; `nohup` não conta), e o tempo é configurado pelo administrador no domínio ou no perfil.
+Peças novas: `scripts/cadeia_mr_a2_a3.sh` (a cadeia versionada, retomável e autoverificada; `PY` = interpretador),
+`scripts/acompanhar_cadeia.py` (rodando numa célula de notebook mantém o kernel ocupado enquanto a cadeia roda —
+contorno, não garantia) e `scripts/instalar_ambiente_gpu_na_home.sh` (os mesmos passos do Gabriel com `--user` e o
+mamba fixado em `e9594ce1`, para o ambiente morar na home e sobreviver a reinícios; rodar com o `/opt/conda` limpo).
+
 **Desenho do G6/G7: `docs/g6_g7_desenho.md`.** O consumidor aplica as regras de avaliação do Mosaic (PLAN
 §13.3–13.5), e o núcleo está escrito e testado com dados sintéticos (`eval/campanha/estudos.py`). Ponto a não perder:
 **no G7 o Mosaic manda relatar o coorte inteiro** (AUROC/AUPRC), com painéis como diagnóstico e sem macro — não a
