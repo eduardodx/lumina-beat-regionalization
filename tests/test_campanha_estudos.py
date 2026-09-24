@@ -222,14 +222,66 @@ class AnalisesTests(unittest.TestCase):
         self.assertNotIn("subconjuntos", estudos.avaliar_estudo(pop, estudos.ESTUDO_POPULACIONAL, _pontos(pop),
                                                                   replicas=5))
 
+    def test_filtrar_pares_nunca_desfaz_um_par(self):
+        m = _membros(n_pares=40)
+        v = estudos.visoes(m, estudos.ESTUDO_CLINICO)
+        manter = np.arange(40) % 3 == 0
+        casos, controles = estudos.filtrar_pares(v[CASOS_PAREADOS], v[CONTROLES], manter)
+        self.assertEqual(len(casos), int(manter.sum()))
+        self.assertEqual(set(controles["variant_id"]), set(casos["matched_variant_id"]))
+
     def test_pares_ambos_fora_do_abraom_nao_desfazem_pares(self):
         m = _membros(n_pares=120)
         v = estudos.visoes(m, estudos.ESTUDO_CLINICO)
-        casos, controles = estudos._pares_ambos_fora_do_abraom(v[CASOS_PAREADOS], v[CONTROLES])
+        r = estudos.sensibilidades(estudos.ESTUDO_CLINICO, v[CASOS_PAREADOS], v[CONTROLES], _pontos(m), replicas=5,
+                                   seed=1, controles_com_scv_brasileira=None, exposicao=None,
+                                   tolerancia_de_exposicao=0)["pares_ambos_fora_do_abraom"]
         esperados = [i for i in range(120) if not (i % 4 == 0) and not (i % 6 == 0)]
-        self.assertEqual(sorted(casos["variant_id"]), sorted(f"caso{i}" for i in esperados))
-        self.assertEqual(set(controles["variant_id"]), set(casos["matched_variant_id"]))
-        self.assertFalse(casos["present_abraom"].any() or controles["present_abraom"].any())
+        self.assertEqual(r["pares_mantidos"], len(esperados))
+        self.assertEqual(r["pares_retirados"], 120 - len(esperados))
+        self.assertEqual(r["interacao"]["pares"], len(esperados))
+
+    def test_sem_controles_com_scv_brasileira_tira_o_par_inteiro(self):
+        m = _membros(n_pares=50)
+        v = estudos.visoes(m, estudos.ESTUDO_CLINICO)
+        r = estudos.sensibilidades(estudos.ESTUDO_CLINICO, v[CASOS_PAREADOS], v[CONTROLES], _pontos(m), replicas=5,
+                                   seed=1, controles_com_scv_brasileira={"ctrl3", "ctrl7", "caso9"},
+                                   exposicao=None, tolerancia_de_exposicao=0)["sem_controles_com_scv_brasileira"]
+        # So CONTROLES da lista contam: `caso9` nao retira nada.
+        self.assertEqual((r["pares_retirados"], r["pares_mantidos"]), (2, 48))
+
+    def test_exposicao_empatada_e_faltante(self):
+        m = _membros(n_pares=30)
+        v = estudos.visoes(m, estudos.ESTUDO_CLINICO)
+        ids = m["variant_id"].astype(str)
+        exposicao = pd.Series([0.0] * len(ids), index=ids)
+        exposicao.loc[["caso1", "caso2", "ctrl5"]] = [3.0, 1.0, 2.0]
+        args = dict(replicas=5, seed=1, controles_com_scv_brasileira=None, tolerancia_de_exposicao=0)
+        r = estudos.sensibilidades(estudos.ESTUDO_CLINICO, v[CASOS_PAREADOS], v[CONTROLES], _pontos(m),
+                                   exposicao=exposicao, **args)["exposicao_empatada"]
+        self.assertEqual((r["pares_retirados"], r["pares_mantidos"]), (3, 27))
+        with self.assertRaises(estudos.EstudoInvalido):
+            estudos.sensibilidades(estudos.ESTUDO_CLINICO, v[CASOS_PAREADOS], v[CONTROLES], _pontos(m),
+                                   exposicao=exposicao.drop("ctrl4"), **args)
+
+    def test_analise_declarada_sem_entrada_fica_registrada(self):
+        m = _membros()
+        r = estudos.avaliar_estudo(m, estudos.ESTUDO_CLINICO, _pontos(m), replicas=5)["sensibilidades"]
+        self.assertIn("nao_calculada", r["sem_controles_com_scv_brasileira"])
+        self.assertIn("nao_calculada", r["exposicao_empatada"])
+        self.assertIn("nao_necessaria", r["pares_completos_na_cobertura"])
+        pop = m.assign(study_id=estudos.ESTUDO_POPULACIONAL)
+        r_pop = estudos.avaliar_estudo(pop, estudos.ESTUDO_POPULACIONAL, _pontos(pop), replicas=5)["sensibilidades"]
+        self.assertIn("nao_calculada", r_pop["pares_ambos_fora_do_abraom"])
+
+    def test_cobertura_que_desfaz_pares_e_contada_e_tem_sensibilidade(self):
+        m = _membros(n_pares=40)
+        p = _pontos(m)
+        p[BASE] = p[BASE].drop(["ctrl4"])
+        r = estudos.avaliar_estudo(m, estudos.ESTUDO_CLINICO, p, replicas=5)
+        self.assertEqual(r["interacao"]["pares_com_os_dois_membros_cobertos"], 39)
+        self.assertTrue(r["interacao"]["cobertura_desfaz_pares"])
+        self.assertEqual(r["sensibilidades"]["pares_completos_na_cobertura"]["pares_mantidos"], 39)
 
     def test_limiares_so_quando_declarados(self):
         m = _membros()

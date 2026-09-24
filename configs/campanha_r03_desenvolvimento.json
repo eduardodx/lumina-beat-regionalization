@@ -160,6 +160,8 @@
   },
   "g6": {
     "estado": "DECLARADO em 23/09, antes de a_2 e a_3 e de qualquer score dos estudos; margens e bootstrap a fechar antes do G7",
+    "natureza": "protocolo DERIVADO: aplica as regras de avaliacao do Mosaic, mas a cabeca e treinada e calibrada no core_locus do release, com exclusoes proprias (autorizado pelo mantenedor em 15/09); nao descrever como cumprimento integral do protocolo publicado",
+    "manifesto": "g6_manifesto.json, com o sha256 dos bytes num arquivo a parte (g6_manifesto.json.sha256)",
     "composicao_final": {
       "M0": [
         {"cabeca": 11, "arquivo": "comparacao_dev_a1/cabeca_M0_h11.pt"},
@@ -187,8 +189,19 @@
     },
     "bootstrap_da_interacao": {
       "estado": "PROPOSTO (plano, secao 6.3)",
-      "regra": "reamostrar overlap_cluster_id EM CONJUNTO sobre a uniao de casos pareados e controles, com os mesmos sorteios para M0 e MR; reamostragem por par como sensibilidade",
+      "regra": "reamostrar overlap_cluster_id EM CONJUNTO sobre a uniao de casos pareados e controles, com os mesmos sorteios para M0 e MR: preserva a dependencia genomica, NAO os pares",
+      "sensibilidade": "sorteio por par: preserva o pareamento, NAO a dependencia entre pares do mesmo cluster; os dois ICs saem juntos",
       "alinhar_com_o_eduardo": "a unidade: o PDF previa reamostragem por matched set (10.000 replicas); replicas e seed sao detalhe operacional da equipe"
+    },
+    "analises_secundarias": {
+      "estado": "PRE-DECLARADAS (plano 6.4 e achado de 20/09): nenhuma muda o resultado oficial, nenhuma e escolhida depois dos resultados, todas mantem pares inteiros; entrada ausente sai como nao_calculada, com o motivo",
+      "pares_ambos_fora_do_abraom": "clinico: interacao so nos pares com caso E controle fora do ABraOM",
+      "sem_controles_com_scv_brasileira": "clinico: interacao sem os pares cujo controle esta na lista da regra ampla (g2_regra_ampla/broad_brazilian_variant_ids.txt; 44 de 3.116), sem refazer o pareamento",
+      "exposicao_empatada": "interacao so nos pares com diferenca 0 de variantes de treino na janela (n_janela), no snapshot final janela2048 com raio 4.096; raio e tolerancia PROPOSTOS",
+      "pares_completos_na_cobertura": "so se a cobertura desfizer pares: interacao nos pares com os dois membros cobertos pelos dois sistemas",
+      "com_limiar_e_brier": "com os limiares e calibradores congelados; Brier a escrever",
+      "baselines_diagnosticas": "presenca no ABraOM e AF (gnomAD, ABraOM) nos mesmos pares, fora dos sistemas: a escrever, ou retirar ANTES do G6 com o motivo",
+      "sanidade_no_fold0": "AUROC/AUPRC de M0 e MR no teste do core_locus, so depois do G6"
     }
   }
 }

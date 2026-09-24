@@ -780,8 +780,23 @@ negativos: o Platt compensa uma diferença grande entre treino e fold 1, compat�
 diferentes — não medido), limiares de 0,46 a 0,56, épocas de 190 a 520. A conferência de código caiu no import do
 `lumina` sem o shim do tilelang; corrigida (`fc48ab4`).
 
-**Desenho do G6/G7: `docs/g6_g7_desenho.md`.** O consumidor segue o protocolo do Mosaic (PLAN §13.3–13.5), e o
-núcleo está escrito e testado com dados sintéticos (`eval/campanha/estudos.py`, 19 testes). Ponto a não perder: **no
-G7 o Mosaic manda relatar o coorte inteiro** (AUROC/AUPRC), com painéis como diagnóstico e sem macro — não a macro
-do desenvolvimento. As margens (três, exigidas pelo Mosaic §13.5, cada uma com quantidade e regra) e a unidade da
-reamostragem são do Eduardo.
+**Desenho do G6/G7: `docs/g6_g7_desenho.md`.** O consumidor aplica as regras de avaliação do Mosaic (PLAN
+§13.3–13.5), e o núcleo está escrito e testado com dados sintéticos (`eval/campanha/estudos.py`). Ponto a não perder:
+**no G7 o Mosaic manda relatar o coorte inteiro** (AUROC/AUPRC), com painéis como diagnóstico e sem macro — não a
+macro do desenvolvimento. As margens (três, exigidas pelo Mosaic §13.5, cada uma com quantidade e regra) e a unidade
+da reamostragem são do Eduardo.
+
+**Revisão do desenho (23–24/09), aceita inteira e corrigida:**
+- a campanha é **protocolo derivado** (cabeça treinada e calibrada no release): aplicar as regras de avaliação do
+  Mosaic não é cumprir o protocolo publicado;
+- **`janela2048` não exclui os clusters dos estudos**: tira do treino as variantes a até 2.048 bp de um membro; só os
+  clusters da **seleção comum** saem inteiros. O documento prometia isolamento maior que o aplicado;
+- o manifesto declara **separados** o pré-treino do R03 (o que não estiver documentado fica "desconhecido", nunca a
+  data do ClinVar), o treino da cabeça e os dados do adapter; o sha256 do manifesto vai em arquivo à parte;
+- o estudo de precisão é só **cenário** de ordem de grandeza, não a largura dos ICs brasileiros; relevância (Eduardo)
+  e precisão (factibilidade) são perguntas separadas, e a margem não se reduz para facilitar;
+- a interação **subtrai deltas**, não remove confundimento; o bootstrap conjunto **não preserva os pares**, o por par
+  não preserva a dependência entre pares do mesmo cluster — os dois saem juntos;
+- o consumidor agora conta os pares com os dois membros cobertos, e as **análises secundárias pré-declaradas** (fora
+  do ABraOM, 44 controles com SCV brasileira, exposição empatada, pares completos) estão implementadas; as que faltam
+  (Brier, baselines de AF, fold 0) estão declaradas, para escrever ou retirar **antes** do G6.

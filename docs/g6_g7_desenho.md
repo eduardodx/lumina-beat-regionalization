@@ -1,16 +1,21 @@
 # G6 e G7 — congelamento e avaliação única nos estudos brasileiros
 
-Estado: **23/09**, escrito enquanto a₂ e a₃ treinam. Nenhum score dos estudos foi calculado. Este documento separa
-o que o protocolo do Mosaic **fixa**, o que já foi **declarado** por nós, o que está **proposto** (confirmar no G6)
-e o que está **aberto** (decisão do Eduardo, antes do G7).
+Estado: **23/09**, revisado no mesmo dia. Escrito enquanto a₂ e a₃ treinam; nenhum score dos estudos foi calculado.
+Separa o que as regras de avaliação do Mosaic **fixam**, o que já foi **declarado** por nós, o que está
+**proposto** (confirmar no G6) e o que está **aberto** (decisão do Eduardo, antes do G7).
+
+**Esta campanha é um protocolo derivado.** O consumidor aplica as regras de **avaliação** do Mosaic, mas a cabeça é
+treinada e calibrada no `core_locus` do release, com exclusões próprias (autorizado pelo mantenedor em 15/09) — o
+Mosaic publicado não prevê treino, seleção nem calibração no release. Descrever como "protocolo derivado", nunca como
+cumprimento integral do protocolo publicado.
 
 Fontes: `lumina-mosaic` commit `814e7f0` (`specs/PLAN.md` §13.3–13.5, `src/mosaic/protocol.py:brazil_protocol_section`,
-`src/mosaic/comparator_eval/`); plano da campanha (`docs/proposta_mosaic_regionalizacao_desenvolvimento.md` §6–8);
-declaração `configs/campanha_r03_desenvolvimento.json` (seção `g6`).
+`src/mosaic/comparator_eval/`); plano da campanha (`docs/proposta_mosaic_regionalizacao_desenvolvimento.md` §4.2,
+§6–8); declaração `configs/campanha_r03_desenvolvimento.json` (seção `g6`).
 
 ## 1. Ordem
 
-1. **a₂, a₃** treinados, congelados pela regra (menor `focal_alt`) → caches de desenvolvimento MR_a₂, MR_a₃ →
+1. **a₂, a₃** treinados e congelados pela regra (menor `focal_alt`) → caches de desenvolvimento MR_a₂, MR_a₃ →
    comparadores → conferência das cabeças.
 2. **G6**: manifesto congelado (seção 5). Depois disso, nada é ajustado.
 3. **Extração dos estudos** para M0, MR_a₁, MR_a₂, MR_a₃ (~9 mil variantes; ~10 min por sistema), pelo mesmo
@@ -20,28 +25,31 @@ declaração `configs/campanha_r03_desenvolvimento.json` (seção `g6`).
 Reexecutar exatamente os sistemas congelados para conferir reprodução não invalida o estudo. Mudar qualquer coisa
 por causa do resultado transforma a rodada seguinte em exploratória.
 
-## 2. O que o protocolo do Mosaic fixa (implementado em `eval/campanha/estudos.py`)
+## 2. Regras de avaliação do Mosaic, como o consumidor as aplica (`eval/campanha/estudos.py`)
 
 | Regra | Como está no consumidor |
 |---|---|
 | Estudos separados, nunca unidos | `avaliar_estudo` roda um estudo por vez |
 | Coorte completo = `case` + `unmatched_case` → Δ_BR_full | `visoes()`, como o `brazil_views` do Mosaic |
 | Casos pareados = `case` com controle bidirecional → Δ_BR_matched; controles → Δ_control | o pareamento é **reconferido**; quebrado, o consumidor recusa |
-| Interação = Δ_BR_matched − Δ_control, sem `unmatched_case` | `interacao()`; cada delta na interseção de cobertura do próprio grupo |
-| AUROC e AUPRC só com as duas classes | AUPRC = precisão média em degraus (a `average_precision_score` do Mosaic; teste confere a definição) |
+| Interação = Δ_BR_matched − Δ_control, sem `unmatched_case` | `interacao()`; cada delta na interseção de cobertura do próprio grupo, e a contagem de pares com os dois membros cobertos pelos dois sistemas |
+| AUROC e AUPRC só com as duas classes | AUPRC = precisão média em degraus (a `average_precision_score` do Mosaic; um teste confere a definição) |
 | n_P, n_B e cobertura sempre; deltas na **interseção** de cobertura; sem imputação | `comparar()`: cobertura de cada sistema no coorte e métricas na interseção |
-| Relatório do coorte inteiro obrigatório; painéis como diagnóstico; **sem macro brasileira**; plof e synonymous como guarda; sem piso 50/50 | coorte inteiro + por painel no coorte completo (AUROC/AUPRC só em missense/splice/noncoding) |
+| Relatório do coorte inteiro obrigatório; painéis como diagnóstico; **sem macro brasileira**; plof e synonymous como guarda; sem piso 50/50 | coorte inteiro + por painel no coorte completo (AUROC/AUPRC só em missense/splice/noncoding) + o coorte sem cada painel |
 | Métricas com limiar só com limiar externo congelado, com proveniência | sem limiar declarado, são omitidas |
 | Bootstrap pareado por `overlap_cluster_id`, 1.000 réplicas, seed 20260901, percentis 2,5/97,5 | os **mesmos sorteios** para os dois sistemas (teste: transformação monótona dá delta 0 em toda réplica) |
 | No estudo clínico, relatar o subconjunto `present_abraom` | coorte completo com `present_abraom = true` |
 | Taxa de pareamento e composição antes e depois | `pareamento` e `composicao` por coorte |
 
-**Atenção: a métrica principal do G7 não é a do desenvolvimento.** No desenvolvimento, o critério declarado foi a
-macro de missense/splice/noncoding. No G7 o protocolo do Mosaic manda relatar o **coorte inteiro** (AUROC e AUPRC)
-e trata os painéis como diagnóstico, sem macro obrigatória. Na comparação exploratória, essa métrica de coorte
-inteiro (a "AUROC geral") foi a que teve IC todo abaixo de zero (−0,0025 [−0,0051; −0,0006]). Isso não é portão: o
-desenvolvimento não mede a pergunta regional, e a interação desconta o que for comum a casos e controles. Mas é o
-dado de desenvolvimento mais próximo da escala do G7, e pesa na escolha das margens (seção 4).
+**A métrica principal do G7 não é a do desenvolvimento.** No desenvolvimento, o critério declarado foi a macro de
+missense/splice/noncoding. No G7 o Mosaic manda relatar o **coorte inteiro** (AUROC e AUPRC) e trata os painéis como
+diagnóstico, sem macro obrigatória. Na comparação exploratória, a métrica de coorte inteiro (a "AUROC geral") teve
+IC todo abaixo de zero (−0,0025 [−0,0051; −0,0006]). Não é portão — o desenvolvimento não mede a pergunta regional —
+e pesa na discussão das margens (seção 4).
+
+**A interação subtrai os deltas observados.** Não remove, por si, confundimento nem diferenças de composição entre
+casos e controles (por exemplo, a presença no ABraOM, 4,6× maior nos casos clínicos). Por isso ela sai sempre com os
+valores absolutos de cada grupo e com as sensibilidades da seção 4.
 
 ## 3. Declarado por nós (seção `g6` da declaração, 23/09)
 
@@ -56,57 +64,102 @@ dado de desenvolvimento mais próximo da escala do G7, e pesa na escolha das mar
 
 **Proposto — implementado e testado, a confirmar:**
 
-| Item | Proposta | Por quê |
+| Item | Proposta | Pressuposto e limite |
 |---|---|---|
-| Reamostragem da interação | clusters sorteados **em conjunto** sobre casos pareados + controles, mesmos sorteios para M0 e MR | o Mosaic reamostra cada coorte separadamente e não define a da interação; um cluster com caso e controle entra inteiro |
-| Sensibilidade da interação | reamostragem por **par** | a unidade do PDF (matched set); ignora a dependência entre pares do mesmo cluster |
-| Sensibilidade do ABraOM | interação só nos pares com caso **e** controle fora do ABraOM, sem desfazer pares | casos 4,6× mais presentes no ABraOM que os controles (achado de 20/09); não é teste decisivo |
+| IC da interação, principal | clusters sorteados **em conjunto** sobre casos pareados + controles | preserva a dependência genômica (cluster inteiro); **não** preserva os pares — caso e controle em clusters diferentes saem em sorteios independentes |
+| IC da interação, sensibilidade | sorteio por **par** | preserva o pareamento; **não** preserva a dependência entre pares do mesmo cluster |
 | Regra do limiar do ensemble | a do `calibrate_threshold` do Mosaic: maior MCC; empate → maior especificidade → maior limiar | alinhar com o protocolo; a regra das cabeças individuais (primeiro máximo) era nossa |
+
+Os dois ICs da interação saem juntos, como métodos de pressupostos diferentes. Uma unidade que preservasse as duas
+coisas seria o componente conexo do grafo cluster–par; a viabilidade depende do tamanho desses componentes, que se
+mede só com o membership, sem score — fica como opção para a decisão da unidade, não implementada.
+
+**Análises secundárias pré-declaradas** (plano §6.4 e achado de 20/09). Nenhuma muda o resultado oficial, nenhuma é
+escolhida depois dos resultados, todas mantêm pares inteiros; entrada ausente sai como `nao_calculada`, com o motivo:
+
+| Análise | Definição | Entrada (hash no G6) | Estado |
+|---|---|---|---|
+| Pares fora do ABraOM | interação só nos pares com caso **e** controle fora do ABraOM (clínico) | membership | implementada |
+| Controles com SCV brasileira | interação sem os pares cujo controle tem SCV de instituição da lista (44 de 3.116 no clínico), sem refazer o pareamento | `g2_regra_ampla/broad_brazilian_variant_ids.txt` | implementada |
+| Exposição de locus | interação só nos pares com exposição empatada (diferença 0) de variantes de treino na janela, no snapshot final (`janela2048`) com raio 4.096 | `exposicao_por_membro.parquet` desse snapshot e raio (gerar se não existir) | implementada; raio e tolerância PROPOSTOS |
+| Pares completos na cobertura | só se a cobertura desfizer pares: interação nos pares com os dois membros cobertos | scores | implementada |
+| Métricas com limiar e Brier | com os limiares e calibradores congelados | manifesto | métricas com limiar implementadas; Brier a escrever |
+| Baselines diagnósticas | presença no ABraOM e AF (gnomAD, ABraOM) pontuadas nos mesmos pares, fora dos sistemas | colunas de AF a localizar | a escrever, ou retirar **antes** do G6 com o motivo |
+| Sanidade no fold 0 | AUROC/AUPRC de M0 e MR no teste do `core_locus`, só depois do G6 | extração do fold 0 depois do congelamento | a escrever |
 
 **Aberto — decisão científica do Eduardo, antes de qualquer score dos estudos (Mosaic §13.5):**
 
-1. **Margem mínima de melhoria no coorte BR.** Qual delta (Δ_BR_full ou Δ_BR_matched), qual métrica (AUROC,
-   AUPRC ou as duas), e qual regra (estimativa ≥ margem, ou limite inferior do IC ≥ margem).
+1. **Margem mínima de melhoria no coorte BR.** Qual delta (Δ_BR_full ou Δ_BR_matched), qual métrica (AUROC, AUPRC ou
+   as duas) e qual regra (estimativa ≥ margem, ou limite inferior do IC ≥ margem).
 2. **Margem máxima de regressão no controle** (Δ_control), com a mesma especificação.
 3. **Painéis em que regressão é inaceitável.**
 4. **Se a interação tem critério próprio** ou é só relatada com os absolutos.
 5. **"Benefício não explicado por um único painel"** (condição 3 do Mosaic): o consumidor já mede o delta do coorte
-   **sem** cada painel (`sem_painel:*`); falta a regra.
-6. **Unidade da reamostragem** (cluster em conjunto × par, como o PDF previa). Réplicas e seed são detalhe da equipe.
+   sem cada painel (`sem_painel:*`); falta a regra.
+6. **Unidade da reamostragem** principal. Réplicas e seed são detalhe da equipe.
 
-**Para decidir as margens sem olhar o estudo (plano §6.5):** estimar a precisão esperada dos deltas com dados de
-**desenvolvimento**, reamostrando as predições de M0 e MR do conjunto de seleção com a composição de cada coorte
-brasileiro (rótulo × painel; o clínico é 90% P, o populacional 95% B). Isso dá a largura provável dos ICs e mostra
-que margens são detectáveis, sem consultar nenhum candidato no estudo.
+Métrica, margem e regra se fixam juntas e antes; não se escolhe depois a combinação mais favorável.
+
+**Duas perguntas separadas para as margens.** (a) Qual melhora seria **cientificamente relevante**? É a decisão do
+Eduardo, e não se reduz a margem para facilitar um resultado positivo. (b) Com os dados disponíveis, que melhora se
+consegue **estimar com precisão**? Para (b), uma análise **limitada de cenários** com dados de desenvolvimento
+(plano §6.5): reamostrar as predições de M0 e MR do conjunto de seleção com a proporção de rótulos e painéis de cada
+coorte brasileiro. Ela **não** dá a largura dos ICs brasileiros: a incerteza real depende também do número e da
+concentração dos clusters, da dependência entre casos e controles, da distribuição dos scores dentro dos painéis e
+da correlação entre M0 e MR no estudo; e células escassas no desenvolvimento (plof/B tem 1 variante) não ganham
+diversidade por repetição. Serve como ordem de grandeza, e não deve virar outra frente longa antes de avançar.
 
 ## 5. O manifesto do G6
 
-Um arquivo `g6_manifesto.json` com o próprio sha256, que o consumidor exige. Conteúdo:
+Arquivo `g6_manifesto.json` e, **à parte**, `g6_manifesto.json.sha256` com o sha256 dos bytes do manifesto (um
+arquivo não contém o próprio hash). O consumidor recusa um manifesto cujo sha256 não confira.
 
-| Grupo | Conteúdo |
+**Os campos do `required_consumer_manifest`, adaptados ao nosso desenho.** O Mosaic supõe um sistema base treinado
+num snapshot global; aqui há três fontes de treino, que o manifesto declara separadas:
+
+| Campo do Mosaic | No nosso desenho |
 |---|---|
-| Os 7 campos do `required_consumer_manifest` | `base_checkpoint_id` (R03 `best_checkpoint.pt`, passo 71.000, `f2983560…`); `regionalized_checkpoint_id` (R03 + a₁/a₂/a₃ por sha256); `base_training_dataset_id` (papel `train` de `g2_final_janela2048/core_head_snapshot.parquet`, derivado do `core_locus` v1 com as exclusões da §4.2); `base_training_dataset_hash` (sha256 do snapshot, o registrado na decisão do G5); `base_training_cutoff` (ClinVar 2026-06, o do release); `abraom_snapshot_hash` (`3cd33784…`); `regionalization_method` (rsLoRA r=8, α=16, 99 módulos, MLM em janelas ~60% gnomAD v4.1 joint / 40% ABraOM, 3.000 passos, 5e-6, checkpoint pelo `focal_alt`; planos `c76d08d4…`/`034eca34…`) |
-| Sistemas | cada componente: arquivo e sha256 da cabeça (da conferência), adapter e sha256, cache de desenvolvimento e sha256 da identidade |
-| Conferências | as três conferências de cabeças passaram; as cabeças do M0 idênticas nos três comparadores; os três adapters com a mesma receita, o mesmo recorte de validação e os mesmos planos |
-| Limiares | do ensemble, por sistema, com a regra e a proveniência (fold 1, n_P, n_B) |
-| Margens e regra de decisão | as da seção 4, já decididas; **sem elas o manifesto não congela** |
-| Bootstrap | unidade, réplicas, seed, regra da interação e sensibilidades |
-| Código | sha256 do consumidor (`eval/campanha/estudos.py`, `metricas.py`, `cabeca.py`) e do script de pontuação |
-| Sobreposições declaradas | gnomAD como outra fonte de regionalização; alelos dos estudos fora do pool do adapter; membros, clusters e regra ampla brasileira fora do treino da cabeça; `br_population_observed` sobreposto ao ABraOM por construção |
+| `base_checkpoint_id` | R03 `best_checkpoint.pt` (LUM-20260719-001, run R03, passo 71.000, sha256 `f2983560…`) + as três cabeças do M0 (sha256 da conferência). O "sistema base" é R03 congelado + cabeça |
+| `regionalized_checkpoint_id` | o mesmo R03 + adapters a₁/a₂/a₃ (sha256) + as três cabeças MR (sha256) |
+| `base_training_dataset_id`, `_hash`, `_cutoff` | declarados em **duas partes**: (a) **pré-treino do R03** — a proveniência disponível; corpus e cutoff que não estiverem documentados ficam **"desconhecido"**, nunca preenchidos com a data do ClinVar; (b) **treino supervisionado da cabeça** — papel `train` de `g2_final_janela2048/core_head_snapshot.parquet` (sha256 da decisão do G5 e hash de conteúdo do G2), rótulos do release v1, cujo cutoff é o do ClinVar do release (2026-06) — cutoff **dos rótulos da cabeça**, não do pré-treino |
+| `abraom_snapshot_hash` | `3cd33784…` (SABE1171, conferido em 20/09) |
+| `regionalization_method` | rsLoRA r=8, α=16, 99 módulos, MLM em janelas ~60% gnomAD v4.1 joint / 40% ABraOM, 3.000 passos, 5e-6, checkpoint pelo `focal_alt`; **dados do adapter à parte**: pool ABraOM `40bd0f79…`, pool global `ce749a6d…`, plano `c99e5dae…`, separação por loco `c76d08d4…`/`034eca34…` |
+
+**Exclusões, como de fato aplicadas** (política `janela2048`; o manifesto não pode prometer isolamento maior):
+
+| O quê | Onde | Garantia |
+|---|---|---|
+| Membros dos dois estudos (casos, casos sem par, controles) | treino, validação e teste da cabeça | nenhum membro em papel algum |
+| Variantes com SCV de instituição brasileira (regra ampla, 5.995) | treino, validação e teste | nenhuma |
+| Não `sequence_eligible`; chr8 | os três papéis | nenhuma |
+| Clusters da **seleção comum** (156) | treino, cluster **inteiro** | nenhum locus da seleção no treino |
+| Variantes de treino a até **2.048 bp** de um membro | treino | nenhuma variante de treino **dentro** da janela de leitura de um membro. **Não** garante: ausência de sobreposição de janelas (resídua em ~25% dos membros) nem remoção do **cluster** do membro — a exclusão por cluster dos estudos foi abandonada por inviável (tirava 84,5% dos patogênicos do treino) |
+| Alelos dos membros | pool e janelas do adapter | nenhum alelo dos estudos no treino populacional |
+
+Exposição residual medida no snapshot final (raio 4.096, benignas do clínico): 0,4832 de "caso maior" entre os
+pares diferentes, média +1,55, mediana absoluta 0 — descritiva; efeito sobre os modelos desconhecido.
+
+**Resto do manifesto:** cada componente (arquivo e sha256 da cabeça, adapter, cache de desenvolvimento e sha256 da
+identidade); as três conferências de cabeças; M0 idêntico nos três comparadores; os três adapters com a mesma
+receita, o mesmo recorte de validação e os mesmos planos; os limiares do ensemble com regra e proveniência; margens
+e regra de decisão (**sem elas o manifesto não congela**); bootstrap (unidade, réplicas, seed, regra da interação e
+sensibilidade); as análises secundárias e as entradas delas, com hash; o sha256 do código do consumidor e do script
+de pontuação; e as sobreposições declaradas (gnomAD como outra fonte de regionalização; `br_population_observed`
+sobreposto ao ABraOM por construção).
 
 ## 6. Extração dos estudos
 
 As variantes dos estudos passam pelo **mesmo** caminho numérico do desenvolvimento: as funções do extrator
 (`montar_sistema`, `identidade`, `rodar_extracao`), sem mudar nenhum dos 12 arquivos da identidade. O consumidor
 confere que a identidade de cada cache dos estudos é igual à do cache de desenvolvimento do mesmo sistema em tudo
-menos a tabela. Tabela: uma linha por variante (quem está nos dois estudos é extraído uma vez; os rótulos e o
-cluster vêm do release e são os mesmos). O extrator recusa membros dos estudos por construção: a extração dos estudos
-é um script próprio, que exige o manifesto do G6.
+menos a tabela. Tabela: uma linha por variante (quem está nos dois estudos é extraído uma vez; rótulo e cluster vêm
+do release e são os mesmos). O extrator de desenvolvimento recusa membros dos estudos por construção: a extração dos
+estudos é um script próprio, que exige o manifesto do G6.
 
 ## 7. O que o resultado poderá afirmar (plano §7)
 
 - Um ganho sustenta transferência diferencial no recorte de **participação** brasileira do Mosaic, com um adapter
-  populacional **misto** — não que o componente brasileiro é a causa (isso pede o MG).
+  populacional **misto**, num protocolo derivado — não que o componente brasileiro é a causa (isso pede o MG).
 - Não sustenta resultado em só-BR, em pacientes ou na população brasileira; o estudo populacional não é evidência
   independente (sobreposto ao ABraOM).
 - A interação vem sempre com os absolutos: um positivo pode vir de o controle piorar mais.
@@ -115,8 +168,8 @@ cluster vêm do release e são os mesmos). O extrator recusa membros dos estudos
 
 | Peça | Estado |
 |---|---|
-| núcleo do consumidor (`eval/campanha/estudos.py`) | **escrito e testado com dados sintéticos** (`tests/test_campanha_estudos.py`, 19 testes); ~5 min por estudo com 1.000 réplicas |
-| script de extração dos estudos | a escrever (depende só do extrator) |
-| construtor do manifesto do G6 | a escrever (precisa de a₂/a₃ para o teste real; testes sintéticos antes) |
+| núcleo do consumidor (`eval/campanha/estudos.py`) | escrito e testado com dados **sintéticos** (`tests/test_campanha_estudos.py`); ~5 a 8 min por estudo com 1.000 réplicas. Ainda não validado ponta a ponta nos artefatos da campanha |
+| script de extração dos estudos | a escrever |
+| construtor do manifesto do G6 (inclui os limiares do ensemble) | a escrever; testes sintéticos antes de a₂/a₃ terminarem |
 | script de pontuação e relatório do G7 | a escrever |
-| análises adicionais pré-declaradas do plano §6.4 (controles com SCV brasileira, baselines de AF, exposição de locus, sanidade no fold 0 depois do congelamento) | a decidir se entram antes do G6 ou ficam declaradas como posteriores |
+| Brier, baselines diagnósticas, sanidade no fold 0 | a escrever, ou retirar antes do G6 com o motivo |
