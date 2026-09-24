@@ -810,6 +810,14 @@ declarado; estados do `adapter.pt` com estado não vazio e chaves declaradas —
 têm hashes diferentes, e o script lista os campos que diferem sem atribuir a eles a diferença inteira. As três
 corridas (inclusive a a₁) são reconferidas antes do registro.
 
+**Reconferência e registro (24/09): as três passaram.** Recorte re-sorteado do plano declarado =
+`0891cf615c3d74613a37f907d6ef3876f4448bb2ed2fe75c412094f3589d3be0`, igual ao detalhe das três corridas; estados do
+`adapter.pt` iguais aos do `adapter_melhor.pt` nas três (198 tensores = 99 módulos × 2 matrizes), com os arquivos
+diferindo em `criado_em_utc` e `identidades`; conferência de código e ambiente contra o cache do M0 passou.
+Registrados em `adapters_congelados`: a₂ `8850e19c…`, a₃ `f2e547e7…`; a entrada da a₁ (`6327a9fa…`) ganhou o recorte
+e a conferência, sem mudar o sha. Próximo: extrações MR_a₂ e MR_a₃, comparadores e conferência das cabeças (com o M0
+contra o do comparador da a₁).
+
 **Desenho do G6/G7: `docs/g6_g7_desenho.md`.** O consumidor aplica as regras de avaliação do Mosaic (PLAN
 §13.3–13.5), e o núcleo está escrito e testado com dados sintéticos (`eval/campanha/estudos.py`). Ponto a não perder:
 **no G7 o Mosaic manda relatar o coorte inteiro** (AUROC/AUPRC), com painéis como diagnóstico e sem macro — não a

@@ -114,12 +114,14 @@
       "plano_treino_sha256": "c76d08d4747f81761776994da2799fc11ae33acb9f4deb78c606eace6e869c9c",
       "plano_validacao_sha256": "034eca340e3921a862498e2ff030df325d6607151deae4f373618781897cee7f",
       "checkpoint_sha256": "f2983560f8f965d234df4f4d15e81337b9547a578d4d6b397ab640207d6a2f44",
-      "janelas_de_treino": 44645
+      "janelas_de_treino": 44645,
+      "recorte_da_validacao_sha256": "0891cf615c3d74613a37f907d6ef3876f4448bb2ed2fe75c412094f3589d3be0",
+      "recorte_da_validacao_origem": "medido em 24/09 pelo congelador: re-sorteado do plano de validacao declarado (seed_da_validacao, limite_validacao) e igual ao detalhe da validacao das tres corridas; o congelador continua re-sorteando, este valor e registro"
     },
     "checkpoint": "adapter_melhor.pt de cada semente: o de menor focal_alt na validacao do adapter (criterio primario declarado)",
     "se_nenhum_checkpoint_supera_a_base": "nao ha MR com esta receita: parar e rediscutir, sem trocar de receita olhando metrica clinica",
     "proibido": "escolher adapter, receita ou checkpoint por metrica clinica ou por diagnostico do MLM",
-    "estado": "receita candidata de desenvolvimento; a corrida a_1 (g4_corrida2) e a primeira execucao dela",
+    "estado": "receita de desenvolvimento executada nas TRES sementes (a_1 em g4_corrida2, a_2 em g4_a2, a_3 em g4_a3); as tres congeladas pela regra e reconferidas em 24/09 por scripts/congelar_adapter.py",
     "demais_sementes": "a_2 e a_3 com a MESMA receita e o MESMO orcamento da a_1 (mesmos planos, passos, exemplos por passo, taxa, cadencia e validacao); muda so --seed. Mantida em 23/09 depois da comparacao exploratoria M0 x MR com a_1, que nao tinha condicao de parada e nao altera a receita"
   },
   "intervalos": {
@@ -140,7 +142,54 @@
       "supera_a_base": true,
       "congelado_em": "2026-09-23",
       "pela_regra": "adapter_do_mr.checkpoint: menor focal_alt na validacao do adapter; nenhuma metrica clinica consultada",
-      "nota": "adapter.pt da mesma corrida tem outro sha256; os estados ainda NAO foram comparados. Pendente: reconferir esta corrida com scripts/congelar_adapter.py (receita, planos, R03, recorte re-sorteado, melhor recalculado e estados), como a_2 e a_3. Nao bloqueia: a regra e o extrator apontam para adapter_melhor.pt"
+      "recorte_da_validacao_sha256": "0891cf615c3d74613a37f907d6ef3876f4448bb2ed2fe75c412094f3589d3be0",
+      "reconferido_em": "2026-09-24",
+      "conferido": "receita e orcamento no relatorio e no checkpoint; planos, R03 e recorte contra a referencia declarada; melhor recalculado do historico",
+      "adapter_pt": {
+        "estados_do_adapter": "iguais (198 tensores)",
+        "sha256_dos_arquivos": "diferentes",
+        "campos_que_diferem_fora_do_estado": ["criado_em_utc", "identidades"]
+      }
+    },
+    "20260922": {
+      "arquivo": "~/artifacts/redesenho/g4_a2/adapter_melhor.pt",
+      "sha256": "8850e19ce019f6a23ed478c6562c4cdebb6198168ad442c1e5329bbd3b7544bf",
+      "passo": 2999,
+      "focal_alt_validacao": {
+        "base": 1.7331,
+        "adapter": 1.6044,
+        "delta": -0.1287
+      },
+      "supera_a_base": true,
+      "pela_regra": "adapter_do_mr.checkpoint: menor focal_alt na validacao do adapter; nenhuma metrica clinica consultada",
+      "recorte_da_validacao_sha256": "0891cf615c3d74613a37f907d6ef3876f4448bb2ed2fe75c412094f3589d3be0",
+      "conferido": "receita e orcamento no relatorio e no checkpoint; planos, R03 e recorte contra a referencia declarada; melhor recalculado do historico",
+      "adapter_pt": {
+        "estados_do_adapter": "iguais (198 tensores)",
+        "sha256_dos_arquivos": "diferentes",
+        "campos_que_diferem_fora_do_estado": ["criado_em_utc", "identidades"]
+      },
+      "congelado_em": "2026-09-24"
+    },
+    "20260923": {
+      "arquivo": "~/artifacts/redesenho/g4_a3/adapter_melhor.pt",
+      "sha256": "f2e547e758ed2cee3f0afd7843fcc40bd085d99216482d2825ddb82076c92ec0",
+      "passo": 2999,
+      "focal_alt_validacao": {
+        "base": 1.7331,
+        "adapter": 1.5978,
+        "delta": -0.1353
+      },
+      "supera_a_base": true,
+      "pela_regra": "adapter_do_mr.checkpoint: menor focal_alt na validacao do adapter; nenhuma metrica clinica consultada",
+      "recorte_da_validacao_sha256": "0891cf615c3d74613a37f907d6ef3876f4448bb2ed2fe75c412094f3589d3be0",
+      "conferido": "receita e orcamento no relatorio e no checkpoint; planos, R03 e recorte contra a referencia declarada; melhor recalculado do historico",
+      "adapter_pt": {
+        "estados_do_adapter": "iguais (198 tensores)",
+        "sha256_dos_arquivos": "diferentes",
+        "campos_que_diferem_fora_do_estado": ["criado_em_utc", "identidades"]
+      },
+      "congelado_em": "2026-09-24"
     }
   },
   "cabeca": {

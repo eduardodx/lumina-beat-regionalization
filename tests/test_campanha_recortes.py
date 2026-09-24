@@ -46,11 +46,18 @@ class RecortesTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 recortes.carregar_campanha(caminho)
 
-    def test_adapter_a1_congelado_esta_declarado(self):
-        registro = recortes.adapter_congelado(recortes.carregar_campanha(DECLARACAO), 20260921)
-        self.assertTrue(registro["sha256"].startswith("6327a9fa"))
+    def test_os_tres_adapters_congelados_estao_declarados(self):
+        campanha = recortes.carregar_campanha(DECLARACAO)
+        prefixos = {20260921: "6327a9fa", 20260922: "8850e19c", 20260923: "f2e547e7"}
+        recorte = campanha["adapter_do_mr"]["referencia"]["recorte_da_validacao_sha256"]
+        for semente, prefixo in prefixos.items():
+            registro = recortes.adapter_congelado(campanha, semente)
+            self.assertTrue(registro["sha256"].startswith(prefixo), semente)
+            self.assertEqual(len(registro["sha256"]), 64, semente)
+            self.assertTrue(registro["supera_a_base"], semente)
+            self.assertEqual(registro["recorte_da_validacao_sha256"], recorte, "mesmo recorte nas tres")
         with self.assertRaises(ValueError):
-            recortes.adapter_congelado(recortes.carregar_campanha(DECLARACAO), 20260922)
+            recortes.adapter_congelado(campanha, 20260924)
 
     def test_tabela_tem_so_os_papeis_de_desenvolvimento(self):
         tabela = recortes.tabela_de_extracao(*_entradas())
