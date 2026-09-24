@@ -14,7 +14,10 @@ o comparador mediu. Para cada `cabeca_{M0,MR}_h{semente}.pt` da pasta da compara
     4. receita igual a do codigo atual;
     5. recarregada, a cabeca reproduz as probabilidades de `predicoes_selecao.parquet` (tolerancia 1e-6; a
        diferenca maxima sai impressa);
-    6. a media das tres probabilidades reproduz as metricas do ensemble no relatorio.
+    6. a media das tres probabilidades reproduz as metricas do ensemble no relatorio;
+    7. com `--m0-de-referencia <pasta do comparador da a_1>`: as cabecas do M0 sao IDENTICAS as de la (pesos,
+       padronizacao, Platt, limiar, epoca). O M0 nao depende do adapter; a composicao final usa as cabecas do M0 do
+       comparador da a_1, e os comparadores da a_2 e da a_3 tem de reproduzi-las.
 
 Nao treina nada e nao le o fold 0 nem os estudos. Grava `conferencia_das_cabecas.json`, com o sha256 de cada
 arquivo, que o manifesto do G6 usa.
@@ -96,6 +99,24 @@ def conferir_ensemble(probabilidades: dict[str, list[np.ndarray]], y: np.ndarray
     return saida, problemas
 
 
+def diferencas_de_cabeca(a: dict[str, Any], b: dict[str, Any]) -> list[str]:
+    """O que difere entre duas cabecas salvas: pesos (bit a bit), padronizacao, Platt, limiar e epoca."""
+    import torch
+
+    problemas = []
+    if set(a["estado"]) != set(b["estado"]):
+        problemas.append("conjuntos de pesos diferentes")
+    elif any(not torch.equal(a["estado"][k], b["estado"][k]) for k in a["estado"]):
+        problemas.append("pesos diferentes")
+    for campo in ("media", "desvio"):
+        if not np.array_equal(np.asarray(a[campo]), np.asarray(b[campo])):
+            problemas.append(f"{campo} diferente")
+    for campo in ("platt", "limiar_de_mcc", "epoca", "semente", "extracao", "politica"):
+        if a.get(campo) != b.get(campo):
+            problemas.append(f"{campo}: {a.get(campo)} != {b.get(campo)}")
+    return problemas
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--comparacao", required=True, type=Path, help="--out-dir do comparador")
@@ -103,6 +124,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cache-mr", required=True, type=Path)
     parser.add_argument("--decisao-g5", required=True, type=Path)
     parser.add_argument("--campanha", type=Path, default=Path("configs/campanha_r03_desenvolvimento.json"))
+    parser.add_argument("--m0-de-referencia", type=Path,
+                        help="pasta de outro comparador (o da a_1): as cabecas do M0 tem de ser identicas")
     parser.add_argument("--out", type=Path, help="padrao: <comparacao>/conferencia_das_cabecas.json")
     args = parser.parse_args(argv)
 
@@ -162,10 +185,24 @@ def main(argv: list[str] | None = None) -> int:
         ensemble, problemas_do_ensemble = conferir_ensemble(probabilidades, y, paineis, relatorio)
     problemas += problemas_do_ensemble
 
+    m0_de_referencia = None
+    if args.m0_de_referencia:
+        referencia = args.m0_de_referencia.expanduser()
+        m0_de_referencia = {"pasta": str(referencia), "cabecas": {}}
+        for semente in relatorio["sementes_da_cabeca"]:
+            nome = f"cabeca_M0_h{semente}.pt"
+            if not (referencia / nome).exists() or not (pasta / nome).exists():
+                problemas.append(f"{nome}: ausente aqui ou na referencia")
+                continue
+            diferencas = diferencas_de_cabeca(carregar_cabeca_salva(pasta / nome),
+                                              carregar_cabeca_salva(referencia / nome))
+            m0_de_referencia["cabecas"][nome] = diferencas or "identica"
+            problemas += [f"{nome} difere da referencia: {d}" for d in diferencas]
+
     saida = {"formato": "conferencia_das_cabecas_v1", "comparacao": str(pasta), "passou": not problemas,
              "extracao": relatorio["extracao"], "politica": relatorio["politica"],
              "semente_do_adapter": relatorio["semente_do_adapter"], "identidades_esperadas": esperado,
-             "cabecas": linhas, "ensemble": ensemble, "problemas": problemas,
+             "cabecas": linhas, "ensemble": ensemble, "m0_de_referencia": m0_de_referencia, "problemas": problemas,
              "tolerancias": {"probabilidade": TOLERANCIA_DA_PROBABILIDADE, "metrica": TOLERANCIA_DA_METRICA}}
     destino = (args.out or pasta / "conferencia_das_cabecas.json").expanduser()
     destino.write_text(json.dumps(saida, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -184,6 +221,10 @@ def main(argv: list[str] | None = None) -> int:
     for sistema, valores in ensemble.items():
         print(f"  ensemble {sistema}: " + " | ".join(
             f"{k} {_n(v['recalculado'])} (relatorio {_n(v['relatorio'])})" for k, v in valores.items()))
+    if m0_de_referencia is not None:
+        iguais = sum(1 for v in m0_de_referencia["cabecas"].values() if v == "identica")
+        print(f"  M0 contra {m0_de_referencia['pasta']}: {iguais} de {len(relatorio['sementes_da_cabeca'])} "
+              f"cabecas identicas")
     if problemas:
         print(f"\nFALHOU: {len(problemas)} problema(s)")
         for problema in problemas:

@@ -183,6 +183,20 @@ def test_g5_e_comparador_de_ponta_a_ponta_num_cache_sintetico():
         torch.save(guardada, pasta / "comparacao" / "cabeca_MR_h11.pt")
         assert conferencia.main(args_conferencia) == 0
 
+        # Um segundo comparador (o da a_2, no notebook) tem de reproduzir as cabecas do M0 bit a bit.
+        assert comparador.main(["--cache-m0", str(pasta / "M0"), "--cache-mr", str(pasta / "MR"),
+                                "--decisao-g5", str(pasta / "g5" / "g5_decisao.json"), *comum,
+                                "--replicas", "20", "--out-dir", str(pasta / "comparacao_b")]) == 0
+        args_b = [*args_conferencia[:1], str(pasta / "comparacao_b"), *args_conferencia[2:],
+                  "--m0-de-referencia", str(pasta / "comparacao")]
+        assert conferencia.main(args_b) == 0
+        resultado_b = json.loads((pasta / "comparacao_b" / "conferencia_das_cabecas.json").read_text(encoding="utf-8"))
+        assert set(resultado_b["m0_de_referencia"]["cabecas"].values()) == {"identica"}
+        # Uma cabeca do M0 diferente na referencia (aqui, so a epoca) tem de reprovar.
+        referencia = torch.load(pasta / "comparacao" / "cabeca_M0_h12.pt", weights_only=False)
+        torch.save(dict(referencia, epoca=referencia["epoca"] + 10), pasta / "comparacao" / "cabeca_M0_h12.pt")
+        assert conferencia.main(args_b) == 2
+
         # Trocar um snapshot entre a decisao e a comparacao tem de ser recusado.
         pd.DataFrame({"variant_id": treino[:10], "role": "train"}).to_parquet(pasta / "janela4096.parquet",
                                                                              index=False)

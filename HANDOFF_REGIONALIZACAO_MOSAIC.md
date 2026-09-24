@@ -780,6 +780,23 @@ negativos: o Platt compensa uma diferença grande entre treino e fold 1, compat�
 diferentes — não medido), limiares de 0,46 a 0,56, épocas de 190 a 520. A conferência de código caiu no import do
 `lumina` sem o shim do tilelang; corrigida (`fc48ab4`).
 
+**a₂ e a₃ (24/09): `exit_a2=0`, `exit_a3=0`.** Mesma receita e orçamento; recorte `0891cf615c3d7461`, planos e
+checkpoint idênticos aos da a₁ (a trava confirmou no relatório); zero falha de janela; backbone intacto.
+
+| Semente | `focal_alt` base → melhor | delta | melhor passo | laço |
+|---|---|---:|---:|---:|
+| a₁ 20260921 | 1,7331 → 1,6008 | −0,1323 | 2999 (final) | ~90 min |
+| a₂ 20260922 | 1,7331 → 1,6044 | −0,1287 | 2999 (final) | 77 min |
+| a₃ 20260923 | 1,7331 → 1,5978 | −0,1353 | 2999 (final) | 76 min |
+
+O efeito no critério primário se **replica entre as sementes** (amplitude 0,0066). Diagnósticos, só descrição, iguais
+aos da a₁: 82–91% do ganho no termo de massa; ordem do ALT sem mudança distinguível (ICs cruzam zero); termo de
+escolha cai com IC abaixo de zero, compatível com suavização, não com reordenação; entropia +0,065 a +0,071;
+referência +0,006 a +0,007; fontes indistinguíveis (ABraOM − global no `focal_ce`: −0,0096 [−0,054; +0,030] e −0,0028
+[−0,050; +0,042]). Nada disso diz algo sobre classificação clínica ou sobre a pergunta regional. Congelamento pela
+regra: as duas superam a base; as entradas saem de `scripts/congelar_adapter.py` (confere receita, orçamento, planos,
+recorte, sha do arquivo e tensores do `adapter.pt`), não de hash copiado à mão.
+
 **Desenho do G6/G7: `docs/g6_g7_desenho.md`.** O consumidor aplica as regras de avaliação do Mosaic (PLAN
 §13.3–13.5), e o núcleo está escrito e testado com dados sintéticos (`eval/campanha/estudos.py`). Ponto a não perder:
 **no G7 o Mosaic manda relatar o coorte inteiro** (AUROC/AUPRC), com painéis como diagnóstico e sem macro — não a
