@@ -35,8 +35,8 @@ class DeclaracaoG6Tests(unittest.TestCase):
             self.assertEqual(componente["arquivo"], f"comparacao_dev_a1/cabeca_M0_h{componente['cabeca']}.pt")
 
     def test_criterios_da_equipe_de_25_09(self):
-        # O que a equipe declarou antes de qualquer score dos estudos. Mudar isto depois do --congelar exige um G6
-        # novo; depois do G7 real, e post hoc.
+        # O que a equipe declarou antes de qualquer score dos estudos, com os valores aceitos explicitamente pelo
+        # Gabriel. Mudar isto depois do --congelar exige um G6 novo; depois do G7 real, e post hoc.
         g = self.campanha["g6"]
         m = g["margens"]
         self.assertEqual(g6.problemas_das_margens(m), [])
@@ -52,9 +52,22 @@ class DeclaracaoG6Tests(unittest.TestCase):
         self.assertEqual(m["regressao_maxima_no_controle"]["condicoes"],
                          [{"estatistica": "p2_5", "comparacao": ">=", "limite": -0.01}])
         self.assertEqual(m["paineis_com_regressao_inaceitavel"]["paineis"], ["missense"])
-        self.assertEqual(m["beneficio_nao_explicado_por_um_painel"]["suporte_minimo_por_painel"], 20)
-        self.assertIs(m["interacao"]["criterio_proprio"], False)
+        self.assertEqual(m["paineis_com_regressao_inaceitavel"]["condicoes"],
+                         [{"estatistica": "estimativa", "comparacao": ">=", "limite": -0.01}])
+        c3 = m["beneficio_nao_explicado_por_um_painel"]
+        self.assertEqual(c3["suporte_minimo_por_painel"], 20)
+        self.assertEqual(c3["condicoes"], [{"estatistica": "estimativa", "comparacao": ">", "limite": 0.0}])
+        # A interacao tem regra propria SEPARADA do sucesso: o sucesso clinico nao prova vantagem regional.
+        interacao = m["interacao"]
+        self.assertIs(interacao["criterio_proprio"], True)
+        self.assertEqual(interacao["papel"], "separado")
+        self.assertEqual(interacao["estudos"], ["br_clinical_evidence"])
+        self.assertEqual(interacao["condicoes"], c1["condicoes"])
+        self.assertTrue(interacao["afirmacao"])
+        self.assertTrue(m["sucesso"]["afirmacao_permitida"])
+        self.assertTrue(any("vantagem regional" in x for x in m["sucesso"]["nao_permite"]))
         self.assertIn("NAO aprovacao do Eduardo", m["estado"])
+        self.assertIn("aceitos explicitamente", m["estado"])
         self.assertEqual(g["bootstrap_da_interacao"]["unidade_principal"], "cluster_conjunto")
 
     def test_tres_componentes_distintos_por_sistema(self):

@@ -256,6 +256,17 @@ class BloqueiosTests(unittest.TestCase):
         self.assertEqual(g6.bloqueios(_campanha(), estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK,
                                       entradas=ENTRADAS_OK), [])
 
+    def test_papel_da_interacao_fora_do_dominio_reprova(self):
+        campanha = _resolvida(_campanha())
+        campanha["g6"]["margens"]["interacao"] = {
+            "criterio_proprio": True, "papel": "informativo", "estudos": ["br_clinical_evidence"], "metrica": "auroc",
+            "condicoes": [{"estatistica": "p2_5", "comparacao": ">", "limite": 0.0}]}
+        bloqueios = g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK)
+        self.assertTrue(any("interacao.papel" in b for b in bloqueios), bloqueios)
+        campanha["g6"]["margens"]["interacao"]["papel"] = "separado"
+        self.assertEqual(g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK,
+                                      entradas=ENTRADAS_OK), [])
+
     def test_a_declaracao_aberta_nao_congela(self):
         campanha = _campanha()
         campanha["g6"]["margens"] = {"estado": "ABERTO"}

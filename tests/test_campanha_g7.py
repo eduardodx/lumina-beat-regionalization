@@ -260,6 +260,35 @@ class MargensTests(unittest.TestCase):
         self.assertEqual(saida["sucesso"]["estudos_exigidos"], [estudos.ESTUDO_CLINICO])
         self.assertEqual(saida["sucesso"]["atende"], saida["por_estudo"][estudos.ESTUDO_CLINICO]["atende_todas"])
 
+    def test_interacao_separada_nao_entra_no_sucesso(self):
+        # Revisao de 25/09: ganho de +0,015 no BR com +0,030 no controle pode passar no criterio clinico; a vantagem
+        # diferencial so pode ser afirmada pela regra separada da interacao, que sai a parte do sucesso.
+        exigida = g7.avaliar_margens(self.r, _margens(), BOOTSTRAP)
+        interacao = dict(_margens()["interacao"], papel="separado", afirmacao="vantagem diferencial (teste)")
+        separada = g7.avaliar_margens(self.r, _margens(interacao=interacao), BOOTSTRAP)
+        regras = separada["por_estudo"][estudos.ESTUDO_CLINICO]["regras"]
+        self.assertNotIn("interacao", regras)
+        self.assertEqual(sorted(regras), sorted(set(exigida["por_estudo"][estudos.ESTUDO_CLINICO]["regras"]) -
+                                                {"interacao"}))
+        vantagem = separada["vantagem_regional"]
+        self.assertTrue(vantagem["avaliada"])
+        self.assertEqual(vantagem["estudos"], [estudos.ESTUDO_CLINICO])
+        self.assertEqual(vantagem["afirmacao_permitida"], "vantagem diferencial (teste)")
+        esperado = self.r[estudos.ESTUDO_CLINICO]["interacao"]["auroc"]["por_unidade"]["cluster_conjunto"]["interacao"]
+        avaliada = vantagem["por_estudo"][estudos.ESTUDO_CLINICO]
+        self.assertEqual(avaliada["condicoes"][0]["valor"], esperado["estimativa"])
+        self.assertEqual(vantagem["atende"], avaliada["atende"])
+        self.assertEqual(separada["sucesso"]["atende"],
+                         g7._combinar(list(regras.values())), "o sucesso so combina as regras do clinico")
+        self.assertFalse(exigida["vantagem_regional"]["avaliada"], "interacao exigida entra no sucesso, nao a parte")
+
+    def test_o_sucesso_carrega_a_afirmacao_declarada(self):
+        declarado = {"afirmacao_permitida": "criterio clinico (teste)", "nao_permite": ["vantagem regional (teste)"]}
+        saida = g7.avaliar_margens(self.r, _margens(sucesso=declarado), BOOTSTRAP)
+        self.assertEqual(saida["sucesso"]["afirmacao_permitida"], "criterio clinico (teste)")
+        self.assertEqual(saida["sucesso"]["nao_permite"], ["vantagem regional (teste)"])
+        self.assertIsNone(g7.avaliar_margens(self.r, _margens(), BOOTSTRAP)["sucesso"]["afirmacao_permitida"])
+
     def test_as_duas_formas_da_revisao_dao_resultados_diferentes(self):
         forma_a = {"condicoes": _condicao(0.02) + _condicao(0.0, "p2_5", ">")}
         forma_b = {"condicoes": _condicao(0.02, "p2_5")}

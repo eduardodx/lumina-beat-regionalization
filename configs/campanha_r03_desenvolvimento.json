@@ -252,31 +252,35 @@
     },
     "decisoes_da_equipe": {
       "data": "25/09/2026",
-      "autoria": "equipe da campanha (Gabriel Palhares), redigido com o Claude, por sugestao da revisao de 25/09; o Eduardo nao foi consultado",
+      "autoria": {
+        "da_revisao_de_25_09": "a estrutura: clinico como principal e populacional como complementar, relatando os dois por inteiro; chr8 incluido; bootstrap por clusters conjuntos com pares como sensibilidade",
+        "escolhas_novas_da_campanha": "o limiar de 0,01 e a forma de cada regra (condicoes 1 a 3, missense e a interacao como regra separada): propostos pelo Claude e aceitos explicitamente pelo Gabriel Palhares em 25/09/2026, depois da revisao que apontou que eram escolhas novas da campanha: interacao como regra separada, 0,01 como convencao, condicao 3 com estimativa > 0 e missense pela estimativa",
+        "eduardo": "nao consultado; pode ratificar ou pedir mudanca antes do G7 real"
+      },
       "o_que": [
         "chr8: incluir os 171 membros, preservando a membership oficial (pendencia do chr8)",
         "bootstrap da interacao: cluster_conjunto principal, par como sensibilidade, 1.000 replicas, seed 20260901",
-        "margens e papel dos estudos (g6.margens)"
+        "margens, papel dos estudos, a regra separada da interacao e a afirmacao que o sucesso permite (g6.margens)"
       ],
-      "o_que_nao_e": "aprovacao do Eduardo. Ele pode ratificar ou pedir mudanca antes do G7 real",
+      "o_que_nao_e": "aprovacao do Eduardo",
       "quando": "antes de qualquer score dos estudos: nenhum foi calculado. Os deltas do desenvolvimento (exploratorios, HANDOFF secao 14) sao conhecidos pela equipe e nao entraram na escolha",
       "mudar_depois": "antes do --congelar, livre; depois dele, exige um G6 novo e refazer o que depende do manifesto; depois do G7 real, qualquer mudanca e post hoc e sai marcada como tal"
     },
     "margens": {
-      "estado": "DECLARADO em 25/09/2026 pela equipe da campanha, antes de qualquer score dos estudos (g6.decisoes_da_equipe). Decisao da equipe, NAO aprovacao do Eduardo",
-      "autoria": "equipe da campanha (Gabriel Palhares), redigido com o Claude, por sugestao da revisao de 25/09; o Eduardo nao foi consultado",
+      "estado": "DECLARADO em 25/09/2026 pela equipe da campanha, antes de qualquer score dos estudos (g6.decisoes_da_equipe): estrutura da revisao de 25/09; valores e formas das regras aceitos explicitamente pelo Gabriel Palhares em 25/09/2026, depois da revisao que apontou que eram escolhas novas da campanha: interacao como regra separada, 0,01 como convencao, condicao 3 com estimativa > 0 e missense pela estimativa. Decisao da equipe, NAO aprovacao do Eduardo",
       "exigidas_pelo_mosaic": [
         "margem pratica minima de melhoria no coorte BR",
         "margem maxima de regressao no controle",
         "paineis em que uma regressao e inaceitavel"
       ],
-      "como_declarar": "cada regra tem estudos, delta, metrica e uma lista de CONDICOES, todas exigidas; cada condicao e {estatistica: estimativa ou p2_5 (o limite inferior do IC), comparacao: >= ou > (estrito), limite finito}, com limite >= 0 nas de melhoria e <= 0 nas de regressao. (a) estimativa >= m e IC excluindo zero = [{estimativa, >=, m}, {p2_5, >, 0}]; (b) limite inferior >= m = [{p2_5, >=, m}]. O construtor do G6 recusa congelar com campo nulo ou fora do dominio (eval/campanha/g6.py:problemas_das_margens)",
+      "como_declarar": "cada regra tem estudos, delta, metrica e uma lista de CONDICOES, todas exigidas; cada condicao e {estatistica: estimativa ou p2_5 (o limite inferior do IC), comparacao: >= ou > (estrito), limite finito}, com limite >= 0 nas de melhoria e <= 0 nas de regressao. (a) estimativa >= m e IC excluindo zero = [{estimativa, >=, m}, {p2_5, >, 0}]; (b) limite inferior >= m = [{p2_5, >=, m}]. A interacao com criterio proprio tem papel exigido (entra no sucesso) ou separado (sai como vantagem_regional, fora do sucesso). O construtor do G6 recusa congelar com campo nulo ou fora do dominio (eval/campanha/g6.py:problemas_das_margens)",
       "proposta_anterior": "o 0,02 de AUROC (plano, secao 6.5; proposta C1 da fase 0) NAO foi transportado: era o ganho minimo da diferenca-em-diferencas M2 x M1 da escada antiga, outra quantidade e outra comparacao, nunca confirmado",
       "limiar_de_relevancia": {
         "valor": 0.01,
         "metrica": "auroc",
-        "uso": "o mesmo nos dois sentidos: ganho minimo (condicoes 1 e 3) e piora maxima (condicao 2 e missense)",
-        "justificativa": "a menor diferenca de AUROC entre M0 e MR que a equipe trata como relevante. Vale nos dois sentidos para nao chamar de irrelevante uma piora do mesmo tamanho de um ganho que se chama de sucesso. E escolha da equipe, nao derivada de dado. Com 0,02 nos dois sentidos, a regra aceitaria no controle e no missense a piora que o PDF tinha como teto de guardrail, o que a equipe acha frouxo para um sistema que substituiria o M0. Alem disso, o AUROC do coorte inteiro dilui ganhos concentrados num painel: no clinico, os pares missense x missense sao 27% dos pares P x B, e 37% das patogenicas sao plof. Um ganho absoluto de 0,02 no coorte seria uma exigencia calibrada para outra quantidade"
+        "uso": "o mesmo nos dois sentidos: ganho minimo (condicao 1 e interacao) e piora maxima (condicao 2 e missense)",
+        "natureza": "CONVENCAO operacional da campanha, aceita explicitamente pelo Gabriel Palhares em 25/09/2026",
+        "justificativa": "a menor diferenca de AUROC entre M0 e MR que a campanha trata como relevante. Usar a mesma regua nos dois sentidos e uma regra de coerencia: nao chamar de irrelevante uma piora do tamanho de um ganho que se chama de sucesso. A coerencia NAO demonstra que 0,01 seja cientificamente relevante; o valor e uma convencao, nao derivada de dado. Nao e o 0,02 da proposta C1, que era de outra quantidade e nunca foi confirmado"
       },
       "papel_dos_estudos": {
         "br_clinical_evidence": "exigido",
@@ -301,7 +305,7 @@
             "limite": 0.0
           }
         ],
-        "justificativa": "coorte completo do clinico (3.119 casos): e o relatorio obrigatorio do Mosaic e difere dos pareados em 3 patogenicas. AUROC: endpoint confirmatorio decidido com o Eduardo em 29/07 (fase 0) e mantido; nao depende da prevalencia, que vai de 4,7% a 90% entre os coortes. Forma (a): o IC exclui zero (ha evidencia de melhora) e a estimativa atinge o limiar de relevancia. A forma (b), limite inferior >= 0,01, exigiria um efeito verdadeiro maior para a mesma margem. A regra por semente da C1 nao entra: o G7 avalia o ensemble"
+        "justificativa": "coorte completo do clinico (3.119 casos): e o relatorio obrigatorio do Mosaic e difere dos pareados em 3 patogenicas. AUROC: endpoint confirmatorio decidido com o Eduardo em 29/07 (fase 0) e mantido; nao depende da prevalencia, que vai de 4,7% a 90% entre os coortes. Forma (a): o IC exclui zero (ha evidencia de melhora) e a estimativa atinge o limiar. A forma (b), limite inferior >= 0,01, exigiria um efeito verdadeiro maior para a mesma margem. A regra por semente da C1 nao entra: o G7 avalia o ensemble"
       },
       "regressao_maxima_no_controle": {
         "estudos": [
@@ -334,7 +338,7 @@
             "limite": -0.01
           }
         ],
-        "justificativa": "missense e o maior painel de discriminacao do clinico (1.244 P / 192 B) e onde a informacao populacional mais pesa. A regra usa a estimativa, e nao o limite inferior, porque o IC por painel e mais largo: ela impede que o ganho do coorte esconda uma piora relevante no missense, sem reprovar o sistema por imprecisao. Splice (33 B) e noncoding (60 B) saem por painel, sem regra: com tao poucas benignas, a equipe nao quer que a estimativa de um painel pequeno decida o resultado"
+        "justificativa": "missense e o maior painel de discriminacao do clinico (1.244 P / 192 B). ALCANCE: a regra usa a estimativa, entao impede aprovar o sistema com uma queda ESTIMADA maior que 0,01 no missense; ela nao demonstra ausencia de queda relevante (isso pediria o limite inferior, que pode reprovar por imprecisao do painel). Splice (33 B) e noncoding (60 B) saem por painel, sem regra"
       },
       "beneficio_nao_explicado_por_um_painel": {
         "estudos": [
@@ -345,18 +349,49 @@
         "condicoes": [
           {
             "estatistica": "estimativa",
-            "comparacao": ">=",
-            "limite": 0.01
+            "comparacao": ">",
+            "limite": 0.0
           }
         ],
         "suporte_minimo_por_painel": 20,
-        "justificativa": "suporte minimo de 20 P e 20 B por painel, a convencao do PDF para avaliacao nao descritiva. No clinico os tres paineis de discriminacao tem suporte (menor classe: missense 192, splice 33, noncoding 60). Sem cada um, a estimativa do delta do coorte continua >= 0,01: o ganho relevante nao depende de um painel so. A regra usa a estimativa, e nao o IC, porque tirar um painel reduz o suporte, e o IC misturaria perda de precisao com explicacao. plof (1.050 P, 2 B) nao tem suporte e nao entra; o coorte sem plof sai no relatorio (celula sem_painel:plof), sem regra"
+        "justificativa": "leitura minima da condicao 3 do Mosaic: sem cada painel de discriminacao com suporte (20 P e 20 B, a convencao do PDF para avaliacao nao descritiva; no clinico entram os tres), a estimativa do delta do coorte continua positiva, ou seja, o ganho nao some sem um painel. Nao exige que o ganho continue >= 0,01 sem cada painel: essa seria uma exigencia adicional forte, que reprovaria um ganho real concentrado no missense. A regra usa a estimativa porque tirar um painel reduz o suporte. ALCANCE: plof (1.050 P, 2 B) nao tem suporte e fica fora; um ganho que dependa de plof nao e detectado pela regra (o coorte sem plof sai no relatorio, na celula sem_painel:plof, sem regra)"
       },
       "interacao": {
-        "criterio_proprio": false,
-        "motivo": "a pergunta da campanha e M0 x MR: o sistema regionalizado supera o base nos estudos brasileiros. A especificidade regional seria a pergunta MG x MR, que nao foi rodada. Alem disso, a interacao nao isola a regionalizacao, porque os casos do clinico estao 4,6x mais presentes no ABraOM que os controles. Sai relatada com os absolutos, nas duas unidades do bootstrap e com as sensibilidades"
+        "criterio_proprio": true,
+        "papel": "separado",
+        "estudos": [
+          "br_clinical_evidence"
+        ],
+        "metrica": "auroc",
+        "condicoes": [
+          {
+            "estatistica": "estimativa",
+            "comparacao": ">=",
+            "limite": 0.01
+          },
+          {
+            "estatistica": "p2_5",
+            "comparacao": ">",
+            "limite": 0.0
+          }
+        ],
+        "unidade": "a principal do bootstrap (cluster_conjunto); o IC por pares sai como sensibilidade",
+        "o_que_mede": "se a mudanca de desempenho do MR difere entre os casos brasileiros pareados e os seus controles (delta_br_matched - delta_control): uma pergunta regional que o ganho absoluto nao responde",
+        "o_que_nao_e": "a comparacao MR x MG, que mediria o efeito adicional da mistura com ABraOM sobre a adaptacao global e nao foi rodada; nem prova de causalidade: a interacao nao remove diferencas de composicao (os casos do clinico estao 4,6x mais presentes no ABraOM que os controles)",
+        "afirmacao": "vantagem regional diferencial no estudo clinico: o ganho do MR sobre o M0 nos casos brasileiros pareados supera o dos controles pareados em pelo menos 0,01 de AUROC, com IC excluindo zero",
+        "justificativa": "regra propria e SEPARADA do sucesso, escolhida pelo Gabriel em 25/09: o sucesso clinico nao pode ser apresentado como prova de vantagem regional, e uma vantagem regional so pode ser afirmada com uma regra declarada antes. Forma (a) com o mesmo limiar de relevancia"
       },
-      "sucesso": "todas as regras aplicaveis do estudo exigido (clinico): condicoes 1, 2 e 3 e o missense. O populacional e relatado por inteiro, sem regra",
+      "sucesso": {
+        "regra": "todas as regras aplicaveis do estudo exigido (clinico): condicoes 1, 2 e 3 e o missense. A interacao NAO entra: sai a parte, como vantagem_regional",
+        "afirmacao_permitida": "o MR atende ao criterio clinico declarado no estudo clinico brasileiro (br_clinical_evidence): ganho de AUROC no coorte completo com estimativa >= 0,01 e IC excluindo zero; sem piora relevante nos controles pareados (limite inferior >= -0,01); sem queda estimada maior que 0,01 no missense; e ganho ainda positivo sem cada painel de discriminacao com suporte",
+        "nao_permite": [
+          "vantagem regional diferencial: so a regra separada da interacao (vantagem_regional) autoriza",
+          "generalizacao ao estudo populacional, que e descritivo",
+          "atribuir o ganho a mistura com ABraOM: a comparacao MR x MG nao foi rodada",
+          "ausencia de queda no missense: a regra so impede aprovar uma queda estimada maior que 0,01",
+          "que o ganho nao dependa de plof, que fica fora da condicao 3"
+        ]
+      },
       "secundarias": "AUPRC, Brier e metricas com limiar sao relatadas sem regra"
     },
     "bootstrap_da_interacao": {

@@ -127,12 +127,14 @@ sai com `sucesso` = todas as regras de todos os estudos exigidos. O 0,02 do plan
 bootstrap traz a recomendação (`cluster_conjunto` principal, `par` sensibilidade, 1.000 réplicas, seed 20260901) ainda
 como `RECOMENDADO`; só congela confirmado. O construtor recusa congelar com qualquer campo nulo ou fora do domínio.
 
-**Declarado (25/09, pela equipe; o Eduardo pode ratificar antes do G7 real).** Clínico exigido e populacional
-descritivo. Limiar de relevância de 0,01 de AUROC nos dois sentidos. Condição 1: Δ_BR_full ≥ 0,01 na estimativa e
-limite inferior > 0. Condição 2: limite inferior de Δ_control ≥ −0,01. Missense protegido com estimativa ≥ −0,01.
-Condição 3 com suporte de 20 P e 20 B e estimativa ≥ 0,01 sem cada painel. Interação sem critério próprio. O 0,02 da
-C1 não foi transportado. Os valores e as justificativas estão em `g6.margens`, e o registro em
-`g6.decisoes_da_equipe`.
+**Declarado (25/09, pela equipe; o Eduardo pode ratificar antes do G7 real).** A estrutura veio da revisão; os
+valores e as formas foram propostos pelo Claude e aceitos explicitamente pelo Gabriel. Clínico exigido e populacional
+descritivo. Limiar de 0,01 de AUROC, uma convenção, nos dois sentidos. Condição 1: Δ_BR_full com estimativa ≥ 0,01 e
+limite inferior > 0. Condição 2: limite inferior de Δ_control ≥ −0,01. Missense: estimativa ≥ −0,01 (impede aprovar
+uma queda estimada; não demonstra ausência de queda). Condição 3: suporte de 20 P e 20 B e estimativa > 0 sem cada
+painel. A interação tem regra própria **separada do sucesso** (estimativa ≥ 0,01 e limite inferior > 0, na unidade
+de clusters), relatada como vantagem regional. O `SUCESSO` diz o que permite afirmar e o que não permite. O 0,02 da
+C1 não foi transportado. Valores e justificativas em `g6.margens`; registro em `g6.decisoes_da_equipe`.
 
 **Duas perguntas separadas para as margens.** (a) Qual melhora seria **cientificamente relevante**? É a decisão do
 Eduardo, e não se reduz a margem para facilitar um resultado positivo. (b) Com os dados disponíveis, que melhora se

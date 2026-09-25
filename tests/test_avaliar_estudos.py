@@ -142,6 +142,11 @@ class EnsaioTests(unittest.TestCase):
             self.assertEqual([c["estatistica"] for c in regras["melhoria_minima_no_coorte_br"]["condicoes"]],
                              ["estimativa", "p2_5"])
             self.assertIsNone(r["margens"]["por_estudo"][estudos.ESTUDO_POPULACIONAL]["atende_todas"])
+            self.assertTrue(r["margens"]["sucesso"]["afirmacao_permitida"])
+            vantagem = r["margens"]["vantagem_regional"]
+            self.assertTrue(vantagem["avaliada"])
+            self.assertEqual(vantagem["estudos"], [estudos.ESTUDO_CLINICO])
+            self.assertEqual(vantagem["por_estudo"][estudos.ESTUDO_CLINICO]["unidade"], "cluster_conjunto")
 
     def test_ensaio_com_margens_declaradas_aplica_as_regras(self):
         with tempfile.TemporaryDirectory() as pasta:

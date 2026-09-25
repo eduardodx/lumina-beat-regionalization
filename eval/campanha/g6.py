@@ -258,6 +258,9 @@ MARGENS_EXIGIDAS: dict[str, tuple[tuple[str, ...], str]] = {
 CONDICOES_DO_MOSAIC = ("melhoria_minima_no_coorte_br", "regressao_maxima_no_controle",
                        "beneficio_nao_explicado_por_um_painel")
 PAPEIS_DOS_ESTUDOS = ("exigido", "descritivo")
+#: A regra propria da interacao entra no sucesso (`exigido`, o padrao) ou e avaliada a parte (`separado`): o G7 relata
+#: entao uma `vantagem_regional`, e o sucesso clinico nao pode ser lido como prova de vantagem diferencial.
+PAPEIS_DA_INTERACAO = ("exigido", "separado")
 UNIDADES_IMPLEMENTADAS = ("cluster_conjunto", "par")
 
 
@@ -345,6 +348,9 @@ def problemas_das_margens(margens: dict[str, Any]) -> list[str]:
         problemas.append("interacao.criterio_proprio: true ou false, explicito")
     elif interacao["criterio_proprio"]:
         problemas += _problemas_da_regra("interacao", interacao, None, ">= 0")
+        if interacao.get("papel", "exigido") not in PAPEIS_DA_INTERACAO:
+            problemas.append(f"interacao.papel: um de {list(PAPEIS_DA_INTERACAO)} (separado = avaliada a parte, fora do "
+                             f"sucesso), recebeu {interacao.get('papel')!r}")
     elif not _texto(interacao.get("motivo")):
         problemas.append("interacao: criterio_proprio false exige `motivo` (ex.: relatada com os absolutos)")
     problemas += _problemas_dos_papeis(margens)

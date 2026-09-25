@@ -1217,13 +1217,15 @@ revisão fixou a estrutura mas não os números. O registro está em `g6.decisoe
 | chr8 | os 171 membros entram (todos no clínico) |
 | 0,02 da C1 | **não** transportado: era de outra quantidade (DiD M2 × M1) e nunca foi confirmado |
 
+**A décima segunda revisão (abaixo) substituiu** a autoria, a condição 3, a interação e a justificativa do limiar.
+
 - **Precisão:** "até a última casa" valia só para as casas impressas no log. O bloco do congelamento compara, com
   precisão total, os limiares e o ensemble do `g6_construcao.json` da pré-checagem com os do definitivo.
-- **Por que 0,01:** é a menor diferença que a equipe trata como relevante, e vale nos dois sentidos para não chamar
-  de irrelevante uma piora do tamanho de um ganho que se chama de sucesso. Com 0,02 nos dois sentidos, a regra
-  aceitaria no controle e no missense a piora que o PDF tinha como teto de guardrail. Além disso, o AUROC do coorte
-  inteiro dilui ganhos concentrados num painel: os pares missense × missense são 27% dos pares P × B do clínico. É
-  escolha da equipe, não derivada de dado; os deltas do desenvolvimento são conhecidos e não entraram na escolha.
+- **Por que 0,01 (corrigido na décima segunda revisão):** é uma convenção operacional da campanha. A mesma régua
+  nos dois sentidos é uma regra de coerência e não demonstra que 0,01 seja cientificamente relevante. A versão
+  anterior deste item usava a fração de pares missense × missense (27%) como diluição do ganho do coorte, e isso não
+  vale: a AUROC do coorte também inclui comparações entre painéis. Os deltas do desenvolvimento são conhecidos e não
+  entraram na escolha.
 - **Lacuna declarada:** o plof (1.050 P, 2 B no clínico) não tem suporte e não entra na condição 3. O coorte sem
   plof sai no relatório (`sem_painel:plof`), sem regra.
 - **Testes ajustados:** `test_campanha_g6` (a declaração de hoje só espera a proveniência e as entradas do notebook,
@@ -1232,3 +1234,41 @@ revisão fixou a estrutura mas não os números. O registro está em `g6.decisoe
   declaração 5, g7 20, estudos 25, cabeças 7, avaliador 4 e cobertura 7 (1 pulado no Windows, sem pyyaml).
 - **Mudar depois:** antes do `--congelar`, livre; depois dele, exige um G6 novo; depois do G7 real, é post hoc e sai
   marcado como tal.
+
+**Décima segunda revisão (25/09): escolhas novas aceitas explicitamente; interação como regra separada.** A revisão
+apontou quatro problemas, todos procedentes:
+1. **Os valores de 0,01 eram proposta nova**, não da revisão, mas a declaração dizia "por sugestão da revisão". A
+   autoria agora separa a estrutura (da revisão: clínico principal e populacional complementar, chr8, bootstrap) dos
+   valores e das formas das regras, propostos pelo Claude e **aceitos explicitamente pelo Gabriel em 25/09**. As
+   justificativas exageravam: a simetria não prova relevância, a fração de pares não converte ganho de painel em
+   ganho de coorte, e "≥ 0,01 sem cada painel" era uma exigência adicional forte, não a tradução inevitável da
+   condição 3.
+2. **A justificativa da interação estava errada**: confundia a interação em M0 × MR (a mudança difere entre casos
+   brasileiros e controles pareados?) com MR × MG (o que a mistura com ABraOM acrescenta à adaptação global?). Com a
+   regra anterior, +0,015 no BR, +0,030 no controle e interação −0,015 poderiam receber `SUCESSO`: utilidade nos
+   casos brasileiros, sem benefício preferencial.
+3. **As proteções têm alcance limitado**: a regra do missense só impede aprovar uma queda estimada maior que 0,01, e
+   a condição 3 não cobre um ganho que dependa de plof.
+4. **A comparação de precisão total imprimia `False` sem reprovar**, e rodava depois de gravar o manifesto.
+
+Escolhas do Gabriel (explícitas):
+
+| Item | Declarado |
+|---|---|
+| Interação | **regra própria, separada do sucesso**: estimativa ≥ 0,01 e limite inferior > 0, na unidade de clusters; sai como `VANTAGEM REGIONAL` e é a única que autoriza afirmar vantagem diferencial |
+| Limiar | 0,01 de AUROC aceito como **convenção** operacional |
+| Condição 3 | **estimativa > 0** sem cada painel com suporte (leitura mínima); ≥ 0,01 reprovaria um ganho real concentrado no missense |
+| Missense | estimativa ≥ −0,01, com o alcance declarado |
+
+O `SUCESSO` agora carrega a **afirmação permitida** e a lista do que ele **não** permite afirmar: vantagem regional
+diferencial, generalização ao populacional, atribuição à mistura com ABraOM (sem MR × MG), ausência de queda no
+missense e independência de plof. As duas saem impressas no relatório do G7.
+
+- **Código:** `g6.PAPEIS_DA_INTERACAO` (`exigido`, o padrão, ou `separado`); `g7.avaliar_margens` põe a interação
+  separada em `vantagem_regional`, fora das regras e do sucesso; `sucesso` traz `afirmacao_permitida` e `nao_permite`.
+  Testes locais: g6 29, declaração 5, g7 22, estudos 25, cabeças 7, avaliador 4 e cobertura 7 (1 pulado no Windows,
+  sem pyyaml).
+- **Operação:** a comparação de precisão total reprova quando diverge e roda primeiro num **rascunho novo, sem
+  `--congelar`**. No bloco do congelamento ela roda de novo, e um manifesto divergente é movido para `_NAO_USAR`.
+  `--so-conferir` não valida o ambiente numérico nem o hash do FASTA: esses dois são conferidos no início da extração
+  real, antes de extrair.

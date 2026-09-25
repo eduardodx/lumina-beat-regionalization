@@ -165,6 +165,7 @@ def avaliar_margens(resultados: dict[str, dict[str, Any]], margens: dict[str, An
         return {"avaliado": False, "motivo": "margens ou bootstrap nao declarados com conteudo", "problemas": problemas}
     saida: dict[str, Any] = {"avaliado": True, "regra": "cada regra: todas as suas condicoes sobre o delta MR - M0 "
                                                         "declarado; estudos nunca unidos", "por_estudo": {}}
+    separadas: dict[str, Any] = {}
     for estudo in ESTUDOS:
         if estudo not in resultados:
             continue
@@ -207,8 +208,12 @@ def avaliar_margens(resultados: dict[str, dict[str, Any]], margens: dict[str, An
             # O IC da unidade DECLARADA, lido em `por_unidade`: nao depende do que o consumidor pos no nivel de cima.
             celula = (((r.get("interacao") or {}).get(interacao["metrica"]) or {}).get("por_unidade") or {}).get(
                 bootstrap["unidade_principal"], {}).get("interacao") or {}
-            regras["interacao"] = {"metrica": interacao["metrica"], "unidade": bootstrap["unidade_principal"],
-                                   **_regra(celula, interacao)}
+            avaliada = {"metrica": interacao["metrica"], "unidade": bootstrap["unidade_principal"],
+                        **_regra(celula, interacao)}
+            if interacao.get("papel", "exigido") == "separado":
+                separadas[estudo] = avaliada
+            else:
+                regras["interacao"] = avaliada
         if not regras:
             saida["por_estudo"][estudo] = {"regras": {}, "atende_todas": None,
                                            "nota": "nenhuma regra declarada para este estudo: nada a atender"}
@@ -216,8 +221,21 @@ def avaliar_margens(resultados: dict[str, dict[str, Any]], margens: dict[str, An
         saida["por_estudo"][estudo] = {"regras": regras, "atende_todas": _combinar(list(regras.values()))}
     papeis = margens["papel_dos_estudos"]
     exigidos = [e for e in ESTUDOS if papeis[e] == "exigido"]
+    declarado = margens.get("sucesso") if isinstance(margens.get("sucesso"), dict) else {}
     saida["sucesso"] = {
         "regra": "todas as regras aplicaveis de cada estudo EXIGIDO; estudo descritivo so e relatado",
         "estudos_exigidos": exigidos, "estudos_descritivos": [e for e in ESTUDOS if papeis[e] == "descritivo"],
-        "atende": _combinar([{"atende": (saida["por_estudo"].get(e) or {}).get("atende_todas")} for e in exigidos])}
+        "atende": _combinar([{"atende": (saida["por_estudo"].get(e) or {}).get("atende_todas")} for e in exigidos]),
+        "afirmacao_permitida": declarado.get("afirmacao_permitida"), "nao_permite": declarado.get("nao_permite")}
+    interacao = margens["interacao"]
+    if interacao["criterio_proprio"] and interacao.get("papel", "exigido") == "separado":
+        saida["vantagem_regional"] = {
+            "avaliada": True,
+            "regra": "regra propria da interacao, declarada antes e SEPARADA do sucesso: so ela autoriza afirmar "
+                     "vantagem diferencial nos casos brasileiros",
+            "afirmacao_permitida": interacao.get("afirmacao"), "estudos": list(interacao["estudos"]),
+            "por_estudo": separadas, "atende": _combinar(list(separadas.values())) if separadas else None}
+    else:
+        saida["vantagem_regional"] = {"avaliada": False,
+                                      "motivo": "sem regra separada para a interacao (ou ela entra no sucesso)"}
     return saida

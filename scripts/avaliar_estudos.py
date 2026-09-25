@@ -214,6 +214,21 @@ def imprimir(relatorio: dict[str, Any]) -> None:
     sucesso = margens["sucesso"]
     print(f"\n{prefixo}SUCESSO (estudos exigidos {sucesso['estudos_exigidos']}; descritivos "
           f"{sucesso['estudos_descritivos']}): {sucesso['atende']}")
+    if sucesso.get("afirmacao_permitida"):
+        print(f"  se True, permite afirmar: {sucesso['afirmacao_permitida']}")
+    for item in sucesso.get("nao_permite") or []:
+        print(f"  nao permite afirmar: {item}")
+    vantagem = margens.get("vantagem_regional") or {}
+    if not vantagem.get("avaliada"):
+        print(f"\n{prefixo}VANTAGEM REGIONAL: nao avaliada ({vantagem.get('motivo')})")
+        return
+    print(f"\n{prefixo}VANTAGEM REGIONAL (regra separada, fora do sucesso; estudos {vantagem['estudos']}): "
+          f"{vantagem['atende']}")
+    for estudo, regra in vantagem["por_estudo"].items():
+        print(f"  {estudo}: interacao {regra['metrica']} na unidade {regra['unidade']}: atende = "
+              f"{regra['atende']}{_condicoes(regra)}")
+    if vantagem.get("afirmacao_permitida"):
+        print(f"  se True, permite afirmar: {vantagem['afirmacao_permitida']}")
 
 
 def main(argv: list[str] | None = None) -> int:
