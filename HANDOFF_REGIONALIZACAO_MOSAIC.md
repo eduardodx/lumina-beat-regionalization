@@ -1272,3 +1272,13 @@ missense e independência de plof. As duas saem impressas no relatório do G7.
   `--congelar`**. No bloco do congelamento ela roda de novo, e um manifesto divergente é movido para `_NAO_USAR`.
   `--so-conferir` não valida o ambiente numérico nem o hash do FASTA: esses dois são conferidos no início da extração
   real, antes de extrair.
+
+**Rascunho final do G6 (25/09, 19:25; revisão `5325f4a`): sem bloqueio.** Log
+`~/artifacts/redesenho/g6_rascunho_final_20260925_192506.log`. A primeira tentativa rodou em `90aa6d9` porque os
+commits não tinham sido enviados. Ela leu a declaração antiga, e o `--congelar` foi recusado sem gravar manifesto; a
+pasta ficou como `g6_recusado_20260925_192116`. Na revisão certa, todos os testes passaram: g6 29, declaração 5,
+g7 22, estudos 25, cabeças 7, cobertura 7, avaliador 4 e os dois ponta a ponta com torch. O construtor saiu com
+`RASCUNHO sem bloqueio`. A comparação com a pré-checagem deu **idêntico com precisão total** em
+`limiares_do_ensemble`, `fold1_descritivo`, `desenvolvimento_do_ensemble_final` e `componentes`; os limiares são
+0,4745615457057724 (M0) e 0,5521634943700215 (MR). Próximo passo: o bloco 2, com `--congelar` e `--so-conferir` nos
+quatro sistemas.
