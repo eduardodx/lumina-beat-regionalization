@@ -210,6 +210,7 @@ def _entradas(campanha, bloqueios=()):
 CODIGO_OK = {"revisao": "0123456789abcdef0123456789abcdef01234567", "ausentes": [], "nao_rastreados": [],
              "modificados": [], "erro": None}
 ABRAOM_OK = {"abraom": {"confere": True}}
+ENTRADAS_OK = {"regra_ampla": {"sha256": "a" * 64}, "exposicao": {"sha256": "b" * 64}}
 
 
 def _regra(**extra):
@@ -246,18 +247,21 @@ class BloqueiosTests(unittest.TestCase):
         bloqueios = g6.bloqueios(_campanha(), estado_do_codigo=CODIGO_OK)
         self.assertTrue(any(b.startswith("margens: nao declaradas") for b in bloqueios), bloqueios)
         self.assertTrue(any(b.startswith("bootstrap da interacao: nao declarado") for b in bloqueios))
-        self.assertEqual(sum(b.startswith("pendencia ") for b in bloqueios), 4)
+        abertas = [x for x in _campanha()["g6"]["pendencias_antes_do_congelamento"]
+                   if x["estado"] not in g6.ESTADOS_RESOLVIDOS]
+        self.assertTrue(abertas)
+        self.assertEqual(sum(b.startswith("pendencia ") for b in bloqueios), len(abertas))
         self.assertTrue(any(b.startswith("abraom_snapshot_hash") for b in bloqueios))
 
     def test_tudo_resolvido_nao_bloqueia(self):
-        self.assertEqual(g6.bloqueios(_resolvida(_campanha()), estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK), [])
+        self.assertEqual(g6.bloqueios(_resolvida(_campanha()), estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK), [])
 
     def test_so_o_texto_do_estado_nao_basta(self):
         # Reproduz a revisao de 24/09: margens e bootstrap com so {"estado": "DECLARADO"} passavam.
         campanha = _resolvida(_campanha())
         campanha["g6"]["margens"] = {"estado": "DECLARADO"}
         campanha["g6"]["bootstrap_da_interacao"] = {"estado": "DECLARADO"}
-        bloqueios = g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK)
+        bloqueios = g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK)
         for nome in g6.MARGENS_EXIGIDAS:
             self.assertIn(f"margens: {nome}: ausente", bloqueios)
         self.assertIn("margens: interacao.criterio_proprio: true ou false, explicito", bloqueios)
@@ -309,22 +313,29 @@ class BloqueiosTests(unittest.TestCase):
     def test_git_que_falha_nao_vale_como_sem_mudancas(self):
         base = _resolvida(_campanha())
         falhou = dict(CODIGO_OK, revisao=None, erro="CalledProcessError: fatal: not a git repository")
-        self.assertEqual(g6.bloqueios(base, estado_do_codigo=falhou, proveniencia=ABRAOM_OK),
+        self.assertEqual(g6.bloqueios(base, estado_do_codigo=falhou, proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK),
                          ["estado do codigo nao conferido (git falhou: CalledProcessError: fatal: not a git "
                           "repository)"])
         for revisao in ("desconhecida", "", None, "0123"):
             self.assertTrue(g6.bloqueios(base, estado_do_codigo=dict(CODIGO_OK, revisao=revisao),
-                                         proveniencia=ABRAOM_OK))
+                                         proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK))
         sujo = dict(CODIGO_OK, ausentes=["scripts/avaliar_estudos.py"], nao_rastreados=["eval/campanha/g6.py"],
                     modificados=["scripts/construir_g6.py"])
-        self.assertEqual(g6.bloqueios(base, estado_do_codigo=sujo, proveniencia=ABRAOM_OK),
+        self.assertEqual(g6.bloqueios(base, estado_do_codigo=sujo, proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK),
                          ["codigo ausente: scripts/avaliar_estudos.py", "codigo fora do git: eval/campanha/g6.py",
                           "codigo com mudanca nao commitada: scripts/construir_g6.py"])
+
+    def test_entrada_das_analises_secundarias_sem_registro_bloqueia(self):
+        base = _resolvida(_campanha())
+        bloqueios = g6.bloqueios(base, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK,
+                                 entradas={"regra_ampla": {"sha256": "a" * 64}})
+        self.assertEqual(len(bloqueios), 1)
+        self.assertTrue(bloqueios[0].startswith("entrada da analise secundaria sem registro (--entrada exposicao="))
 
     def test_margem_aberta_com_outra_palavra_continua_bloqueando(self):
         campanha = _resolvida(_campanha())
         campanha["g6"]["margens"]["estado"] = "em discussao"
-        self.assertTrue(g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK))
+        self.assertTrue(g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK))
 
     def test_a_declaracao_real_tem_os_campos_das_margens_e_do_bootstrap(self):
         # O modelo da declaracao tem todos os campos que a validacao cobra, nulos ate a decisao.

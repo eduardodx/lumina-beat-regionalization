@@ -90,8 +90,8 @@ escolhida depois dos resultados, todas mantêm pares inteiros; entrada ausente s
 | Controles com SCV brasileira | interação sem os pares cujo controle tem SCV de instituição da lista (44 de 3.116 no clínico), sem refazer o pareamento | `g2_regra_ampla/broad_brazilian_variant_ids.txt` | implementada |
 | Exposição de locus | interação só nos pares com exposição empatada (diferença 0) de variantes de treino na janela, no snapshot final (`janela2048`) com raio 4.096 | `exposicao_por_membro.parquet` desse snapshot e raio (gerar se não existir) | implementada; raio e tolerância PROPOSTOS |
 | Pares completos na cobertura | só se a cobertura desfizer pares: interação nos pares com os dois membros cobertos | scores | implementada |
-| Métricas com limiar e Brier | com os limiares e calibradores congelados | manifesto | métricas com limiar implementadas; Brier a escrever |
-| Baselines diagnósticas | fora dos sistemas, nos mesmos coortes e pares: (1) `gnomad_rarity`, o comparador **oficial** do Mosaic (`−gnomad_v4_af`, `not_found`/`ac0` com AF 0); (2) raridade no ABraOM (`−abraom_af`, ausente = 0; regra **nossa**, análoga); (3) presença no ABraOM com **papel explícito** — no clínico, diagnóstico da diferença de composição; no populacional ela **define** os grupos, é constante dentro de cada um e não se relata como discriminação | `pb_annotations.parquet` do release, por `variant_id` (hash lógico contra os invariantes da ADR 0006 declarados em `g6.proveniencia.release_do_mosaic` e contra o manifesto da cópia) | cobertura e proveniência a conferir (`scripts/conferir_cobertura_das_baselines.py`, só contagens); depois escrever. Não retirar pela falta na membership: a informação está no release |
+| Métricas com limiar e Brier | com os limiares e calibradores congelados; Brier só dos **sistemas**, sobre as probabilidades calibradas do ensemble — nunca sobre −AF | manifesto | implementadas (`com_brier`); testes do notebook pendentes |
+| Baselines diagnósticas | fora dos sistemas, nos mesmos coortes e pares: (1) `gnomad_rarity`, o comparador **oficial** do Mosaic (`−gnomad_v4_af`, `not_found`/`ac0` com AF 0); (2) raridade no ABraOM (`−abraom_af`, ausente = 0; regra **nossa**, análoga); (3) presença no ABraOM com **papel explícito** — no clínico, diagnóstico da diferença de composição; no populacional ela **define** os grupos, é constante dentro de cada um e não se relata como discriminação | `pb_annotations.parquet` do release, por `variant_id` (hash lógico contra os invariantes da ADR 0006 declarados em `g6.proveniencia.release_do_mosaic` e contra o manifesto da cópia) | cobertura e proveniência conferidas em 24/09 (só contagens); implementadas (`eval/campanha/baselines.py`, `estudos.avaliar_baseline`), com score constante no coorte saindo sem métrica e sem Brier |
 | Sanidade no fold 0 | AUROC/AUPRC de M0 e MR no teste do `core_locus`, só depois do G6 | extração do fold 0 depois do congelamento | a escrever |
 
 **Por que a baseline contínua fica (revisão de 24/09).** Eu tinha proposto retirar a de AF contínua porque ela "não
@@ -204,7 +204,11 @@ As variantes dos estudos passam pelo **mesmo** caminho numérico do desenvolvime
 confere que a identidade de cada cache dos estudos é igual à do cache de desenvolvimento do mesmo sistema em tudo
 menos a tabela. Tabela: uma linha por variante (quem está nos dois estudos é extraído uma vez; rótulo e cluster vêm
 do release e são os mesmos). O extrator de desenvolvimento recusa membros dos estudos por construção: a extração dos
-estudos é um script próprio, que exige o manifesto do G6.
+estudos é um script próprio, que exige o manifesto do G6: `scripts/extrair_estudos.py` (lê janela, lote e
+fragmento da identidade de desenvolvimento do mesmo sistema e recusa, antes de extrair, identidade que difira além da
+tabela). Membros no chr8 entram (o Mosaic avalia o membership inteiro; a reserva do chr8 é do treino e das janelas) —
+a confirmar com o Eduardo junto com a decisão E. A pontuação e o relatório são `scripts/avaliar_estudos.py`, com um
+modo `--ensaio-sintetico` que exercita o mesmo caminho na membership real, com scores sintéticos.
 
 ## 7. O que o resultado poderá afirmar (plano §7)
 
@@ -219,8 +223,8 @@ estudos é um script próprio, que exige o manifesto do G6.
 | Peça | Estado |
 |---|---|
 | núcleo do consumidor (`eval/campanha/estudos.py`) | escrito e testado com dados **sintéticos** (`tests/test_campanha_estudos.py`); ~5 a 8 min por estudo com 1.000 réplicas. Ainda não validado ponta a ponta nos artefatos da campanha |
-| script de extração dos estudos | a escrever |
+| script de extração dos estudos (`scripts/extrair_estudos.py`) | escrito; `--so-conferir` testado; extração real só depois do G6 congelado |
 | construtor do G6 (`scripts/construir_g6.py`, `eval/campanha/g6.py`) | escrito em 24/09 e testado com dados sintéticos (regras puras no Windows; ponta a ponta com torch no notebook); rascunho a rodar nos artefatos; congelamento bloqueado até as margens, a unidade do bootstrap e as pendências |
-| script de pontuação e relatório do G7 | a escrever |
-| Brier, sanidade no fold 0 | a escrever (a sanidade no fold 0 fica para depois do congelamento) |
-| baselines diagnósticas | conferência de cobertura e proveniência escrita (`scripts/conferir_cobertura_das_baselines.py`), a rodar; depois escrever no consumidor |
+| script de pontuação e relatório do G7 (`scripts/avaliar_estudos.py`) | escrito; ensaio testado no Windows; modo real testado com torch no notebook |
+| Brier e baselines diagnósticas | escritos (`estudos.py`, `baselines.py`); testes do notebook pendentes |
+| sanidade no fold 0 | a escrever, depois do congelamento |

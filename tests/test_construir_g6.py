@@ -1,7 +1,8 @@
-"""Construtor do G6 de ponta a ponta sobre caches SINTETICOS: G5, os tres comparadores, as tres conferencias e o
-construtor, na ordem do notebook. Precisa de torch.
+"""G6 e G7 de ponta a ponta sobre caches SINTETICOS: G5, os tres comparadores, as tres conferencias, o construtor
+do G6 e, depois do congelamento, a extracao (so conferir) e a avaliacao REAL dos estudos, na ordem do notebook.
+Precisa de torch (e, para o G7, do repositorio do Mosaic e de pyyaml).
 
-    PYTHONPATH=. REQUIRE_NO_SKIP=1 python3 tests/test_construir_g6.py
+    PYTHONPATH=. REQUIRE_NO_SKIP=1 MOSAIC_ROOT=~/testeArq/lumina-mosaic python3 tests/test_construir_g6.py
 """
 from __future__ import annotations
 
@@ -41,6 +42,18 @@ def _exige_torch():
         raise Skip(f"sem torch: {MOTIVO}")
 
 
+def _raiz_do_mosaic():
+    for candidata in (os.environ.get("MOSAIC_ROOT"), Path.home() / "testeArq" / "lumina-mosaic",
+                      RAIZ.parent / "lumina-mosaic"):
+        if candidata and (Path(candidata).expanduser() / "src" / "mosaic" / "hashing.py").exists():
+            return Path(candidata).expanduser()
+    return None
+
+
+def _codigo_limpo(_arquivos):
+    return {"revisao": "0" * 40, "ausentes": [], "nao_rastreados": [], "modificados": [], "erro": None}
+
+
 def _tabela():
     rng = np.random.default_rng(0)
     papeis = ["train"] * 360 + ["validation"] * 120 + ["selecao"] * 120
@@ -70,7 +83,8 @@ def _cache(pasta: Path, *, semente_do_adapter, tabela, sinal, campanha, rng_seed
                   "codigo": {"arquivos": {"x.py": "1"}}, "ambiente": {"gpu": "sintetica"},
                   "checkpoint_sha256": campanha["adapter_do_mr"]["referencia"]["checkpoint_sha256"],
                   "adapter_sha256": adapter_congelado(campanha, semente_do_adapter)["sha256"] if mr else None,
-                  "semente_do_adapter": semente_do_adapter}
+                  "semente_do_adapter": semente_do_adapter, "janela_bp": 4096, "lote": {"variantes_por_lote": 8},
+                  "fragmento": 4096}
     (pasta / "identidade.json").write_text(json.dumps(identidade), encoding="utf-8")
     (pasta / "manifesto.json").write_text(json.dumps({"completo": True}), encoding="utf-8")
     tabela.to_parquet(pasta / "tabela.parquet", index=False)
@@ -82,7 +96,8 @@ def _regra(**extra):
     return {"estudos": ["br_clinical_evidence"], "metrica": "auroc", "estatistica": "p2_5", **extra}
 
 
-def _campanha_do_teste(tabela, destino: Path, *, selecao_comum: Path, resolvida=False, abraom_sha=None) -> Path:
+def _campanha_do_teste(tabela, destino: Path, *, selecao_comum: Path, checkpoint_sha: str, resolvida=False,
+                       abraom_sha=None, release_do_mosaic=None) -> Path:
     """A declaracao real com as contagens e o hash da selecao sintetica; `resolvida` fecha margens, bootstrap e
     pendencias com CONTEUDO (exemplo sintetico, nao proposta de margem)."""
     campanha = json.loads((RAIZ / "configs" / "campanha_r03_desenvolvimento.json").read_text(encoding="utf-8"))
@@ -91,6 +106,9 @@ def _campanha_do_teste(tabela, destino: Path, *, selecao_comum: Path, resolvida=
         variantes=int(len(selecao)), clusters=int(selecao["overlap_cluster_id"].nunique()),
         sha256_prefixo=hashlib.sha256(selecao_comum.read_bytes()).hexdigest()[:8])
     campanha["recortes"]["parada_e_calibracao"]["variantes"] = int((tabela["papel"] == "validation").sum())
+    campanha["adapter_do_mr"]["referencia"]["checkpoint_sha256"] = checkpoint_sha
+    if release_do_mosaic is not None:
+        campanha["g6"]["proveniencia"]["release_do_mosaic"]["logical_hash"] = release_do_mosaic
     if resolvida:
         campanha["g6"]["margens"] = {
             "estado": "DECLARADO (teste sintetico)",
@@ -120,7 +138,11 @@ def _montar(raiz: Path, tabela) -> dict:
 
     selecao_comum = raiz / "selecao_comum.parquet"
     tabela.loc[tabela["papel"] == "selecao", ["variant_id"]].to_parquet(selecao_comum, index=False)
-    configuracao = _campanha_do_teste(tabela, raiz / "campanha.json", selecao_comum=selecao_comum)
+    checkpoint = raiz / "r03_sintetico.pt"
+    checkpoint.write_bytes(b"R03 sintetico")
+    checkpoint_sha = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    configuracao = _campanha_do_teste(tabela, raiz / "campanha.json", selecao_comum=selecao_comum,
+                                      checkpoint_sha=checkpoint_sha)
     campanha = carregar_campanha(configuracao)
     caches = {"M0": raiz / "g3_cache" / "M0"}
     _cache(caches["M0"], semente_do_adapter=None, tabela=tabela, sinal=1.0, campanha=campanha, rng_seed=7)
@@ -152,8 +174,17 @@ def _montar(raiz: Path, tabela) -> dict:
                                  "--cache-mr", str(caches[semente]), "--decisao-g5", str(decisao),
                                  "--campanha", str(configuracao), *referencia]) == 0
     politica = json.loads(decisao.read_text(encoding="utf-8"))["decisao"]["politica"]
+    entradas = {"regra_ampla": raiz / "regra_ampla.txt", "exposicao": raiz / "exposicao.parquet"}
+    entradas["regra_ampla"].write_text("ninguem\n", encoding="utf-8")
+    pd.DataFrame({"variant_id": ["ninguem"], "study_id": ["br_clinical_evidence"], "n_janela": [0]}).to_parquet(
+        entradas["exposicao"], index=False)
     return {"caches": caches, "decisao": decisao, "snapshot": snapshots[politica], "campanha": configuracao,
-            "selecao_comum": selecao_comum}
+            "selecao_comum": selecao_comum, "checkpoint": checkpoint, "checkpoint_sha": checkpoint_sha,
+            "entradas": entradas}
+
+
+def _entradas(montado: dict) -> list[str]:
+    return [a for nome, caminho in montado["entradas"].items() for a in ("--entrada", f"{nome}={caminho}")]
 
 
 def _argumentos(raiz: Path, montado: dict, caches: dict | None = None) -> list[str]:
@@ -206,13 +237,15 @@ def test_construtor_de_ponta_a_ponta():
         abraom.write_text("chrom\tpos\tref\talt\taf_abraom\n", encoding="utf-8")
         resolvida = _campanha_do_teste(tabela, raiz / "campanha_resolvida.json",
                                        selecao_comum=montado["selecao_comum"], resolvida=True,
+                                       checkpoint_sha=montado["checkpoint_sha"],
                                        abraom_sha=hashlib.sha256(abraom.read_bytes()).hexdigest())
         original = construtor.estado_do_codigo
         construtor.estado_do_codigo = lambda arquivos: {"revisao": "0" * 40, "ausentes": [], "nao_rastreados": [],
                                                         "modificados": [], "erro": None}
         try:
             assert construtor.main([*_argumentos(raiz, montado), "--campanha", str(resolvida), "--proveniencia",
-                                    f"abraom={abraom}", "--congelar", "--out-dir", str(raiz / "g6_c")]) == 0
+                                    f"abraom={abraom}", *_entradas(montado), "--congelar",
+                                    "--out-dir", str(raiz / "g6_c")]) == 0
         finally:
             construtor.estado_do_codigo = original
         manifesto, sha = g6.ler_manifesto_congelado(raiz / "g6_c")
@@ -234,7 +267,8 @@ def test_construtor_de_ponta_a_ponta():
         construtor._git = git_que_falha
         try:
             assert construtor.main([*_argumentos(raiz, montado), "--campanha", str(resolvida), "--proveniencia",
-                                    f"abraom={abraom}", "--congelar", "--out-dir", str(raiz / "g6_c2")]) == 2
+                                    f"abraom={abraom}", *_entradas(montado), "--congelar",
+                                    "--out-dir", str(raiz / "g6_c2")]) == 2
         finally:
             construtor._git = original
         construcao_c2 = json.loads((raiz / "g6_c2" / "g6_construcao.json").read_text(encoding="utf-8"))
@@ -265,6 +299,136 @@ def test_construtor_de_ponta_a_ponta():
         assert construtor.main([*_argumentos(raiz, montado), "--campanha", str(raiz / "campanha_errada.json"),
                                 "--out-dir", str(raiz / "g6_g")]) == 2
         assert not (raiz / "g6_g").exists()
+
+
+def _estudos(raiz: Path, montado: dict, mosaic: Path) -> dict:
+    """Membership sintetica, release minimo (hash logico do proprio Mosaic), entradas das analises secundarias e os
+    caches dos ESTUDOS no formato do extrator: identidade = a do desenvolvimento do mesmo sistema menos a tabela."""
+    import importlib.util
+
+    import pyarrow.parquet as pq
+
+    from eval.campanha import cache as cache_io
+    from eval.campanha import g7
+    from eval.campanha.recortes import hash_da_tabela, hash_do_conteudo
+    from scripts import conferir_cobertura_das_baselines as cobertura
+
+    especificacao = importlib.util.spec_from_file_location("teste_g7", RAIZ / "tests" / "test_campanha_g7.py")
+    teste_g7 = importlib.util.module_from_spec(especificacao)
+    especificacao.loader.exec_module(teste_g7)
+    sys.path.insert(0, str(mosaic / "src"))
+    from mosaic.hashing import logical_contract
+
+    membros = teste_g7.membros_sinteticos(n_pares=40)
+    membros.to_parquet(raiz / "brazil_study_variants.parquet", index=False)
+    release = raiz / "mosaic_release"
+    (release / "studies" / "brazil").mkdir(parents=True)
+    membros.drop(columns=["chrom", "pos_1based", "ref", "alt"]).assign(
+        stratum="x", gnomad_af_bin="rare", core_fold=2, br_lab_any=False).to_parquet(release / cobertura.MEMBERSHIP,
+                                                                                    index=False)
+    teste_g7.anotacoes_sinteticas(membros).to_parquet(release / cobertura.ANOTACOES, index=False)
+    referencia = {caminho: {k: v for k, v in logical_contract(pq.read_table(release / caminho), chave).items()
+                            if k in ("n", "logical_hash")} for caminho, chave in cobertura.CHAVES.items()}
+    controles = membros[(membros["study_id"] == "br_clinical_evidence") & (membros["member_role"] == "control")]
+    montado["entradas"]["regra_ampla"].write_text("\n".join(controles["variant_id"].iloc[:2]) + "\n", encoding="utf-8")
+    pd.DataFrame({"variant_id": membros["variant_id"], "study_id": membros["study_id"],
+                  "n_janela": np.arange(len(membros)) % 2}).to_parquet(montado["entradas"]["exposicao"], index=False)
+
+    tabela = g7.tabela_dos_estudos(membros)
+    y = tabela["binary_label"].to_numpy().astype(np.float32)
+    caches = {}
+    for i, chave in enumerate(["M0", *SEMENTES]):
+        pasta = raiz / "g7_cache" / str(chave)
+        pasta.mkdir(parents=True)
+        dev = json.loads((montado["caches"][chave] / "identidade.json").read_text(encoding="utf-8"))
+        identidade = dict(dev, tabela_sha256_conteudo=hash_do_conteudo(tabela),
+                          tabela_sha256_composicao=hash_da_tabela(tabela), papeis=["estudo"])
+        rng = np.random.default_rng(100 + i)
+        matrizes = {}
+        for nome, dims in (("cabecas_172", 172), ("leitura_antiga_1344", 1344)):
+            base = rng.normal(size=(len(tabela), dims)).astype(np.float32)
+            base[:, 0] += (1.0 + 0.1 * i) * (2 * y - 1)
+            matrizes[nome] = base
+        (pasta / "identidade.json").write_text(json.dumps(identidade), encoding="utf-8")
+        (pasta / "manifesto.json").write_text(json.dumps({"completo": True}), encoding="utf-8")
+        tabela.to_parquet(pasta / "tabela.parquet", index=False)
+        cache_io.gravar_fragmento(pasta, 0, variant_id=tabela["variant_id"].to_numpy().astype(str),
+                                  papel=tabela["papel"].to_numpy().astype(str), matrizes=matrizes)
+        caches[chave] = pasta
+    return {"membros": raiz / "brazil_study_variants.parquet", "release": release, "referencia": referencia,
+            "caches": caches, "tabela": tabela}
+
+
+def test_g7_real_de_ponta_a_ponta():
+    """G6 congelado -> extracao (so conferir) -> avaliacao REAL dos estudos com as cabecas congeladas."""
+    _exige_torch()
+    mosaic = _raiz_do_mosaic()
+    if mosaic is None:
+        raise Skip("sem o repositorio do Mosaic (MOSAIC_ROOT)")
+    from eval.campanha import g6
+    from eval.campanha.cabeca import carregar_cabeca_salva, pontuar_salva
+    from eval.campanha.leitura_do_cache import carregar_cache
+    from scripts import avaliar_estudos as avaliar
+    from scripts import construir_g6 as construtor
+    from scripts import extrair_estudos as extrator
+
+    tabela = _tabela()
+    with tempfile.TemporaryDirectory() as pasta:
+        raiz = Path(pasta)
+        montado = _montar(raiz, tabela)
+        e = _estudos(raiz, montado, mosaic)
+        abraom = raiz / "abraom.tsv"
+        abraom.write_text("chrom\tpos\tref\talt\taf_abraom\n", encoding="utf-8")
+        resolvida = _campanha_do_teste(tabela, raiz / "campanha_g7.json", selecao_comum=montado["selecao_comum"],
+                                       checkpoint_sha=montado["checkpoint_sha"], resolvida=True,
+                                       abraom_sha=hashlib.sha256(abraom.read_bytes()).hexdigest(),
+                                       release_do_mosaic=e["referencia"])
+        originais = (construtor.estado_do_codigo, avaliar.estado_do_codigo)
+        construtor.estado_do_codigo = avaliar.estado_do_codigo = _codigo_limpo
+        try:
+            assert construtor.main([*_argumentos(raiz, montado), "--campanha", str(resolvida), "--proveniencia",
+                                    f"abraom={abraom}", *_entradas(montado), "--congelar",
+                                    "--out-dir", str(raiz / "g6_final")]) == 0
+            manifesto, _sha = g6.ler_manifesto_congelado(raiz / "g6_final")
+            assert set(manifesto["entradas_das_analises_secundarias"]) == {"regra_ampla", "exposicao"}
+
+            extracao = ["--manifesto", str(raiz / "g6_final"), "--membros", str(e["membros"]), "--checkpoint",
+                        str(montado["checkpoint"]), "--fasta", str(raiz / "hg38_ausente.fa"), "--campanha", str(resolvida),
+                        "--so-conferir"]
+            assert extrator.main([*extracao, "--sistema", "M0", "--out-dir", str(raiz / "x")]) == 0
+            assert extrator.main([*extracao, "--sistema", "MR", "--out-dir", str(raiz / "x")]) == 2, \
+                "MR sem semente"
+
+            caches = [a for chave, p in e["caches"].items() for a in ("--cache-estudos", f"{chave}={p}")]
+            g7_args = ["--manifesto", str(raiz / "g6_final"), "--raiz", str(raiz), *caches, "--release-root",
+                       str(e["release"]), "--mosaic-root", str(mosaic), *_entradas(montado), "--campanha",
+                       str(resolvida), "--replicas", "10"]
+            assert avaliar.main([*g7_args, "--out-dir", str(raiz / "g7")]) == 0
+            relatorio = json.loads((raiz / "g7" / "g7_relatorio.json").read_text(encoding="utf-8"))
+            assert relatorio["modo"] == "REAL" and relatorio["margens"]["avaliado"]
+            assert relatorio["limiares"]["base"] == manifesto["sistemas"]["base"]["limiar"]["threshold"]
+
+            # A probabilidade do sistema base e a media das tres cabecas congeladas sobre o cache dos estudos do M0.
+            pontos = pd.read_parquet(raiz / "g7" / "g7_pontos.parquet").set_index("variant_id")
+            cache = carregar_cache(e["caches"]["M0"], manifesto["extracao_dos_caches"]["extracao"])
+            refeitas = [pontuar_salva(carregar_cabeca_salva(raiz / c["arquivo"]), cache["matriz"])[1]
+                        for c in manifesto["sistemas"]["base"]["componentes"]]
+            esperado = pd.Series(np.mean(refeitas, axis=0), index=cache["tabela"]["variant_id"].astype(str))
+            assert np.allclose(pontos["prob_base"].reindex(esperado.index), esperado, rtol=0, atol=1e-12)
+
+            # Adulteracoes: ambiente diferente num cache dos estudos, caches de adapter trocados, entrada mudada.
+            ident = e["caches"][SEMENTES[1]] / "identidade.json"
+            guardada = ident.read_text(encoding="utf-8")
+            ident.write_text(json.dumps(dict(json.loads(guardada), ambiente={"gpu": "outra"})), encoding="utf-8")
+            assert avaliar.main([*g7_args, "--out-dir", str(raiz / "g7_b")]) == 2
+            ident.write_text(guardada, encoding="utf-8")
+            trocados = [a.replace(f"{SEMENTES[1]}={e['caches'][SEMENTES[1]]}", f"{SEMENTES[1]}={e['caches'][SEMENTES[2]]}")
+                        for a in g7_args]
+            assert avaliar.main([*trocados, "--out-dir", str(raiz / "g7_c")]) == 2
+            montado["entradas"]["regra_ampla"].write_text("outra lista\n", encoding="utf-8")
+            assert avaliar.main([*g7_args, "--out-dir", str(raiz / "g7_d")]) == 2
+        finally:
+            construtor.estado_do_codigo, avaliar.estado_do_codigo = originais
 
 
 if __name__ == "__main__":

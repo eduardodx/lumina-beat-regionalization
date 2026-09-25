@@ -190,6 +190,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--snapshot-da-politica", required=True, type=Path,
                         help="o core_head_snapshot.parquet da politica escolhida no G5")
     parser.add_argument("--selecao", required=True, type=Path, help="g5_comum/selecao_comum.parquet")
+    parser.add_argument("--entrada", action="append", default=[],
+                        help="nome=arquivo de entrada das analises secundarias (regra_ampla, exposicao)")
     parser.add_argument("--proveniencia", action="append", default=[],
                         help="nome=arquivo para reconferir (abraom, pool_abraom, pool_global, plano, plano_treino, "
                              "plano_validacao)")
@@ -283,6 +285,15 @@ def main(argv: list[str] | None = None) -> int:
 
     proveniencia, problemas_de_proveniencia = conferir_proveniencia(
         campanha, ler_pares(args.proveniencia, "--proveniencia"))
+    entradas = {}
+    for nome, caminho in ler_pares(args.entrada, "--entrada").items():
+        if nome not in g6.ENTRADAS_DAS_ANALISES_SECUNDARIAS:
+            problemas_de_proveniencia.append(f"--entrada {nome}: fora de {sorted(g6.ENTRADAS_DAS_ANALISES_SECUNDARIAS)}")
+        elif not caminho.exists():
+            problemas_de_proveniencia.append(f"--entrada {nome}: {caminho} nao existe")
+        else:
+            entradas[nome] = {"arquivo": str(caminho), "sha256": sha256_do_arquivo(caminho),
+                              "descricao": g6.ENTRADAS_DAS_ANALISES_SECUNDARIAS[nome]}
     if problemas_de_proveniencia:
         return _falhar(problemas_de_proveniencia)
 
@@ -408,7 +419,7 @@ def main(argv: list[str] | None = None) -> int:
     arquivos_de_codigo = sorted(set(g6.CODIGO_DO_G6) | set(g6.CODIGO_DO_G7))
     codigo = {**estado_do_codigo(arquivos_de_codigo),
               "arquivos": {a: sha256_do_arquivo(RAIZ / a) for a in arquivos_de_codigo if (RAIZ / a).exists()}}
-    bloqueios = g6.bloqueios(campanha, estado_do_codigo=codigo, proveniencia=proveniencia)
+    bloqueios = g6.bloqueios(campanha, estado_do_codigo=codigo, proveniencia=proveniencia, entradas=entradas)
     fold1 = {"papel": "validation", "descricao": "fold 1 gold (validation_gold do run 0)",
              "variantes": int(len(ids["validation"])), "n_P": int(rotulos["validation"].sum()),
              "n_B": int((rotulos["validation"] == 0).sum()), "ids_sha256": g6.sha256_dos_ids(ids["validation"]),
@@ -462,6 +473,7 @@ def main(argv: list[str] | None = None) -> int:
                              "m0_de_referencia": (conferencias[nome].get("m0_de_referencia") or {}).get("cabecas")}
                       for nome in nomes},
         proveniencia=proveniencia, codigo=codigo, ambiente_da_pontuacao=ambiente_da_pontuacao(),
+        entradas=entradas, raiz_dos_comparadores=str(raiz),
         modulos=len(superficie), bloqueios_atuais=bloqueios,
         criado_em_utc=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     (destino / g6.NOME_DO_RASCUNHO).write_bytes(g6.serializar(g6.montar_manifesto(campanha, **comum)))

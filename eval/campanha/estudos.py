@@ -34,7 +34,10 @@ O QUE O MOSAIC NAO DEFINE E FICA DECLARADO AQUI (plano, secao 6.3; PROPOSTO ate 
     - sensibilidades pre-declaradas (plano 6.4 e achado de 20/09), sempre sem desfazer pares -- o controle sai junto
       com o seu caso: pares com caso E controle fora do ABraOM; sem os pares cujo controle tem SCV brasileira (regra
       ampla); pares com exposicao de locus empatada; e, se a cobertura desfizer pares, so os pares completos. Entrada
-      ausente nao faz a analise sumir: ela sai marcada como nao calculada, com o motivo.
+      ausente nao faz a analise sumir: ela sai marcada como nao calculada, com o motivo;
+    - Brier, so dos SISTEMAS e so sobre probabilidades calibradas (`com_brier`); nunca sobre um score de ordenacao;
+    - baselines (`avaliar_baseline`): scores FORA dos sistemas, com metricas absolutas na propria cobertura; score
+      constante num coorte nao discrimina por construcao e sai sem metrica, com o motivo.
 """
 from __future__ import annotations
 
@@ -151,6 +154,12 @@ def continuas(y: np.ndarray, s: np.ndarray) -> dict[str, float | None]:
     return {"auroc": metricas.auroc(s, y), "auprc": metricas.auprc(s, y)}
 
 
+def brier(y: np.ndarray, p: np.ndarray) -> float | None:
+    """Media de (p - y)^2 sobre PROBABILIDADES calibradas; None sem linha. Menor e melhor."""
+    y, p = np.asarray(y, dtype=float), np.asarray(p, dtype=float)
+    return float(np.mean((p - y) ** 2)) if y.size else None
+
+
 def com_limiar(y: np.ndarray, s: np.ndarray, limiar: float) -> dict[str, float | None]:
     """MCC, sensibilidade e especificidade com a regra do Mosaic (`score >= limiar`; MCC 0 com denominador 0)."""
     y = np.asarray(y, dtype=int)
@@ -171,10 +180,16 @@ def _delta(a: float | None, b: float | None) -> float | None:
     return None if a is None or b is None else float(b - a)
 
 
+def _chaves(limiares: dict[str, float] | None, com_brier: bool) -> tuple[str, ...]:
+    return (CONTINUAS + (("brier",) if com_brier else ())
+            + (("mcc", "sensitivity", "specificity") if limiares is not None else ()))
+
+
 def comparar(y: np.ndarray, base: np.ndarray, regionalizado: np.ndarray,
-             limiares: dict[str, float] | None = None) -> dict[str, Any]:
+             limiares: dict[str, float] | None = None, *, com_brier: bool = False) -> dict[str, Any]:
     """Cada sistema na INTERSECAO de cobertura e o delta regionalizado - base; a cobertura de cada sistema no
-    proprio coorte vem a parte, porque variante sem score conta como nao coberta."""
+    proprio coorte vem a parte, porque variante sem score conta como nao coberta. No Brier, delta NEGATIVO e
+    melhora."""
     y = np.asarray(y, dtype=int)
     base, regionalizado = np.asarray(base, dtype=float), np.asarray(regionalizado, dtype=float)
     ambos = np.isfinite(base) & np.isfinite(regionalizado)
@@ -183,10 +198,11 @@ def comparar(y: np.ndarray, base: np.ndarray, regionalizado: np.ndarray,
                                            REGIONALIZADO: suporte(y, np.isfinite(regionalizado))}}
     for sistema, s in ((BASE, base), (REGIONALIZADO, regionalizado)):
         saida[sistema] = continuas(y[ambos], s[ambos])
+        if com_brier:
+            saida[sistema]["brier"] = brier(y[ambos], s[ambos])
         if limiares is not None:
             saida[sistema].update(com_limiar(y[ambos], s[ambos], limiares[sistema]))
-    chaves = CONTINUAS + (("mcc", "sensitivity", "specificity") if limiares is not None else ())
-    saida["delta"] = {k: _delta(saida[BASE][k], saida[REGIONALIZADO][k]) for k in chaves}
+    saida["delta"] = {k: _delta(saida[BASE][k], saida[REGIONALIZADO][k]) for k in _chaves(limiares, com_brier)}
     return saida
 
 
@@ -240,7 +256,7 @@ def _arrays(frame: pd.DataFrame, pontos: dict[str, pd.Series]) -> dict[str, np.n
 
 def analise_do_coorte(frame: pd.DataFrame, pontos: dict[str, pd.Series], *, replicas: int = REPLICAS,
                       seed: int = SEED, limiares: dict[str, float] | None = None,
-                      por_painel: bool = False) -> dict[str, Any]:
+                      por_painel: bool = False, com_brier: bool = False) -> dict[str, Any]:
     """Um coorte: sistemas e delta na intersecao, com IC do bootstrap pareado por cluster (os MESMOS sorteios para
     os dois sistemas). Com `por_painel`, repete por painel (diagnostico) e mede o delta SEM cada painel com suporte
     -- a informacao da condicao "beneficio nao explicado por um unico painel"."""
@@ -257,7 +273,8 @@ def analise_do_coorte(frame: pd.DataFrame, pontos: dict[str, pd.Series], *, repl
         saida = {}
         for nome, mascara in celulas.items():
             linhas = indices[mascara[indices]]
-            resultado = comparar(a["y"][linhas], a[BASE][linhas], a[REGIONALIZADO][linhas], limiares)
+            resultado = comparar(a["y"][linhas], a[BASE][linhas], a[REGIONALIZADO][linhas], limiares,
+                                 com_brier=com_brier)
             painel = nome[len("painel:"):] if nome.startswith("painel:") else None
             if painel is not None and painel not in PAINEIS_DE_DISCRIMINACAO:
                 # Como no Mosaic: AUROC e AUPRC so nos paineis de discriminacao; plof e synonymous sao guarda
@@ -271,7 +288,7 @@ def analise_do_coorte(frame: pd.DataFrame, pontos: dict[str, pd.Series], *, repl
     acumulador = _Acumulador()
     todas = grupos(a["clusters"])
     rng = np.random.default_rng(seed)
-    chaves = CONTINUAS + (("mcc", "sensitivity", "specificity") if limiares is not None else ())
+    chaves = _chaves(limiares, com_brier)
     for _ in range(replicas):
         replica = medir(sortear(todas, rng))
         for nome, resultado in replica.items():
@@ -466,12 +483,15 @@ def avaliar_estudo(membros: pd.DataFrame, estudo: str, pontos: dict[str, pd.Seri
                    limiares: dict[str, float] | None = None,
                    controles_com_scv_brasileira: set[str] | None = None,
                    exposicao: pd.Series | None = None, tolerancia_de_exposicao: int = 0,
+                   com_brier: bool = False,
                    progresso: Callable[[str], None] | None = None) -> dict[str, Any]:
     """Tudo o que o protocolo pede de UM estudo, mais as analises secundarias declaradas para ele.
 
     `pontos[sistema]` e uma Series indexada por `variant_id` com a probabilidade do sistema congelado; variante
     ausente ou NaN conta como nao pontuada (cobertura), nunca e imputada. `controles_com_scv_brasileira` e a lista
     da regra ampla (G2); `exposicao` e o `n_janela` por membro no snapshot final, com o raio declarado no G6.
+    `com_brier` exige probabilidades em [0, 1]. Os tres coortes saem com as celulas por painel e sem cada painel:
+    as margens podem pedir painel em qualquer um deles.
     """
     avisar = progresso or (lambda _texto: None)
     for sistema in SISTEMAS:
@@ -479,6 +499,9 @@ def avaliar_estudo(membros: pd.DataFrame, estudo: str, pontos: dict[str, pd.Seri
             raise EstudoInvalido(f"sem scores do sistema {sistema!r}")
         if pontos[sistema].index.has_duplicates:
             raise EstudoInvalido(f"scores do sistema {sistema!r} com variant_id repetido")
+        valores = pontos[sistema].to_numpy(dtype=float)
+        if com_brier and ((valores[np.isfinite(valores)] < 0) | (valores[np.isfinite(valores)] > 1)).any():
+            raise EstudoInvalido(f"Brier so sobre probabilidades: {sistema!r} tem score fora de [0, 1]")
     v = visoes(membros, estudo)
     completo, casos, controles = v[COORTE_COMPLETO], v[CASOS_PAREADOS], v[CONTROLES]
     saida: dict[str, Any] = {
@@ -488,14 +511,19 @@ def avaliar_estudo(membros: pd.DataFrame, estudo: str, pontos: dict[str, pd.Seri
                        "taxa_de_pareamento": len(casos) / len(completo) if len(completo) else None},
         "metricas_com_limiar": ("com o limiar do ensemble congelado no G6" if limiares is not None
                                 else "omitidas: sem limiar externo congelado"),
+        "brier": ("sobre as probabilidades calibradas do ensemble (cada cabeca calibrada no fold 1 do core_locus); "
+                  "delta regionalized - base NEGATIVO e melhora; a prevalencia do estudo difere da do fold 1 e pesa no "
+                  "valor absoluto, nao na comparacao entre os sistemas no mesmo coorte" if com_brier
+                  else "nao calculado"),
         "coortes": {},
     }
     avisar(f"{estudo}: coorte completo")
     saida["coortes"][COORTE_COMPLETO] = analise_do_coorte(completo, pontos, replicas=replicas, seed=seed,
-                                                          limiares=limiares, por_painel=True)
+                                                          limiares=limiares, por_painel=True, com_brier=com_brier)
     for nome, frame in ((CASOS_PAREADOS, casos), (CONTROLES, controles)):
         avisar(f"{estudo}: {nome}")
-        saida["coortes"][nome] = analise_do_coorte(frame, pontos, replicas=replicas, seed=seed, limiares=limiares)
+        saida["coortes"][nome] = analise_do_coorte(frame, pontos, replicas=replicas, seed=seed, limiares=limiares,
+                                                   por_painel=True, com_brier=com_brier)
     avisar(f"{estudo}: interacao")
     saida["interacao"] = interacao(casos, controles, pontos, replicas=replicas, seed=seed)
 
@@ -506,10 +534,104 @@ def avaliar_estudo(membros: pd.DataFrame, estudo: str, pontos: dict[str, pd.Seri
             "present_abraom": {
                 "exigido_por": "Mosaic (source_overlap_by_study: report_present_abraom_overlap)",
                 "coorte": "coorte completo com present_abraom = true",
-                **analise_do_coorte(presentes, pontos, replicas=replicas, seed=seed, limiares=limiares)},
+                **analise_do_coorte(presentes, pontos, replicas=replicas, seed=seed, limiares=limiares,
+                                    com_brier=com_brier)},
         }
     avisar(f"{estudo}: sensibilidades")
     saida["sensibilidades"] = sensibilidades(estudo, casos, controles, pontos, replicas=replicas, seed=seed,
                                              controles_com_scv_brasileira=controles_com_scv_brasileira,
                                              exposicao=exposicao, tolerancia_de_exposicao=tolerancia_de_exposicao)
     return saida
+
+
+# ------------------------------------------------------------------------------------------------ baselines
+
+def _um_score(frame: pd.DataFrame, score: pd.Series) -> dict[str, np.ndarray]:
+    ids = frame["variant_id"].astype(str)
+    return {"y": frame["binary_label"].astype(int).to_numpy(), "s": score.reindex(ids).to_numpy(dtype=float),
+            "clusters": frame["overlap_cluster_id"].astype(str).to_numpy(),
+            "paineis": frame["primary_panel"].astype(str).to_numpy()}
+
+
+def _metricas_de_um_score(y: np.ndarray, s: np.ndarray) -> dict[str, Any]:
+    """AUROC e AUPRC na cobertura do proprio score. Score constante na cobertura nao discrimina por construcao."""
+    coberto = np.isfinite(s)
+    if np.unique(s[coberto]).size <= 1:
+        return {"auroc": None, "auprc": None, "constante": True}
+    return {**continuas(y[coberto], s[coberto]), "constante": False}
+
+
+def avaliar_score_unico(frame: pd.DataFrame, score: pd.Series, *, replicas: int = REPLICAS,
+                        seed: int = SEED) -> dict[str, Any]:
+    """Um score FORA dos sistemas num coorte: suporte, AUROC e AUPRC na propria cobertura (coorte e paineis de
+    discriminacao), com IC por cluster. Sem Brier: uma baseline e score de ordenacao, nao probabilidade."""
+    a = _um_score(frame, score)
+    celulas = {"coorte": np.ones(len(frame), dtype=bool)}
+    for painel in PAINEIS_DE_DISCRIMINACAO:
+        if (a["paineis"] == painel).any():
+            celulas[f"painel:{painel}"] = a["paineis"] == painel
+
+    def medir(indices: np.ndarray) -> dict[str, dict[str, Any]]:
+        return {nome: _metricas_de_um_score(a["y"][indices[m[indices]]], a["s"][indices[m[indices]]])
+                for nome, m in celulas.items()}
+
+    observado = medir(np.arange(len(frame)))
+    acumulador, rng = _Acumulador(), np.random.default_rng(seed)
+    todas = grupos(a["clusters"])
+    for _ in range(replicas):
+        for nome, resultado in medir(sortear(todas, rng)).items():
+            for chave in CONTINUAS:
+                acumulador.guardar((nome, chave), resultado[chave])
+    saida: dict[str, Any] = {"composicao": composicao(frame)}
+    for nome, resultado in observado.items():
+        saida[nome] = {"suporte": suporte(a["y"][celulas[nome]], np.isfinite(a["s"][celulas[nome]])),
+                       "constante": resultado["constante"],
+                       **{chave: {"estimativa": resultado[chave], **acumulador.intervalo((nome, chave))}
+                          for chave in CONTINUAS}}
+        if resultado["constante"]:
+            saida[nome]["motivo"] = "score constante na cobertura: nao discrimina por construcao"
+    return saida
+
+
+def diferenca_entre_grupos(casos: pd.DataFrame, controles: pd.DataFrame, score: pd.Series, *,
+                           replicas: int = REPLICAS, seed: int = SEED) -> dict[str, Any]:
+    """AUROC/AUPRC do MESMO score nos casos pareados menos nos controles, com clusters sorteados em conjunto sobre a
+    uniao. DESCRITIVA: diz se a baseline discrimina diferente nos dois grupos -- contexto para ler a interacao dos
+    sistemas, nao criterio."""
+    ac, ak = _um_score(casos, score), _um_score(controles, score)
+
+    def estimar(ic: np.ndarray, ik: np.ndarray) -> dict[str, float | None]:
+        mc, mk = _metricas_de_um_score(ac["y"][ic], ac["s"][ic]), _metricas_de_um_score(ak["y"][ik], ak["s"][ik])
+        return {k: _delta(mk[k], mc[k]) for k in CONTINUAS}
+
+    observado = estimar(np.arange(len(casos)), np.arange(len(controles)))
+    todas = grupos(np.concatenate([ac["clusters"], ak["clusters"]]))
+    acumulador, rng = _Acumulador(), np.random.default_rng(seed)
+    for _ in range(replicas):
+        indices = sortear(todas, rng)
+        ic, ik = indices[indices < len(casos)], indices[indices >= len(casos)] - len(casos)
+        replica = estimar(ic, ik) if ic.size and ik.size else {}
+        for k in CONTINUAS:
+            acumulador.guardar((k,), replica.get(k))
+    return {"definicao": "metrica nos casos pareados - metrica nos controles, cada uma na cobertura do score",
+            "natureza": "descritiva",
+            **{k: {"estimativa": observado[k], **acumulador.intervalo((k,))} for k in CONTINUAS}}
+
+
+def avaliar_baseline(membros: pd.DataFrame, estudo: str, score: pd.Series, *, especificacao: dict[str, Any],
+                     replicas: int = REPLICAS, seed: int = SEED) -> dict[str, Any]:
+    """Uma baseline declarada num estudo: regra, papel e cobertura explicitos; nos tres coortes, metricas absolutas;
+    e a diferenca descritiva entre casos pareados e controles. Estudo em que a baseline nao se aplica por construcao
+    sai com o motivo declarado, sem metrica."""
+    base = {"regra": especificacao["regra"], "papel": especificacao["papel"].get(estudo),
+            "sem_brier": "score de ordenacao, nao probabilidade"}
+    if estudo in especificacao.get("nao_aplicavel", {}):
+        return {**base, "nao_aplicavel": especificacao["nao_aplicavel"][estudo]}
+    if score.index.has_duplicates:
+        raise EstudoInvalido(f"baseline {especificacao['nome']} com variant_id repetido")
+    v = visoes(membros, estudo)
+    return {**base,
+            "coortes": {nome: avaliar_score_unico(frame, score, replicas=replicas, seed=seed)
+                        for nome, frame in v.items()},
+            "diferenca_casos_pareados_menos_controles": diferenca_entre_grupos(
+                v[CASOS_PAREADOS], v[CONTROLES], score, replicas=replicas, seed=seed)}

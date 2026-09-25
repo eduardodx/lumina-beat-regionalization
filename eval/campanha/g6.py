@@ -43,7 +43,14 @@ ESTADOS_RESOLVIDOS = ("FEITO", "RETIRADO")
 CODIGO_DO_G6 = ("eval/campanha/g6.py", "scripts/construir_g6.py", "eval/campanha/cabeca.py",
                 "eval/campanha/metricas.py", "eval/campanha/leitura_do_cache.py", "eval/campanha/recortes.py")
 CODIGO_DO_G7 = ("eval/campanha/estudos.py", "eval/campanha/metricas.py", "eval/campanha/cabeca.py",
-                "eval/campanha/g6.py", "scripts/avaliar_estudos.py")
+                "eval/campanha/g6.py", "eval/campanha/g7.py", "eval/campanha/baselines.py",
+                "scripts/extrair_estudos.py", "scripts/avaliar_estudos.py",
+                "scripts/conferir_cobertura_das_baselines.py")
+#: Entradas das analises secundarias que o G7 le: o sha256 de cada uma vai no manifesto, e o G7 confere.
+ENTRADAS_DAS_ANALISES_SECUNDARIAS = {
+    "regra_ampla": "g2_regra_ampla/broad_brazilian_variant_ids.txt: controles com SCV de instituicao brasileira",
+    "exposicao": "exposicao_por_membro.parquet do snapshot final (janela2048), raio 4.096 (n_janela por membro)",
+}
 
 
 class ManifestoInvalido(ValueError):
@@ -352,7 +359,8 @@ def problemas_do_codigo(estado: dict[str, Any]) -> list[str]:
 
 
 def bloqueios(campanha: dict[str, Any], *, estado_do_codigo: dict[str, Any],
-              proveniencia: dict[str, dict[str, Any]] | None = None) -> list[str]:
+              proveniencia: dict[str, dict[str, Any]] | None = None,
+              entradas: dict[str, dict[str, Any]] | None = None) -> list[str]:
     """O que impede o congelamento, na ordem em que se resolve. Vazio = pode congelar. Pura."""
     g6 = campanha["g6"]
     saida = [f"margens: {p}" for p in problemas_das_margens(g6["margens"])]
@@ -361,6 +369,9 @@ def bloqueios(campanha: dict[str, Any], *, estado_do_codigo: dict[str, Any],
     saida += problemas_do_codigo(estado_do_codigo)
     if not ((proveniencia or {}).get("abraom") or {}).get("confere"):
         saida.append("abraom_snapshot_hash nao reconferido no arquivo (--proveniencia abraom=<SABE1171.Abraom.clean.tsv>)")
+    for nome, descricao in ENTRADAS_DAS_ANALISES_SECUNDARIAS.items():
+        if not ((entradas or {}).get(nome) or {}).get("sha256"):
+            saida.append(f"entrada da analise secundaria sem registro (--entrada {nome}=<arquivo>): {descricao}")
     return saida
 
 
@@ -383,7 +394,9 @@ def montar_manifesto(campanha: dict[str, Any], *, declaracao_sha256: str, decisa
                      extracao: dict[str, Any], limiares: dict[str, dict[str, Any]], fold1: dict[str, Any],
                      conferencias: dict[str, dict[str, Any]], proveniencia: dict[str, dict[str, Any]],
                      codigo: dict[str, Any], ambiente_da_pontuacao: dict[str, Any], modulos: int,
-                     bloqueios_atuais: list[str], criado_em_utc: str, estado: str = RASCUNHO) -> dict[str, Any]:
+                     bloqueios_atuais: list[str], criado_em_utc: str, estado: str = RASCUNHO,
+                     entradas: dict[str, dict[str, Any]] | None = None,
+                     raiz_dos_comparadores: str | None = None) -> dict[str, Any]:
     """O manifesto do G6: tudo o que o G7 precisa para pontuar o sistema congelado e tudo o que foi aplicado, com o
     que foi reconferido separado do que so esta declarado. O rascunho e o congelado so diferem no `estado`. Pura."""
     if estado not in (RASCUNHO, CONGELADO):
@@ -460,6 +473,8 @@ def montar_manifesto(campanha: dict[str, Any], *, declaracao_sha256: str, decisa
                       "leitura": "ICs condicionais aos sistemas congelados: reamostram variantes (por cluster), nao o "
                                  "treino dos adapters e das cabecas"},
         "analises_secundarias": g6["analises_secundarias"],
+        "entradas_das_analises_secundarias": entradas or {},
+        "raiz_dos_comparadores": raiz_dos_comparadores,
         "pendencias": g6.get("pendencias_antes_do_congelamento", []),
         "codigo": codigo,
         "ambiente_da_pontuacao": ambiente_da_pontuacao,

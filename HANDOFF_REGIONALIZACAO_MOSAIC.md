@@ -984,8 +984,9 @@ ABraOM reconferido no arquivo (o bloqueio sumiu); código sem mudança fora do c
 | M0 = média de h11, h12, h13 | 0,474562 | 0,8878 | 0,9125 | 0,9692 |
 | MR = média de a₁+h11, a₂+h12, a₃+h13 | 0,552163 | 0,8880 | 0,9181 | 0,9663 |
 
-O fold 1 é o mesmo em que as cabeças pararam, foram calibradas e o limiar foi escolhido: esses valores são
-otimistas por construção e servem só de registro do limiar.
+Os limiares estão **calculados e registrados no rascunho**; só congelam com o manifesto definitivo. O MCC no fold 1
+é a quantidade usada no ajuste (o mesmo fold em que as cabeças pararam e foram calibradas), não uma estimativa
+independente de desempenho.
 
 | Ensemble FINAL, conjunto de seleção (exploratório; IC por cluster, 1.000 réplicas) | M0 | MR | Δ [IC] |
 |---|---:|---:|---|
@@ -993,8 +994,9 @@ otimistas por construção e servem só de registro do limiar.
 | AUROC geral | 0,9683 | 0,9679 | −0,0004 [−0,0019; +0,0010] |
 | AUPRC | 0,9228 | 0,9210 | −0,0018 [−0,0051; +0,0018] |
 
-Painéis (AUROC M0 → MR): missense 0,8451 → 0,8421; splice 0,9883 → 0,9880; noncoding 0,9201 → 0,9216; plof com 1
-benigna, sem leitura. Com o limiar do fold 1, na seleção: M0 MCC 0,7319 (sens. 0,9460, esp. 0,8621); MR MCC 0,7403
+Painéis (AUROC M0 → MR): missense 0,8451 → 0,8421 (−0,0030); splice 0,9883 → 0,9880 (−0,0003); noncoding
+0,9201 → 0,9216 (**+0,0015**); plof com 1 benigna, sem leitura. No ensemble final **não** houve queda em todos os
+painéis — a leitura dos arranjos por adapter não se transporta para ele. Com o limiar do fold 1, na seleção: M0 MCC 0,7319 (sens. 0,9460, esp. 0,8621); MR MCC 0,7403
 (0,9310; 0,8766) — a queda em relação ao fold 1 acompanha a outra composição do conjunto (muitas benignas em
 noncoding e synonymous) e o fold 1 ter servido à calibração; é descritivo.
 
@@ -1019,8 +1021,38 @@ a declarada. `gnomad_rarity` definido em **100%** dos membros; `present_abraom` 
 | populacional, unmatched_case | 1.138 | 1.138 / 0 / 0 | 1.138 |
 
 Três fatos de construção, agora medidos: (1) no clínico, casos e controles têm **a mesma** distribuição de status do
-gnomAD (o pareamento casa `gnomad_af_bin`), e 877 de 3.116 (28%) em cada grupo recebem AF 0 pela regra oficial —
-empates grandes no topo do `gnomad_rarity`, que o AUROC trata como meio ponto; (2) a presença no ABraOM é 323 × 71
-(≈ 4,5×, o achado de 20/09); (3) no populacional a presença é 100% nos casos e 0% nos controles, e a raridade no
-ABraOM é constante (0) nos controles. A pendência das baselines passa a `A_ESCREVER` (conferência registrada na
+gnomAD (o pareamento casa `gnomad_af_bin`, que distingue ausência e `ac0`), e 877 de 3.116 (28,1%) em cada grupo
+recebem AF 0 pela regra oficial — empates grandes no topo do `gnomad_rarity`, que o AUROC trata como meio ponto.
+**Cobertura do score não é frequência observada**: 772 são `not_found` (sem registro no gnomAD: o 0 é imputação) e
+105 são `ac0` (sítio chamado com AC 0, status próprio no Mosaic, nem raro nem ausente pela ADR 0003); (2) a
+presença no ABraOM é 323 × 71 (≈ 4,5×, o achado de 20/09), diferença de composição; (3) no populacional a presença é
+100% nos casos e 0% nos controles, e a raridade no ABraOM fica constante (0) nos controles **pela regra de imputação
+declarada** — a frequência deles está ausente, não medida como zero. A pendência das baselines passa a `A_ESCREVER` (conferência registrada na
 declaração).
+
+**Oitava revisão (24/09) e o código do G7.** A revisão aprovou seguir e pediu três precisões, aplicadas acima:
+limiares "calculados e registrados" (não "congelados") até o manifesto definitivo; cobertura do score ≠ frequência
+observada; zero da raridade no ABraOM nos controles = regra de imputação. E um cuidado: **Brier nunca sobre −AF**
+(score de ordenação, não probabilidade).
+
+Escrito, sem tocar nos 12 arquivos da identidade do cache:
+
+| Peça | O que faz |
+|---|---|
+| `eval/campanha/estudos.py` | `com_brier`: Brier (média de (p − y)²) nos três coortes, só dos **sistemas**, recusando score fora de [0, 1]; células por painel e sem cada painel nos **três** coortes (as margens podem pedi-las); `avaliar_baseline`/`avaliar_score_unico`: baseline com métricas absolutas na própria cobertura, **score constante no coorte sai sem métrica** ("não discrimina por construção"), diferença casos pareados − controles descritiva, **sem Brier** |
+| `eval/campanha/baselines.py` | `gnomad_rarity` pelo `comparator_score` do Mosaic; raridade no ABraOM (−`abraom_af`, ausente → 0, regra nossa); ausência no ABraOM só no clínico (no populacional, "não aplicável por construção"); `frequencia_observada` separa medido de imputado |
+| `eval/campanha/g7.py` | tabela dos estudos (uma linha por variante, papel `estudo`, recusa atributo divergente); identidade do cache dos estudos = a de desenvolvimento em tudo menos a tabela; scores **sintéticos** do ensaio; `avaliar_margens`: cada regra declarada aplicada mecanicamente, estudo por estudo, com a unidade principal do bootstrap na interação; estudo sem regra sai "nenhuma regra declarada", nunca "atende" por vacuidade |
+| `scripts/extrair_estudos.py` | exige o G6 congelado e a mesma declaração; parâmetros de janela, lote e fragmento lidos da identidade de desenvolvimento do mesmo sistema; **antes de extrair**, recusa identidade nova que difira da de desenvolvimento além da tabela; `--so-conferir` sem GPU |
+| `scripts/avaliar_estudos.py` | modo real: manifesto congelado, declaração e código do manifesto (sha256 e git), release e entradas conferidos, caches dos estudos conferidos, seis cabeças aplicadas, consumidor com Brier, baselines, margens; modo `--ensaio-sintetico`: o mesmo caminho na membership real com scores sintéticos, sem manifesto nem modelo |
+| `scripts/construir_g6.py` | `--entrada regra_ampla=… --entrada exposicao=…`: sha256 no manifesto, **bloqueio** se faltar; registra a pasta dos comparadores |
+
+**Membros no chr8 entram no G7** (regra declarada, `g7.LEITURA_DO_CHR8`): o Mosaic avalia o membership inteiro, a
+reserva do chr8 é do treino e das janelas, e o G7 é avaliação única. Fica como pendência **a confirmar com o
+Eduardo** junto com a decisão E.
+
+**Testes:** puros no Windows (26 do G6, 18 do G7, 24 do consumidor, 7 da cobertura, 3 do ensaio); com torch, no
+notebook, o ponta a ponta do G6 e um novo do **G7 real** (G6 congelado → extração só-conferir → avaliação com as
+cabeças congeladas, prob. do sistema = média das três, e três adulterações recusadas). Antes de mandar, o mesmo G7
+real rodou aqui com cabeças lineares no lugar do `.pt`: congelou, conferiu, pontuou, a média bateu com as três
+cabeças e as adulterações (ambiente trocado, caches de adapter trocados, entrada mudada) reprovaram pelo motivo
+certo. As pendências escritas ficam `ESCRITO` até os testes do notebook passarem.
