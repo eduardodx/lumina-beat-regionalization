@@ -1303,3 +1303,40 @@ quatro caches estão em `~/artifacts/redesenho/g7_cache/{M0,MR_a1,MR_a2,MR_a3}`:
 sistema, então o ambiente numérico e o FASTA conferem. Velocidade: 0,054 s por variante no M0 e 0,074 no MR, igual ao
 desenvolvimento. A função `passo` do bloco enviado no chat perderia o `exit_` de uma falha sob `set -e`; a do runbook
 (`|| s=$?`) está certa, mas nada falhou. Próximo passo: `avaliar_estudos.py` no modo real, uma única vez.
+
+## 14.10 Resultado do G7 (25/09, 20:59; revisão `91ef32a`; manifesto `05a510fa…c047`)
+
+Avaliação única, com 1.000 réplicas, seed 20260901 e bootstrap por clusters conjuntos. Relatório em
+`~/artifacts/redesenho/g7_20260925_205918/`: `g7_relatorio.json` (sha256 `8c1029352ce9cd5f…3aec1a`) e
+`g7_pontos.parquet` (sha256 `8c0df2af9c2992df…3a4c70c`, prefixo e sufixo). Log
+`~/artifacts/redesenho/g7_20260925_205918.log`. Todas as conferências do modo real passaram antes das métricas.
+
+**Veredito pelas regras declaradas: `SUCESSO = False` e `VANTAGEM REGIONAL = False`.**
+
+| Estudo clínico (exigido), AUROC | M0 | MR | Δ (IC 95%) | Regra |
+|---|---|---|---|---|
+| Coorte completo (3.119) | 0,9286 | 0,9273 | −0,0013 [−0,0043; +0,0018] | condição 1: **não atende** (estimativa < 0,01; IC inclui zero) |
+| Controles (3.116) | 0,9319 | 0,9318 | −0,0001 [−0,0034; +0,0033] | condição 2: **atende** (limite inferior −0,0034 ≥ −0,01) |
+| Missense (coorte completo) | | | estimativa +0,0009 | **atende** (só impede queda estimada > 0,01) |
+| Sem cada painel | | | missense −0,0026, splice −0,0017, noncoding −0,0002 | condição 3: **não atende** |
+| Interação (clusters) | | | −0,0012 [−0,0056; +0,0034] (par: [−0,0055; +0,0035]) | vantagem regional: **não atende** |
+
+- **Leitura descritiva (não é regra declarada):** no clínico, o IC do Δ inteiro fica dentro de ±0,01 no coorte e
+  nos controles. O ganho de 0,01 que a campanha tratava como relevante é incompatível com o IC, e uma piora relevante
+  também. Secundárias: AUPRC −0,0002 [−0,0007; +0,0003]; Brier −0,0002 [−0,0017; +0,0013]. Isso bate com o
+  desenvolvimento (AUROC −0,0004), que continua exploratório.
+- **Populacional (descritivo, sem regra; sobreposto ao ABraOM por construção; 84 clusters):** coorte completo AUROC
+  +0,0070 [−0,0028; +0,0137] e Brier −0,0143 [−0,0210; −0,0003]; pareados AUROC +0,0021 [−0,0081; +0,0081] e Brier
+  −0,0009; controles AUROC −0,0046 [−0,0141; +0,0032] e Brier +0,0064 [+0,0018; +0,0116]; interação +0,0067
+  [−0,0067; +0,0182]. A melhora de Brier do coorte completo não aparece nos pareados, então vem sobretudo dos 1.138
+  casos sem par (1 P e 1.137 B, a maioria noncoding). É uma hipótese descritiva, não afirmação.
+- **Baselines (absolutas, descritivas):** `gnomad_rarity` tem AUROC 0,9020 no clínico e 0,9031 no populacional
+  completo, contra 0,9286 e 0,9329 do M0. A raridade no ABraOM tem 0,6478 no clínico e 0,8808 no populacional
+  completo (neste, as benignas comuns no ABraOM definem o estudo).
+- **O que o resultado permite dizer:** o MR (adapter misto rsLoRA, 60% gnomAD e 40% ABraOM) não atendeu ao critério
+  clínico declarado e não mostrou vantagem diferencial nos casos brasileiros; também não piorou os controles
+  (não inferioridade a −0,01 atendida). **Não permite**: generalizar para o populacional, atribuir efeito à mistura
+  com ABraOM (sem MR × MG) nem afirmar ausência de queda no missense (a regra usa só a estimativa).
+- **Pendentes pré-declarados:** a leitura das secundárias que o resumo não imprime (painéis com IC, sem plof,
+  métricas com limiar, subconjunto `present_abraom`, interação nas sensibilidades), que já estão no JSON. E a
+  `sanidade_no_fold0` (AUROC/AUPRC de M0 e MR no teste do core_locus), que ainda não tem código nem extração do fold 0.
