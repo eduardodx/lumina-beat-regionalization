@@ -44,9 +44,10 @@ def _exige(disponivel, motivo):
     return unittest.skipUnless(disponivel, motivo)
 
 
-def _release(pasta: Path, *, resolvida=False):
+def _release(pasta: Path, *, resolvida=False, aberta=False):
     """Release minimo (membership + anotacoes), entradas das analises secundarias e a declaracao com a referencia
-    desse release. `resolvida` declara margens e bootstrap (exemplo sintetico, nao proposta)."""
+    desse release. `resolvida` troca margens e bootstrap por um exemplo sintetico; `aberta` volta a declaracao ao
+    estado de antes de 25/09 (margens ABERTO, bootstrap so recomendado); sem os dois, vale a declaracao real."""
     import pyarrow.parquet as pq
 
     sys.path.insert(0, str(MOSAIC / "src"))
@@ -65,6 +66,9 @@ def _release(pasta: Path, *, resolvida=False):
     campanha["g6"]["proveniencia"]["release_do_mosaic"]["logical_hash"] = {
         caminho: {k: v for k, v in logical_contract(pq.read_table(pasta / "release" / caminho), chave).items()
                   if k in ("n", "logical_hash")} for caminho, chave in cobertura.CHAVES_DO_RELEASE.items()}
+    if aberta:
+        campanha["g6"]["margens"] = {"estado": "ABERTO"}
+        campanha["g6"]["bootstrap_da_interacao"]["estado"] = "RECOMENDADO"
     if resolvida:
         margens = teste_g7._margens()
         campanha["g6"]["margens"] = margens
@@ -98,7 +102,7 @@ class EnsaioTests(unittest.TestCase):
     def test_ensaio_na_membership_com_scores_sinteticos(self):
         with tempfile.TemporaryDirectory() as pasta:
             pasta = Path(pasta)
-            argumentos = _release(pasta)
+            argumentos = _release(pasta, aberta=True)
             self.assertEqual(avaliar.main(["--ensaio-sintetico", *argumentos, "--out-dir", str(pasta / "e1")]), 0)
             r = json.loads((pasta / "e1" / "ensaio_relatorio.json").read_text(encoding="utf-8"))
             self.assertEqual(r["modo"], "ENSAIO")
@@ -111,15 +115,33 @@ class EnsaioTests(unittest.TestCase):
             self.assertIn("pares_mantidos", clinico["sistemas"]["sensibilidades"]["exposicao_empatada"])
             populacional = r["estudos"][estudos.ESTUDO_POPULACIONAL]
             self.assertIn("nao_aplicavel", populacional["baselines"]["ausencia_no_abraom"])
-            self.assertFalse(r["margens"]["avaliado"], "a declaracao de hoje nao tem margens")
+            self.assertFalse(r["margens"]["avaliado"], "a declaracao aberta nao tem margens")
             self.assertEqual(r["baselines"]["cobertura_do_score"]["gnomad_rarity"]["pontuadas"],
                              r["baselines"]["cobertura_do_score"]["gnomad_rarity"]["membros_unicos"])
             self.assertFalse((pasta / "e1" / "g7_pontos.parquet").exists(), "o ensaio nao grava scores")
-            self.assertIsNone(r["bootstrap"]["unidade_principal_da_interacao"], "a declaracao de hoje nao tem unidade")
+            self.assertIsNone(r["bootstrap"]["unidade_principal_da_interacao"], "a declaracao aberta nao tem unidade")
             self.assertEqual(r["bootstrap"]["replicas"], 10)
             self.assertEqual(r["tabela_oficial"]["no_chr8"], 4, "chr8 entra no G7 (o par 0 de cada estudo)")
             self.assertNotIn("p2_5", clinico["sistemas"]["interacao"]["auroc"]["interacao"])
             self.assertEqual(avaliar.main(["--ensaio-sintetico", *argumentos, "--out-dir", str(pasta / "e1")]), 2)
+
+    def test_ensaio_com_a_declaracao_da_equipe(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            pasta = Path(pasta)
+            argumentos = _release(pasta)
+            self.assertEqual(avaliar.main(["--ensaio-sintetico", *argumentos, "--out-dir", str(pasta / "e3")]), 0)
+            r = json.loads((pasta / "e3" / "ensaio_relatorio.json").read_text(encoding="utf-8"))
+            self.assertTrue(r["margens"]["avaliado"], r["margens"].get("problemas"))
+            self.assertEqual(r["bootstrap"]["unidade_principal_da_interacao"], "cluster_conjunto")
+            self.assertEqual(r["margens"]["sucesso"]["estudos_exigidos"], [estudos.ESTUDO_CLINICO])
+            self.assertEqual(r["margens"]["sucesso"]["estudos_descritivos"], [estudos.ESTUDO_POPULACIONAL])
+            regras = r["margens"]["por_estudo"][estudos.ESTUDO_CLINICO]["regras"]
+            self.assertEqual(sorted(regras), sorted(["melhoria_minima_no_coorte_br", "regressao_maxima_no_controle",
+                                                     "paineis_com_regressao_inaceitavel",
+                                                     "beneficio_nao_explicado_por_um_painel"]))
+            self.assertEqual([c["estatistica"] for c in regras["melhoria_minima_no_coorte_br"]["condicoes"]],
+                             ["estimativa", "p2_5"])
+            self.assertIsNone(r["margens"]["por_estudo"][estudos.ESTUDO_POPULACIONAL]["atende_todas"])
 
     def test_ensaio_com_margens_declaradas_aplica_as_regras(self):
         with tempfile.TemporaryDirectory() as pasta:

@@ -245,15 +245,26 @@ def _resolvida(campanha):
 
 
 class BloqueiosTests(unittest.TestCase):
-    def test_a_declaracao_de_hoje_nao_congela(self):
+    def test_a_declaracao_de_hoje_so_espera_o_que_o_notebook_da(self):
+        # Margens, papeis, bootstrap e chr8 declarados pela equipe em 25/09: sem a proveniencia do ABraOM e as duas
+        # entradas (que so o notebook tem), o G6 ainda nao congela, e por nada mais.
         bloqueios = g6.bloqueios(_campanha(), estado_do_codigo=CODIGO_OK)
+        self.assertFalse([b for b in bloqueios if b.startswith(("margens", "bootstrap", "pendencia"))], bloqueios)
+        self.assertEqual(len(bloqueios), 3, bloqueios)
+        self.assertTrue(bloqueios[0].startswith("abraom_snapshot_hash"), bloqueios)
+        self.assertTrue(all(b.startswith("entrada da analise secundaria sem registro") for b in bloqueios[1:]))
+        self.assertEqual(g6.bloqueios(_campanha(), estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK,
+                                      entradas=ENTRADAS_OK), [])
+
+    def test_a_declaracao_aberta_nao_congela(self):
+        campanha = _campanha()
+        campanha["g6"]["margens"] = {"estado": "ABERTO"}
+        campanha["g6"]["bootstrap_da_interacao"]["estado"] = "RECOMENDADO"
+        campanha["g6"]["pendencias_antes_do_congelamento"][-1]["estado"] = "RECOMENDADO"
+        bloqueios = g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK)
         self.assertTrue(any(b.startswith("margens: nao declaradas") for b in bloqueios), bloqueios)
         self.assertTrue(any(b.startswith("bootstrap da interacao: nao declarado") for b in bloqueios))
-        abertas = [x for x in _campanha()["g6"]["pendencias_antes_do_congelamento"]
-                   if x["estado"] not in g6.ESTADOS_RESOLVIDOS]
-        self.assertTrue(abertas)
-        self.assertEqual(sum(b.startswith("pendencia ") for b in bloqueios), len(abertas))
-        self.assertTrue(any(b.startswith("abraom_snapshot_hash") for b in bloqueios))
+        self.assertEqual(sum(b.startswith("pendencia ") for b in bloqueios), 1)
 
     def test_tudo_resolvido_nao_bloqueia(self):
         self.assertEqual(g6.bloqueios(_resolvida(_campanha()), estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK), [])
@@ -362,7 +373,7 @@ class BloqueiosTests(unittest.TestCase):
         self.assertTrue(g6.bloqueios(campanha, estado_do_codigo=CODIGO_OK, proveniencia=ABRAOM_OK, entradas=ENTRADAS_OK))
 
     def test_a_declaracao_real_tem_os_campos_das_margens_e_do_bootstrap(self):
-        # O modelo da declaracao tem todos os campos que a validacao cobra, nulos ate a decisao.
+        # A declaracao tem todos os campos que a validacao cobra (declarados pela equipe em 25/09).
         g6_real = _campanha()["g6"]
         for nome in g6.MARGENS_EXIGIDAS:
             self.assertIn(nome, g6_real["margens"])
@@ -370,9 +381,9 @@ class BloqueiosTests(unittest.TestCase):
         self.assertEqual(set(g6_real["margens"]["papel_dos_estudos"]), set(g6.ESTUDOS))
         for nome in g6.MARGENS_EXIGIDAS:
             self.assertIn("condicoes", g6_real["margens"][nome])
-        # A recomendacao operacional esta registrada, mas nao congela sem a confirmacao.
+        # A recomendacao da revisao foi declarada pela equipe: o bootstrap nao bloqueia mais.
         self.assertEqual(g6_real["bootstrap_da_interacao"]["unidade_principal"], "cluster_conjunto")
-        self.assertTrue(g6.problemas_do_bootstrap(g6_real["bootstrap_da_interacao"]))
+        self.assertEqual(g6.problemas_do_bootstrap(g6_real["bootstrap_da_interacao"]), [])
         for campo in ("unidade_principal", "unidade_de_sensibilidade", "replicas", "seed", "percentis"):
             self.assertIn(campo, g6_real["bootstrap_da_interacao"])
 

@@ -1191,7 +1191,44 @@ comando do definitivo, sem `--congelar`, com `--proveniencia abraom=$A/g0_fontes
 `--entrada regra_ampla=$A/g2_regra_ampla/broad_brazilian_variant_ids.txt` e
 `--entrada exposicao=$A/g6_exposicao_janela2048_r4096/exposicao_por_membro.parquet`. O arquivo do ABraOM confere com o
 declarado, e as duas entradas ficaram registradas. Restam **3 bloqueios**: margens (com `papel_dos_estudos`),
-bootstrap da interação e chr8. O resto reproduz o rascunho de 24/09 **exatamente**: limiares 0,474562 e 0,552163 (MCC
+bootstrap da interação e chr8. O resto reproduz o rascunho de 24/09 **nas casas impressas no log** (os JSONs completos não foram comparados): limiares 0,474562 e 0,552163 (MCC
 0,8878 e 0,8880), ensemble final no desenvolvimento com macro −0,0006 [−0,0048; +0,0033] e os mesmos valores por
 painel. Esses números continuam exploratórios e não entram nas margens (a folha do Eduardo não os mostra). Depois da
 decisão, o G6 definitivo é este comando com `--congelar` e outra pasta.
+
+**Décima primeira revisão (25/09): critérios declarados pela equipe, sem esperar o Eduardo.** A revisão mostrou que
+os três bloqueios vinham de como a declaração estava escrita (margens atribuídas ao Eduardo, bootstrap recomendado,
+chr8 aguardando confirmação), não de um limite técnico: o código exige uma declaração completa, não um autor
+específico. O Gabriel decidiu assumir as sugestões da revisão como decisão da equipe. O Eduardo não foi consultado e
+pode ratificar ou pedir mudança antes do G7 real. Os valores das margens são proposta redigida com o Claude, porque a
+revisão fixou a estrutura mas não os números. O registro está em `g6.decisoes_da_equipe`, com data, autoria e o que
+**não** é (aprovação do Eduardo).
+
+| Item | Declarado em 25/09 |
+|---|---|
+| Papel dos estudos | clínico **exigido**; populacional **descritivo** (relatado por inteiro, sem regra) |
+| Limiar de relevância | **0,01 de AUROC**, o mesmo nos dois sentidos (ganho mínimo e piora máxima) |
+| Condição 1 | clínico, Δ_BR_full, AUROC: estimativa ≥ 0,01 **e** limite inferior > 0 (forma a) |
+| Condição 2 | clínico, Δ_control, AUROC: limite inferior ≥ −0,01 (não inferioridade) |
+| Painel protegido | missense, Δ_BR_full, AUROC: estimativa ≥ −0,01; splice e noncoding só relatados |
+| Condição 3 | suporte mínimo 20 P e 20 B (os três painéis do clínico entram); sem cada um, estimativa ≥ 0,01 |
+| Interação | sem critério próprio; relatada nas duas unidades (a pergunta é M0 × MR; MG × MR não rodou; composição 4,6×) |
+| Bootstrap | `cluster_conjunto` principal, `par` sensibilidade, 1.000 réplicas, seed 20260901 |
+| chr8 | os 171 membros entram (todos no clínico) |
+| 0,02 da C1 | **não** transportado: era de outra quantidade (DiD M2 × M1) e nunca foi confirmado |
+
+- **Precisão:** "até a última casa" valia só para as casas impressas no log. O bloco do congelamento compara, com
+  precisão total, os limiares e o ensemble do `g6_construcao.json` da pré-checagem com os do definitivo.
+- **Por que 0,01:** é a menor diferença que a equipe trata como relevante, e vale nos dois sentidos para não chamar
+  de irrelevante uma piora do tamanho de um ganho que se chama de sucesso. Com 0,02 nos dois sentidos, a regra
+  aceitaria no controle e no missense a piora que o PDF tinha como teto de guardrail. Além disso, o AUROC do coorte
+  inteiro dilui ganhos concentrados num painel: os pares missense × missense são 27% dos pares P × B do clínico. É
+  escolha da equipe, não derivada de dado; os deltas do desenvolvimento são conhecidos e não entraram na escolha.
+- **Lacuna declarada:** o plof (1.050 P, 2 B no clínico) não tem suporte e não entra na condição 3. O coorte sem
+  plof sai no relatório (`sem_painel:plof`), sem regra.
+- **Testes ajustados:** `test_campanha_g6` (a declaração de hoje só espera a proveniência e as entradas do notebook,
+  e a declaração aberta continua bloqueando), `test_declaracao_g6` (o conteúdo dos critérios) e
+  `test_avaliar_estudos` (ensaio com a declaração da equipe, mantido o ensaio da declaração aberta). Locais: g6 28,
+  declaração 5, g7 20, estudos 25, cabeças 7, avaliador 4 e cobertura 7 (1 pulado no Windows, sem pyyaml).
+- **Mudar depois:** antes do `--congelar`, livre; depois dele, exige um G6 novo; depois do G7 real, é post hoc e sai
+  marcado como tal.
