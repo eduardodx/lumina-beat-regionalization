@@ -1282,3 +1282,16 @@ g7 22, estudos 25, cabeças 7, cobertura 7, avaliador 4 e os dois ponta a ponta 
 `limiares_do_ensemble`, `fold1_descritivo`, `desenvolvimento_do_ensemble_final` e `componentes`; os limiares são
 0,4745615457057724 (M0) e 0,5521634943700215 (MR). Próximo passo: o bloco 2, com `--congelar` e `--so-conferir` nos
 quatro sistemas.
+
+**G6 CONGELADO (25/09, 19:30; revisão `a0b0bc9`, que contém `5325f4a`).** Manifesto em
+`~/artifacts/redesenho/g6_definitivo_20260925_193006/g6_manifesto.json`, com sha256
+`05a510fac7031939e1cb0461552b1629fc387320b14f265089083ade0a70c047`. Log
+`~/artifacts/redesenho/g6_definitivo_20260925_193006.log`.
+- Todos os testes passaram antes do congelamento.
+- Limiares, fold 1, ensemble de desenvolvimento e componentes são **idênticos à pré-checagem com precisão total**.
+- `--so-conferir` passou nos quatro sistemas (M0, 20260921, 20260922, 20260923): manifesto, declaração, release,
+  tabela oficial, cache de desenvolvimento, adapter e R03 conferem. A tabela oficial tem 8.875 variantes, 171 no chr8,
+  conteúdo `b191ab5e317b` (o mesmo do ensaio na membership real).
+- O ambiente numérico e o hash do FASTA são conferidos no início da extração real.
+- **A partir daqui, a declaração e os arquivos de código do G6/G7 não mudam**: o manifesto guarda o sha256 de cada um
+  e o G7 recusa divergência. Só documentação pode ser commitada até o G7 rodar.
