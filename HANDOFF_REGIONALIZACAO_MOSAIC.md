@@ -1184,3 +1184,14 @@ números de métrica nessa saída vêm das fixtures sintéticas dos testes, não
   casos pareados estão em 78. Entre os painéis de discriminação, só o missense tem mais de 10 patogênicas.
 - **chr8:** os 171 membros estão todos no clínico, 78 casos e 93 controles. O populacional não tem membro no chr8.
 - A folha do Eduardo foi atualizada com essas contagens (versão 3) e não tem mais pendência de dado.
+
+**Pré-checagem do G6 (25/09, 17:15; revisão `90aa6d9`): só restam os bloqueios do Eduardo.** Log
+`~/artifacts/redesenho/g6_prechecagem_20260925_171514.log`; rascunho em `g6_prechecagem_20260925_171514/`. O mesmo
+comando do definitivo, sem `--congelar`, com `--proveniencia abraom=$A/g0_fontes/SABE1171.Abraom.clean.tsv`,
+`--entrada regra_ampla=$A/g2_regra_ampla/broad_brazilian_variant_ids.txt` e
+`--entrada exposicao=$A/g6_exposicao_janela2048_r4096/exposicao_por_membro.parquet`. O arquivo do ABraOM confere com o
+declarado, e as duas entradas ficaram registradas. Restam **3 bloqueios**: margens (com `papel_dos_estudos`),
+bootstrap da interação e chr8. O resto reproduz o rascunho de 24/09 **exatamente**: limiares 0,474562 e 0,552163 (MCC
+0,8878 e 0,8880), ensemble final no desenvolvimento com macro −0,0006 [−0,0048; +0,0033] e os mesmos valores por
+painel. Esses números continuam exploratórios e não entram nas margens (a folha do Eduardo não os mostra). Depois da
+decisão, o G6 definitivo é este comando com `--congelar` e outra pasta.
