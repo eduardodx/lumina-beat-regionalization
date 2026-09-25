@@ -1158,3 +1158,29 @@ score dos estudos, só contagens de rótulo. Dois achados ao prepará-la:
   da resposta; a página avisa quando a escolha a exigir.
 - Pendente na página: contagens por painel e chr8 por estudo, de um bloco no notebook que só lê rótulos (o
   `ensaio_relatorio.json` já tem a composição por painel de cada coorte).
+
+**Suporte por painel nos estudos (25/09, 17:02; revisão `7aaed65`): só rótulos.** Log
+`~/artifacts/redesenho/contagens_por_painel_20260925_170144.log`. Antes das contagens, todos os testes passaram no
+notebook: 27 + 4 + 20 + 25 + 7 + 7 (cobertura) + 3 (avaliador) e os dois ponta a ponta com torch (G6 e G7 real). Os
+números de métrica nessa saída vêm das fixtures sintéticas dos testes, não de dado real.
+
+| P / B | clínico, completo | clínico, pareados = controles | populacional, completo | populacional, pareados = controles |
+|---|---|---|---|---|
+| missense | 1.244 / 192 | 1.242 / 192 | 61 / 417 | 60 / 309 |
+| splice | 408 / 33 | 408 / 33 | 10 / 38 | 10 / 28 |
+| noncoding | 95 / 60 | 95 / 60 | 4 / 1.078 | 4 / 153 |
+| plof (guarda) | 1.050 / 2 | 1.049 / 2 | 14 / 1 | 14 / 1 |
+| synonymous (guarda) | 10 / 24 | 10 / 24 | 0 / 266 | 0 / 172 |
+| other | 1 / 0 | 1 / 0 | 0 / 0 | 0 / 0 |
+| clusters | 1.133 | 1.133 e 1.200 (união 1.653) | 84 | 78 e 113 (união 122) |
+
+- **Condição 3:** no clínico ela se aplica com suporte mínimo de até 60, e com os três painéis até 33 (as 33 benignas
+  de splice). No populacional, só com mínimo de até 10 (missense e splice). Com o 20 do PDF, o clínico tem os três
+  painéis e o populacional só o missense, onde a condição não se aplica.
+- **O AUROC do coorte mistura painéis:** no clínico, 37% das patogênicas são plof (1.050, contra 2 benignas no
+  painel); no populacional completo, 84% das patogênicas são missense ou plof e 75% das benignas são noncoding ou
+  synonymous. Parte da discriminação do coorte vem da composição por painel, não só da ordem dentro de cada painel.
+- **Populacional:** 1.889 variantes em 84 clusters; a união do bootstrap da interação tem 122 clusters, e os 751
+  casos pareados estão em 78. Entre os painéis de discriminação, só o missense tem mais de 10 patogênicas.
+- **chr8:** os 171 membros estão todos no clínico, 78 casos e 93 controles. O populacional não tem membro no chr8.
+- A folha do Eduardo foi atualizada com essas contagens (versão 3) e não tem mais pendência de dado.
