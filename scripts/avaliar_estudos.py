@@ -168,6 +168,15 @@ def imprimir(relatorio: dict[str, Any]) -> None:
                   f"[{_n(i['interacao']['p2_5'], '+.4f')}; {_n(i['interacao']['p97_5'], '+.4f')}] (clusters em conjunto)"
                   f" | por par [{_n(i['interacao_sensibilidade_por_par']['p2_5'], '+.4f')}; "
                   f"{_n(i['interacao_sensibilidade_por_par']['p97_5'], '+.4f')}]")
+        partes = []
+        for nome, s in sistemas["sensibilidades"].items():
+            if "nao_calculada" in s:
+                partes.append(f"{nome}: nao calculada ({s['nao_calculada']})")
+            elif "nao_necessaria" in s:
+                partes.append(f"{nome}: nao necessaria")
+            else:
+                partes.append(f"{nome}: {s['pares_mantidos']} pares mantidos, {s['pares_retirados']} retirados")
+        print("  sensibilidades: " + " | ".join(partes))
         for nome, b in bloco["baselines"].items():
             if "nao_aplicavel" in b:
                 print(f"  baseline {nome}: nao aplicavel -- {b['nao_aplicavel']}")
