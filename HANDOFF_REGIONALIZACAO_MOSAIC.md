@@ -1105,15 +1105,39 @@ recusado na extração e cache com alelo trocado recusado no G7; raridade no ABr
 **Exposição de locus, medida agora no snapshot final (`g6_exposicao_janela2048_r4096`, dado real, sem score):**
 treino 99.992 variantes em 1.576 clusters; no clínico, 77,6% dos casos e 76,0% dos controles sem nenhuma variante de
 treino a até 4.096 bp; média 3,11 × 3,31; nos 3.116 pares, 59,3% empatados e, entre os 1.267 diferentes, caso maior em
-48,2% — praticamente simétrico (diferença média −0,2). Por cluster (`n_treino`), caso maior em 49,2% dos 2.218 pares
-diferentes. O registro anterior (0,4832; média +1,55) era **só das benignas** do clínico: outro subconjunto, não
+48,2%, com diferença média −0,2: **essas estatísticas estão próximas do equilíbrio** — o que não elimina
+diferenças por classe, por painel nem no efeito sobre M0 e MR. Por cluster (`n_treino`), caso maior em 49,2% dos 2.218
+pares diferentes. O registro anterior (0,4832; média +1,55) era **só das benignas** do clínico: outro subconjunto, não
 contradiz. Descritivo: exposição igual não implica efeito igual nos dois sistemas.
 
-**Precisão que o G7 vai ter (contagens, não resultado):** o clínico tem só **311 benignas** (e 2.805 patogênicas nos
-pareados); o populacional, só **88 patogênicas** nos pareados (e 89 no coorte completo, que é 95% benigno por causa
-dos 1.138 casos sem par). Os ICs do G7 dependerão dessas classes minoritárias — informação para as margens do
-Eduardo, não motivo para ajustá-las.
+**Limitações de suporte (contagens; não determinam a largura dos intervalos):** o clínico tem só **311 benignas** (e
+2.805 patogênicas nos pareados); o populacional, só **88 patogênicas** nos pareados (e 89 no coorte completo, que é 95%
+benigno por causa dos 1.138 casos sem par). No populacional só **39,8% dos casos têm controle**: o coorte completo
+descreve todos os casos publicados, a interação descreve o subconjunto pareado, e uma conclusão sobre a interação não
+se transfere aos 1.138 casos sem par. Informação para as margens, não motivo para ajustá-las.
 
 Pendências de código e o ensaio passam a `FEITO` com a evidência acima. Bloqueios que restam para o G6 definitivo:
 margens e unidade do bootstrap (Eduardo), chr8 na decisão E (171 membros) e, na hora de congelar, `--proveniencia
 abraom=…` e `--entrada regra_ampla=… --entrada exposicao=…` (já existe `g6_exposicao_janela2048_r4096`).
+
+**Décima revisão (25/09): aceita; o que dá para resolver sem devolver tudo ao Eduardo.**
+- **Precisões de leitura, aplicadas acima:** exposição — "essas estatísticas estão próximas do equilíbrio", não
+  "simétrico" (não elimina diferenças por classe, painel ou efeito sobre M0 e MR); as contagens mostram **limitações de
+  suporte**, não "a precisão que o G7 vai ter" (não determinam a largura dos ICs); no populacional só 39,8% dos casos
+  têm controle, então a interação descreve os 751 pareados e não se transfere aos 1.138 sem par (o consumidor agora
+  escreve isso no bloco de pareamento de cada estudo); e o MR sintético do ensaio ter piorado é desta realização, não
+  uma garantia matemática do ruído (nenhum teste depende disso).
+- **Recomendações operacionais, registradas como `RECOMENDADO` (continuam bloqueando até a confirmação):** chr8 —
+  incluir os 171 membros, preservando a membership oficial (§6.6 reserva o chr8 das janelas e do treino da cabeça, o que
+  é compatível com avaliá-lo; a reserva é do desenvolvimento e **não** prova que o pré-treino do R03 nunca viu o chr8);
+  bootstrap — `cluster_conjunto` principal e `par` como sensibilidade, 1.000 réplicas, seed 20260901 (o cluster é a
+  unidade de bloqueio do Mosaic nos outros deltas; nenhum dos dois preserva todas as dependências, por isso os dois
+  saem; a escolha **não** se baseia em largura ou sinal de intervalo algum).
+- **Margens: decisão científica, não dedutível do código.** O esquema passou a representar o que a revisão distinguiu:
+  cada regra é uma lista de condições (`estimativa` ou `p2_5`, `>=` ou `>` estrito), então "estimativa ≥ 0,02 com IC
+  excluindo zero" e "limite inferior ≥ 0,02" se escrevem e **dão resultados diferentes** (teste com as duas numa mesma
+  célula; e `p2_5 = 0` não "exclui zero"). E cada estudo ganhou um papel, **exigido** ou **descritivo**; o G7 sai com
+  `sucesso` pelos exigidos. O 0,02 continua sendo proposta, não requisito.
+- Ensaio local do G7 real refeito com o esquema novo: regras com as condições avaliadas, por painel e sem cada painel,
+  e a linha `SUCESSO`. O ensaio do avaliador só usa a unidade do bootstrap quando ela está **declarada**; a
+  recomendada aparece como tal.

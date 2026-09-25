@@ -240,8 +240,12 @@ def _texto(valor: Any) -> bool:
 ESTUDOS = ("br_clinical_evidence", "br_population_observed")
 DELTAS = ("delta_br_full", "delta_br_matched", "delta_control")
 METRICAS_DAS_MARGENS = ("auroc", "auprc")
-#: A regra e sempre `estatistica >= limite` sobre um delta MR - M0: a estimativa ou o limite inferior do IC.
+#: Cada regra e uma lista de CONDICOES sobre um delta MR - M0, todas exigidas. Cada condicao compara a estimativa ou
+#: o limite inferior do IC (p2_5) com um limite, por `>=` ou `>` (estrito: "o IC exclui zero" e `p2_5 > 0`). Assim
+#: "estimativa >= 0,02 com IC excluindo zero" e "limite inferior >= 0,02" sao regras DIFERENTES e as duas se
+#: escrevem (revisao de 25/09); a segunda exige evidencia mais forte.
 ESTATISTICAS = ("estimativa", "p2_5")
+COMPARACOES = (">=", ">")
 #: As tres margens do Mosaic (PLAN 13.5) e a condicao 3 do protocolo, com o delta que cada uma pode usar e o sinal
 #: do limite: melhoria pede limite >= 0; regressao maxima, limite <= 0.
 MARGENS_EXIGIDAS: dict[str, tuple[tuple[str, ...], str]] = {
@@ -250,32 +254,74 @@ MARGENS_EXIGIDAS: dict[str, tuple[tuple[str, ...], str]] = {
     "paineis_com_regressao_inaceitavel": (DELTAS, "<= 0"),
     "beneficio_nao_explicado_por_um_painel": (("delta_br_full", "delta_br_matched"), ">= 0"),
 }
+#: As condicoes 1 a 3 do Mosaic valem para todo estudo EXIGIDO; estudo DESCRITIVO so e relatado, sem regra.
+CONDICOES_DO_MOSAIC = ("melhoria_minima_no_coorte_br", "regressao_maxima_no_controle",
+                       "beneficio_nao_explicado_por_um_painel")
+PAPEIS_DOS_ESTUDOS = ("exigido", "descritivo")
 UNIDADES_IMPLEMENTADAS = ("cluster_conjunto", "par")
 
 
+def _problemas_das_condicoes(nome: str, condicoes: Any, sinal: str) -> list[str]:
+    if not (isinstance(condicoes, list) and condicoes):
+        return [f"{nome}.condicoes: lista nao vazia de {{estatistica, comparacao, limite}}, recebeu {condicoes!r}"]
+    problemas, vistas = [], set()
+    for i, condicao in enumerate(condicoes):
+        rotulo = f"{nome}.condicoes[{i}]"
+        if not isinstance(condicao, dict):
+            problemas.append(f"{rotulo}: objeto {{estatistica, comparacao, limite}}")
+            continue
+        for campo, dominio in (("estatistica", ESTATISTICAS), ("comparacao", COMPARACOES)):
+            if condicao.get(campo) not in dominio:
+                problemas.append(f"{rotulo}.{campo}: um de {list(dominio)}, recebeu {condicao.get(campo)!r}")
+        limite = condicao.get("limite")
+        if not _finito(limite):
+            problemas.append(f"{rotulo}.limite: numero finito, recebeu {limite!r}")
+        elif (sinal == ">= 0" and limite < 0) or (sinal == "<= 0" and limite > 0):
+            problemas.append(f"{rotulo}.limite: tem de ser {sinal}, recebeu {limite}")
+        if condicao.get("estatistica") in vistas:
+            problemas.append(f"{nome}.condicoes: {condicao.get('estatistica')} repetida")
+        vistas.add(condicao.get("estatistica"))
+    return problemas
+
+
 def _problemas_da_regra(nome: str, item: Any, deltas: tuple[str, ...] | None, sinal: str) -> list[str]:
-    """Uma regra `estatistica >= limite`; `deltas` None = a regra nao escolhe delta (a interacao)."""
+    """Uma regra: estudos, delta, metrica e condicoes; `deltas` None = a regra nao escolhe delta (a interacao)."""
     if not isinstance(item, dict):
         return [f"{nome}: ausente"]
     problemas = []
     estudos = item.get("estudos")
     if not (isinstance(estudos, list) and estudos and len(set(estudos)) == len(estudos) and set(estudos) <= set(ESTUDOS)):
         problemas.append(f"{nome}.estudos: lista nao vazia de {list(ESTUDOS)}, recebeu {estudos!r}")
-    campos = (("metrica", METRICAS_DAS_MARGENS), ("estatistica", ESTATISTICAS))
+    campos = (("metrica", METRICAS_DAS_MARGENS),)
     for campo, dominio in ((("delta", deltas),) if deltas is not None else ()) + campos:
         if item.get(campo) not in dominio:
             problemas.append(f"{nome}.{campo}: um de {list(dominio)}, recebeu {item.get(campo)!r}")
-    limite = item.get("limite")
-    if not _finito(limite):
-        problemas.append(f"{nome}.limite: numero finito, recebeu {limite!r}")
-    elif (sinal == ">= 0" and limite < 0) or (sinal == "<= 0" and limite > 0):
-        problemas.append(f"{nome}.limite: tem de ser {sinal}, recebeu {limite}")
+    return problemas + _problemas_das_condicoes(nome, item.get("condicoes"), sinal)
+
+
+def _problemas_dos_papeis(margens: dict[str, Any]) -> list[str]:
+    """Cada estudo EXIGIDO tem as condicoes 1 a 3 do Mosaic; estudo DESCRITIVO nao aparece em regra nenhuma."""
+    papeis = margens.get("papel_dos_estudos")
+    if not (isinstance(papeis, dict) and set(papeis) == set(ESTUDOS) and set(papeis.values()) <= set(PAPEIS_DOS_ESTUDOS)):
+        return [f"papel_dos_estudos: {{estudo: exigido ou descritivo}} para {list(ESTUDOS)}, recebeu {papeis!r}"]
+    exigidos = [e for e in ESTUDOS if papeis[e] == "exigido"]
+    descritivos = [e for e in ESTUDOS if papeis[e] == "descritivo"]
+    problemas = [] if exigidos else ["papel_dos_estudos: ao menos um estudo exigido"]
+    for nome in CONDICOES_DO_MOSAIC:
+        estudos = (margens.get(nome) or {}).get("estudos") or []
+        faltando = [e for e in exigidos if e not in estudos]
+        if faltando:
+            problemas.append(f"{nome}.estudos: as condicoes do Mosaic valem para todo estudo exigido; faltam {faltando}")
+    for nome in (*MARGENS_EXIGIDAS, "interacao"):
+        indevidos = [e for e in descritivos if e in ((margens.get(nome) or {}).get("estudos") or [])]
+        if indevidos:
+            problemas.append(f"{nome}.estudos: estudo descritivo nao tem regra ({indevidos})")
     return problemas
 
 
 def problemas_das_margens(margens: dict[str, Any]) -> list[str]:
     """O que falta para as margens valerem como regra de decisao: estado declarado E, em cada uma, estudos, delta,
-    metrica, estatistica e limite finito -- nao basta o texto do estado (revisao de 24/09). Pura."""
+    metrica e condicoes com limite finito, mais o papel de cada estudo -- nao basta o texto do estado. Pura."""
     problemas = []
     for nome, (deltas, sinal) in MARGENS_EXIGIDAS.items():
         item = margens.get(nome)
@@ -301,6 +347,7 @@ def problemas_das_margens(margens: dict[str, Any]) -> list[str]:
         problemas += _problemas_da_regra("interacao", interacao, None, ">= 0")
     elif not _texto(interacao.get("motivo")):
         problemas.append("interacao: criterio_proprio false exige `motivo` (ex.: relatada com os absolutos)")
+    problemas += _problemas_dos_papeis(margens)
     if not _declarado(margens.get("estado")):
         incompletas = sorted({p.split(".")[0].split(":")[0] for p in problemas})
         return [f"nao declaradas ({margens.get('estado')}); incompletas: {', '.join(incompletas) or 'nenhuma'}"]

@@ -212,16 +212,21 @@ class TabelaEIdentidadeTests(unittest.TestCase):
             self.assertFalse(serie.index.has_duplicates)
 
 
+def _condicao(limite, estatistica="estimativa", comparacao=">="):
+    return [{"estatistica": estatistica, "comparacao": comparacao, "limite": limite}]
+
+
 def _margens(**troca):
-    def regra(**extra):
-        return {"estudos": [estudos.ESTUDO_CLINICO], "metrica": "auroc", "estatistica": "estimativa", **extra}
+    def regra(limite, **extra):
+        return {"estudos": [estudos.ESTUDO_CLINICO], "metrica": "auroc", "condicoes": _condicao(limite), **extra}
     m = {"estado": "DECLARADO (teste)",
-         "melhoria_minima_no_coorte_br": regra(delta="delta_br_full", limite=0.01),
-         "regressao_maxima_no_controle": regra(delta="delta_control", limite=-0.01),
-         "paineis_com_regressao_inaceitavel": regra(delta="delta_br_full", limite=-0.02, paineis=["missense"]),
-         "beneficio_nao_explicado_por_um_painel": regra(delta="delta_br_full", limite=0.0, suporte_minimo_por_painel=1),
+         "papel_dos_estudos": {estudos.ESTUDO_CLINICO: "exigido", estudos.ESTUDO_POPULACIONAL: "descritivo"},
+         "melhoria_minima_no_coorte_br": regra(0.01, delta="delta_br_full"),
+         "regressao_maxima_no_controle": regra(-0.01, delta="delta_control"),
+         "paineis_com_regressao_inaceitavel": regra(-0.02, delta="delta_br_full", paineis=["missense"]),
+         "beneficio_nao_explicado_por_um_painel": regra(0.0, delta="delta_br_full", suporte_minimo_por_painel=1),
          "interacao": {"criterio_proprio": True, "estudos": [estudos.ESTUDO_CLINICO], "metrica": "auroc",
-                       "estatistica": "estimativa", "limite": 0.0}}
+                       "condicoes": _condicao(0.0)}}
     m.update(troca)
     return m
 
@@ -244,25 +249,39 @@ class MargensTests(unittest.TestCase):
         saida = g7.avaliar_margens(self.r, _margens(), BOOTSTRAP)
         regras = saida["por_estudo"][estudos.ESTUDO_CLINICO]["regras"]
         delta = self.r[estudos.ESTUDO_CLINICO]["coortes"][COORTE_COMPLETO]["coorte"]["delta"]["auroc"]["estimativa"]
-        self.assertEqual(regras["melhoria_minima_no_coorte_br"]["valor"], delta)
+        self.assertEqual(regras["melhoria_minima_no_coorte_br"]["condicoes"][0]["valor"], delta)
         self.assertEqual(regras["melhoria_minima_no_coorte_br"]["atende"], delta >= 0.01)
         controle = self.r[estudos.ESTUDO_CLINICO]["coortes"][CONTROLES]["coorte"]["delta"]["auroc"]["estimativa"]
-        self.assertEqual(regras["regressao_maxima_no_controle"]["valor"], controle)
+        self.assertEqual(regras["regressao_maxima_no_controle"]["condicoes"][0]["valor"], controle)
         interacao = self.r[estudos.ESTUDO_CLINICO]["interacao"]["auroc"]["interacao"]["estimativa"]
-        self.assertEqual(regras["interacao"]["valor"], interacao)
+        self.assertEqual(regras["interacao"]["condicoes"][0]["valor"], interacao)
         self.assertTrue(regras["beneficio_nao_explicado_por_um_painel"]["aplicavel"])
         self.assertNotIn(estudos.ESTUDO_POPULACIONAL, saida["por_estudo"])
+        self.assertEqual(saida["sucesso"]["estudos_exigidos"], [estudos.ESTUDO_CLINICO])
+        self.assertEqual(saida["sucesso"]["atende"], saida["por_estudo"][estudos.ESTUDO_CLINICO]["atende_todas"])
+
+    def test_as_duas_formas_da_revisao_dao_resultados_diferentes(self):
+        forma_a = {"condicoes": _condicao(0.02) + _condicao(0.0, "p2_5", ">")}
+        forma_b = {"condicoes": _condicao(0.02, "p2_5")}
+        celula = {"estimativa": 0.03, "p2_5": 0.005}
+        self.assertTrue(g7._regra(celula, forma_a)["atende"])
+        self.assertFalse(g7._regra(celula, forma_b)["atende"], "o limite inferior abaixo de 0,02 reprova (b)")
+        # "IC excluindo zero" e estrito: limite inferior exatamente 0 nao exclui zero.
+        self.assertFalse(g7._regra({"estimativa": 0.03, "p2_5": 0.0}, forma_a)["atende"])
+        self.assertTrue(g7._regra({"estimativa": 0.03, "p2_5": 0.0}, {"condicoes": _condicao(0.0, "p2_5")})["atende"])
+        self.assertIsNone(g7._regra({"estimativa": 0.03, "p2_5": None}, forma_a)["atende"])
 
     def test_unidade_por_par_usa_o_ic_por_par_e_regra_quebrada_reprova(self):
         par = dict(BOOTSTRAP, unidade_principal="par", unidade_de_sensibilidade="cluster_conjunto")
         saida = g7.avaliar_margens(self.r, _margens(melhoria_minima_no_coorte_br={
-            "estudos": [estudos.ESTUDO_CLINICO], "delta": "delta_br_full", "metrica": "auroc", "estatistica": "p2_5",
-            "limite": 0.99}), par)
+            "estudos": [estudos.ESTUDO_CLINICO], "delta": "delta_br_full", "metrica": "auroc",
+            "condicoes": _condicao(0.99, "p2_5")}), par)
         regras = saida["por_estudo"][estudos.ESTUDO_CLINICO]["regras"]
         self.assertFalse(regras["melhoria_minima_no_coorte_br"]["atende"])
         self.assertFalse(saida["por_estudo"][estudos.ESTUDO_CLINICO]["atende_todas"])
         esperado = self.r[estudos.ESTUDO_CLINICO]["interacao"]["auroc"]["por_unidade"]["par"]["interacao"]["estimativa"]
-        self.assertEqual(regras["interacao"]["valor"], esperado)
+        self.assertEqual(regras["interacao"]["condicoes"][0]["valor"], esperado)
+        self.assertFalse(saida["sucesso"]["atende"])
         self.assertEqual(regras["interacao"]["unidade"], "par")
 
     def test_condicao_3_sem_suporte_em_dois_paineis_nao_se_aplica(self):

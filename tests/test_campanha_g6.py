@@ -213,13 +213,15 @@ ABRAOM_OK = {"abraom": {"confere": True}}
 ENTRADAS_OK = {"regra_ampla": {"sha256": "a" * 64}, "exposicao": {"sha256": "b" * 64}}
 
 
-def _regra(**extra):
-    return {"estudos": ["br_clinical_evidence"], "metrica": "auroc", "estatistica": "p2_5", **extra}
+def _regra(estatistica="p2_5", limite=0.0, comparacao=">=", **extra):
+    return {"estudos": ["br_clinical_evidence"], "metrica": "auroc",
+            "condicoes": [{"estatistica": estatistica, "comparacao": comparacao, "limite": limite}], **extra}
 
 
 def _margens_declaradas():
     """Um exemplo SINTETICO de declaracao completa -- nao e proposta de margem."""
     return {"estado": "DECLARADO (teste sintetico)",
+            "papel_dos_estudos": {"br_clinical_evidence": "exigido", "br_population_observed": "descritivo"},
             "melhoria_minima_no_coorte_br": _regra(delta="delta_br_full", limite=0.0),
             "regressao_maxima_no_controle": _regra(delta="delta_control", limite=-0.01),
             "paineis_com_regressao_inaceitavel": _regra(delta="delta_br_full", limite=-0.02, paineis=["missense"]),
@@ -269,12 +271,24 @@ class BloqueiosTests(unittest.TestCase):
         self.assertTrue(any(b.startswith("bootstrap da interacao: replicas") for b in bloqueios))
 
     def test_margens_com_conteudo_invalido_reprovam(self):
+        def c0(m, nome):
+            return m[nome]["condicoes"][0]
+
         casos = {
-            "limite": lambda m: m["melhoria_minima_no_coorte_br"].update(limite=float("nan")),
-            "limite: numero finito": lambda m: m["regressao_maxima_no_controle"].update(limite=True),
-            "tem de ser >= 0": lambda m: m["melhoria_minima_no_coorte_br"].update(limite=-0.01),
-            "tem de ser <= 0": lambda m: m["regressao_maxima_no_controle"].update(limite=0.01),
-            "estatistica": lambda m: m["melhoria_minima_no_coorte_br"].update(estatistica="p97_5"),
+            "limite": lambda m: c0(m, "melhoria_minima_no_coorte_br").update(limite=float("nan")),
+            "limite: numero finito": lambda m: c0(m, "regressao_maxima_no_controle").update(limite=True),
+            "tem de ser >= 0": lambda m: c0(m, "melhoria_minima_no_coorte_br").update(limite=-0.01),
+            "tem de ser <= 0": lambda m: c0(m, "regressao_maxima_no_controle").update(limite=0.01),
+            "estatistica": lambda m: c0(m, "melhoria_minima_no_coorte_br").update(estatistica="p97_5"),
+            "comparacao": lambda m: c0(m, "melhoria_minima_no_coorte_br").update(comparacao="<="),
+            "condicoes: lista nao vazia": lambda m: m["melhoria_minima_no_coorte_br"].update(condicoes=[]),
+            "repetida": lambda m: m["melhoria_minima_no_coorte_br"]["condicoes"].append(
+                {"estatistica": "p2_5", "comparacao": ">", "limite": 0.0}),
+            "papel_dos_estudos": lambda m: m.pop("papel_dos_estudos"),
+            "faltam": lambda m: m["papel_dos_estudos"].update(br_population_observed="exigido"),
+            "estudo descritivo nao tem regra": lambda m: m["melhoria_minima_no_coorte_br"].update(
+                estudos=["br_clinical_evidence", "br_population_observed"]),
+            "ao menos um estudo exigido": lambda m: m["papel_dos_estudos"].update(br_clinical_evidence="descritivo"),
             "delta": lambda m: m["regressao_maxima_no_controle"].update(delta="delta_br_full"),
             "estudos": lambda m: m["melhoria_minima_no_coorte_br"].update(estudos=[]),
             "metrica": lambda m: m["melhoria_minima_no_coorte_br"].update(metrica="macro"),
@@ -282,7 +296,7 @@ class BloqueiosTests(unittest.TestCase):
             "exige `motivo`": lambda m: m["paineis_com_regressao_inaceitavel"].update(paineis=[]),
             "suporte_minimo": lambda m: m["beneficio_nao_explicado_por_um_painel"].update(suporte_minimo_por_painel=0),
             "criterio_proprio false exige": lambda m: m["interacao"].pop("motivo"),
-            "interacao.limite": lambda m: m["interacao"].update(criterio_proprio=True),
+            "interacao.condicoes": lambda m: m["interacao"].update(criterio_proprio=True),
         }
         for trecho, estragar in casos.items():
             margens = _margens_declaradas()
@@ -293,6 +307,16 @@ class BloqueiosTests(unittest.TestCase):
         margens = _margens_declaradas()
         margens["paineis_com_regressao_inaceitavel"] = {"paineis": [], "motivo": "nenhum painel critico (teste)"}
         self.assertEqual(g6.problemas_das_margens(margens), [])
+
+    def test_as_duas_formas_de_regra_da_revisao_sao_codificaveis(self):
+        # (a) estimativa >= 0,02 e IC excluindo zero; (b) limite inferior >= 0,02: regras diferentes (revisao 25/09).
+        forma_a = [{"estatistica": "estimativa", "comparacao": ">=", "limite": 0.02},
+                   {"estatistica": "p2_5", "comparacao": ">", "limite": 0.0}]
+        forma_b = [{"estatistica": "p2_5", "comparacao": ">=", "limite": 0.02}]
+        for forma in (forma_a, forma_b):
+            margens = _margens_declaradas()
+            margens["melhoria_minima_no_coorte_br"]["condicoes"] = forma
+            self.assertEqual(g6.problemas_das_margens(margens), [])
 
     def test_bootstrap_com_unidade_invalida_reprova(self):
         for campo, valor in (("unidade_principal", "componente_conexo"), ("unidade_de_sensibilidade", "cluster_conjunto"),
@@ -343,6 +367,12 @@ class BloqueiosTests(unittest.TestCase):
         for nome in g6.MARGENS_EXIGIDAS:
             self.assertIn(nome, g6_real["margens"])
         self.assertIn("criterio_proprio", g6_real["margens"]["interacao"])
+        self.assertEqual(set(g6_real["margens"]["papel_dos_estudos"]), set(g6.ESTUDOS))
+        for nome in g6.MARGENS_EXIGIDAS:
+            self.assertIn("condicoes", g6_real["margens"][nome])
+        # A recomendacao operacional esta registrada, mas nao congela sem a confirmacao.
+        self.assertEqual(g6_real["bootstrap_da_interacao"]["unidade_principal"], "cluster_conjunto")
+        self.assertTrue(g6.problemas_do_bootstrap(g6_real["bootstrap_da_interacao"]))
         for campo in ("unidade_principal", "unidade_de_sensibilidade", "replicas", "seed", "percentis"):
             self.assertIn(campo, g6_real["bootstrap_da_interacao"])
 

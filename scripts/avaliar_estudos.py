@@ -142,6 +142,13 @@ def _n(valor: Any, formato: str = ".4f") -> str:
     return "-" if valor is None else format(valor, formato)
 
 
+def _condicoes(regra: dict[str, Any]) -> str:
+    if "condicoes" not in regra:
+        return ""
+    return " (" + "; ".join(f"{c['estatistica']} {_n(c['valor'], '+.4f')} {c['comparacao']} {c['limite']}: "
+                            f"{c['atende']}" for c in regra["condicoes"]) + ")"
+
+
 def imprimir(relatorio: dict[str, Any]) -> None:
     prefixo = "[ENSAIO] " if relatorio["modo"] == "ENSAIO" else ""
     if prefixo:
@@ -200,10 +207,13 @@ def imprimir(relatorio: dict[str, Any]) -> None:
         print(f"\n{prefixo}margens em {estudo}: atende todas = {bloco['atende_todas']}"
               + (f" ({bloco['nota']})" if bloco.get("nota") else ""))
         for nome, regra in bloco["regras"].items():
-            detalhe = (f" (valor {_n(regra.get('valor'), '+.4f')}; exige {regra.get('estatistica')} >= "
-                       f"{regra.get('limite')})" if "valor" in regra else "")
-            print(f"  {nome}: atende = {regra.get('atende')}{detalhe}"
+            print(f"  {nome}: atende = {regra.get('atende')}{_condicoes(regra)}"
                   + (f" -- {regra['motivo']}" if regra.get("motivo") else ""))
+            for rotulo, parte in {**regra.get("por_painel", {}), **regra.get("sem_cada_painel", {})}.items():
+                print(f"      {rotulo}: atende = {parte['atende']}{_condicoes(parte)}")
+    sucesso = margens["sucesso"]
+    print(f"\n{prefixo}SUCESSO (estudos exigidos {sucesso['estudos_exigidos']}; descritivos "
+          f"{sucesso['estudos_descritivos']}): {sucesso['atende']}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -259,9 +269,12 @@ def main(argv: list[str] | None = None) -> int:
     else:
         replicas = args.replicas if args.replicas is not None else estudos.REPLICAS
         seed = args.seed if args.seed is not None else estudos.SEED
-        declarada = campanha["g6"]["bootstrap_da_interacao"].get("unidade_principal")
-        unidade = declarada if declarada in estudos.UNIDADES_DA_INTERACAO else None
-        origem_do_bootstrap = "ensaio: linha de comando; unidade da declaracao, se ja houver"
+        bootstrap_declarado = campanha["g6"]["bootstrap_da_interacao"]
+        proposta = bootstrap_declarado.get("unidade_principal")
+        confirmada = not g6.problemas_do_bootstrap(bootstrap_declarado)
+        unidade = proposta if confirmada else None
+        origem_do_bootstrap = ("ensaio: linha de comando; unidade DECLARADA na declaracao" if confirmada else
+                               f"ensaio: linha de comando; unidade ainda nao declarada (recomendada: {proposta})")
 
     logical_contract, especificacao, comparator_score, codigo_do_mosaic = cobertura.carregar_mosaic(
         args.mosaic_root.expanduser())

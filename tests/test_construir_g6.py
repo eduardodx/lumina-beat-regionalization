@@ -92,8 +92,9 @@ def _cache(pasta: Path, *, semente_do_adapter, tabela, sinal, campanha, rng_seed
                               papel=tabela["papel"].to_numpy().astype(str), matrizes=matrizes)
 
 
-def _regra(**extra):
-    return {"estudos": ["br_clinical_evidence"], "metrica": "auroc", "estatistica": "p2_5", **extra}
+def _regra(limite=0.0, estatistica="p2_5", comparacao=">=", **extra):
+    return {"estudos": ["br_clinical_evidence"], "metrica": "auroc",
+            "condicoes": [{"estatistica": estatistica, "comparacao": comparacao, "limite": limite}], **extra}
 
 
 def _campanha_do_teste(tabela, destino: Path, *, selecao_comum: Path, checkpoint_sha: str, resolvida=False,
@@ -112,6 +113,7 @@ def _campanha_do_teste(tabela, destino: Path, *, selecao_comum: Path, checkpoint
     if resolvida:
         campanha["g6"]["margens"] = {
             "estado": "DECLARADO (teste sintetico)",
+            "papel_dos_estudos": {"br_clinical_evidence": "exigido", "br_population_observed": "descritivo"},
             "melhoria_minima_no_coorte_br": _regra(delta="delta_br_full", limite=0.0),
             "regressao_maxima_no_controle": _regra(delta="delta_control", limite=-0.01),
             "paineis_com_regressao_inaceitavel": _regra(delta="delta_br_full", limite=-0.02, paineis=["missense"]),

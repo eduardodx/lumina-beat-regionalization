@@ -258,20 +258,23 @@
         "paineis em que uma regressao e inaceitavel"
       ],
       "nota": "o 0,02 do plano (secao 6.5) nao diz sobre qual quantidade incide. Ganho absoluto no coorte BR, interacao delta_br_matched - delta_control e nao inferioridade geral sao perguntas diferentes, cada uma com a sua margem",
-      "como_declarar": "cada regra e `estatistica >= limite` sobre um delta MR - M0, com estatistica = estimativa ou p2_5 (o limite inferior do IC); limite finito, >= 0 nas de melhoria e <= 0 nas de regressao; estudos entre br_clinical_evidence e br_population_observed. Preencher os campos nulos abaixo e mudar o estado para DECLARADO: o construtor do G6 recusa congelar com campo nulo ou fora do dominio (eval/campanha/g6.py:problemas_das_margens)",
-      "melhoria_minima_no_coorte_br": {"estudos": null, "delta": null, "metrica": null, "estatistica": null, "limite": null, "delta_permitido": ["delta_br_full", "delta_br_matched"]},
-      "regressao_maxima_no_controle": {"estudos": null, "delta": "delta_control", "metrica": null, "estatistica": null, "limite": null},
-      "paineis_com_regressao_inaceitavel": {"paineis": null, "estudos": null, "delta": null, "metrica": null, "estatistica": null, "limite": null, "nota": "paineis entre missense, splice e noncoding (os com AUROC/AUPRC no consumidor); lista vazia so com `motivo`"},
-      "beneficio_nao_explicado_por_um_painel": {"estudos": null, "delta": null, "metrica": null, "estatistica": null, "limite": null, "suporte_minimo_por_painel": null, "nota": "condicao 3 do Mosaic (PLAN 13.5): quando dois ou mais paineis tem suporte (n_P e n_B >= suporte_minimo_por_painel), o delta do coorte sem cada painel (celulas sem_painel:* do consumidor) atende a regra"},
-      "interacao": {"criterio_proprio": null, "nota": "true: regra propria (estudos, metrica, estatistica, limite >= 0) sobre delta_br_matched - delta_control; false: so relatada com os absolutos, com `motivo`"}
+      "como_declarar": "cada regra tem estudos, delta, metrica e uma lista de CONDICOES, todas exigidas; cada condicao e {estatistica: estimativa ou p2_5 (o limite inferior do IC), comparacao: >= ou > (estrito), limite finito}, com limite >= 0 nas de melhoria e <= 0 nas de regressao. As duas formas da revisao de 25/09 sao regras DIFERENTES: (a) estimativa >= m e IC excluindo zero = [{estimativa, >=, m}, {p2_5, >, 0}]; (b) limite inferior >= m = [{p2_5, >=, m}], que exige evidencia mais forte. papel_dos_estudos diz, por estudo, se ele e EXIGIDO (as condicoes 1 a 3 do Mosaic valem para ele) ou DESCRITIVO (so relatado, sem regra). O construtor do G6 recusa congelar com campo nulo ou fora do dominio (eval/campanha/g6.py:problemas_das_margens)",
+      "proposta_anterior": "0,02 de AUROC (plano, secao 6.5) e PROPOSTA, nao requisito aprovado; nao diz sobre qual delta, estatistica ou estudo incide",
+      "papel_dos_estudos": {"br_clinical_evidence": null, "br_population_observed": null},
+      "melhoria_minima_no_coorte_br": {"estudos": null, "delta": null, "metrica": null, "condicoes": null, "delta_permitido": ["delta_br_full", "delta_br_matched"]},
+      "regressao_maxima_no_controle": {"estudos": null, "delta": "delta_control", "metrica": null, "condicoes": null},
+      "paineis_com_regressao_inaceitavel": {"paineis": null, "estudos": null, "delta": null, "metrica": null, "condicoes": null, "nota": "paineis entre missense, splice e noncoding (os com AUROC/AUPRC no consumidor); lista vazia so com `motivo`"},
+      "beneficio_nao_explicado_por_um_painel": {"estudos": null, "delta": null, "metrica": null, "condicoes": null, "suporte_minimo_por_painel": null, "nota": "condicao 3 do Mosaic (PLAN 13.5): quando dois ou mais paineis tem suporte (n_P e n_B >= suporte_minimo_por_painel), o delta do coorte sem cada painel (celulas sem_painel:* do consumidor) atende as condicoes"},
+      "interacao": {"criterio_proprio": null, "nota": "true: condicoes proprias (estudos, metrica, condicoes com limite >= 0) sobre delta_br_matched - delta_control, na unidade principal do bootstrap; false: so relatada com os absolutos, com `motivo`. No populacional a interacao descreve os 751 pareados (39,8% dos casos), nao os 1.138 sem par"}
     },
     "bootstrap_da_interacao": {
-      "estado": "PROPOSTO (plano, secao 6.3)",
+      "estado": "RECOMENDADO em 25/09 (revisao): cluster_conjunto principal e par como sensibilidade, 1.000 replicas, seed 20260901; a confirmar pelo Eduardo junto com as margens",
+      "justificativa": "variantes do mesmo locus podem ter erros correlacionados, e o overlap_cluster_id e a unidade de bloqueio do proprio Mosaic (bootstrap.resample: blocking_unit) em todos os outros deltas; o sorteio por par preserva o pareamento, mas trata como independentes pares do mesmo cluster. Nenhum preserva as duas dependencias, por isso os dois saem juntos. A escolha NAO se baseia na largura ou no sinal de intervalo algum, sintetico ou de desenvolvimento",
       "regra": "reamostrar overlap_cluster_id EM CONJUNTO sobre a uniao de casos pareados e controles, com os mesmos sorteios para M0 e MR: preserva a dependencia genomica, NAO os pares",
       "sensibilidade": "sorteio por par: preserva o pareamento, NAO a dependencia entre pares do mesmo cluster; os dois ICs saem juntos",
       "alinhar_com_o_eduardo": "a unidade: o PDF previa reamostragem por matched set (10.000 replicas); replicas e seed sao detalhe operacional da equipe",
-      "unidade_principal": null,
-      "unidade_de_sensibilidade": null,
+      "unidade_principal": "cluster_conjunto",
+      "unidade_de_sensibilidade": "par",
       "unidades_implementadas": ["cluster_conjunto", "par"],
       "replicas": 1000,
       "seed": 20260901,
@@ -353,7 +356,7 @@
       {"item": "script de extracao dos estudos (scripts/extrair_estudos.py): exige o G6 congelado, tabela reconstruida das tabelas oficiais, mesmo caminho numerico e identidade do desenvolvimento", "estado": "FEITO", "onde": "scripts/extrair_estudos.py; --so-conferir e recusas (G1 com alelo trocado, MR sem semente) no ponta a ponta com torch em ~/artifacts/redesenho/g7_ensaio_20260925_010644.log (revisao 87e1fe8); a extracao real so roda depois do congelamento"},
       {"item": "script de pontuacao e relatorio do G7 (scripts/avaliar_estudos.py), testado com dados sinteticos", "estado": "FEITO", "onde": "scripts/avaliar_estudos.py; G7 real sintetico com torch (bootstrap do manifesto, --replicas divergente recusado, cache fora da tabela oficial recusado) e ensaio em ~/artifacts/redesenho/g7_ensaio_20260925_010644.log (revisao 87e1fe8)"},
       {"item": "ensaio do consumidor na membership real com scores SINTETICOS, sem nenhum score dos estudos: confere a leitura dos artefatos da campanha antes da avaliacao unica", "estado": "FEITO", "onde": "~/artifacts/redesenho/g7_ensaio_20260925_010644/ensaio_relatorio.json: tabela oficial 8.875 (171 no chr8), pareamento 3.119/3.116 e 1.889/751, composicao igual a do suite.yaml, 44 pares retirados pela regra ampla, 1.849 pares com exposicao empatada"},
-      {"item": "confirmar com o Eduardo que os membros no chr8 entram no G7 (a reserva do chr8, decisao E, e do treino e das janelas; o Mosaic avalia o membership inteiro): 171 membros", "estado": "A_CONFIRMAR"}
+      {"item": "chr8 no G7: incluir os 171 membros, preservando a membership oficial (registrar na decisao E)", "estado": "RECOMENDADO", "justificativa": "o plano (secao 6.6) reserva o chr8 das janelas populacionais e do treino da cabeca, o que e compativel com avalia-lo depois; o pedido e avaliar nesses dois estudos, e o Mosaic avalia o membership inteiro; a reserva e do desenvolvimento e NAO prova que o pre-treino original do R03 nunca viu o chr8 (proveniencia do pre-treino: desconhecida)", "falta": "confirmacao do Eduardo"}
     ],
     "regra_das_pendencias": "o manifesto so congela com margens e unidade do bootstrap declaradas e com toda pendencia FEITO ou RETIRADO (com o motivo); o construtor recusa --congelar antes disso"
   }

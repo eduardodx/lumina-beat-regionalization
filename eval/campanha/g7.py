@@ -2,8 +2,9 @@
 estudos contra os de desenvolvimento, os scores SINTETICOS do ensaio e a aplicacao das margens declaradas. Sem torch.
 
 Nada aqui escolhe, ajusta ou calibra: os sistemas, os limiares e as regras de decisao vem do manifesto congelado do
-G6. A aplicacao das margens e mecanica -- cada regra `estatistica >= limite` sobre o delta declarado, estudo por
-estudo, nunca unindo os estudos.
+G6. A aplicacao das margens e mecanica -- cada regra e uma lista de condicoes (`estimativa` ou `p2_5`, `>=` ou `>`,
+limite) sobre o delta declarado, estudo por estudo, nunca unindo os estudos; o sucesso e o de todos os estudos
+EXIGIDOS.
 """
 from __future__ import annotations
 
@@ -130,9 +131,15 @@ def baselines_sinteticas(membros: pd.DataFrame, nomes: list[str], *, seed: int) 
 
 # ----------------------------------------------------------------------------------------------- margens
 
-def _regra(valor: Any, item: dict[str, Any]) -> dict[str, Any]:
-    atende = None if valor is None else bool(valor >= item["limite"])
-    return {"valor": valor, "estatistica": item["estatistica"], "limite": item["limite"], "atende": atende}
+def _regra(celula: dict[str, Any] | None, item: dict[str, Any]) -> dict[str, Any]:
+    """Todas as condicoes do item sobre a celula do delta (estimativa, p2_5, ...); valor ausente -> indefinida."""
+    avaliadas = []
+    for condicao in item["condicoes"]:
+        valor = (celula or {}).get(condicao["estatistica"])
+        atende = None if valor is None else bool(valor > condicao["limite"] if condicao["comparacao"] == ">"
+                                                 else valor >= condicao["limite"])
+        avaliadas.append({**condicao, "valor": valor, "atende": atende})
+    return {"condicoes": avaliadas, "atende": _combinar(avaliadas)}
 
 
 def _celula(resultado: dict[str, Any], coorte: str, celula: str, metrica: str) -> dict[str, Any] | None:
@@ -156,7 +163,7 @@ def avaliar_margens(resultados: dict[str, dict[str, Any]], margens: dict[str, An
     problemas = problemas_das_margens(margens) + problemas_do_bootstrap(bootstrap)
     if problemas:
         return {"avaliado": False, "motivo": "margens ou bootstrap nao declarados com conteudo", "problemas": problemas}
-    saida: dict[str, Any] = {"avaliado": True, "regra": "cada regra: estatistica >= limite sobre o delta MR - M0 "
+    saida: dict[str, Any] = {"avaliado": True, "regra": "cada regra: todas as suas condicoes sobre o delta MR - M0 "
                                                         "declarado; estudos nunca unidos", "por_estudo": {}}
     for estudo in ESTUDOS:
         if estudo not in resultados:
@@ -166,14 +173,13 @@ def avaliar_margens(resultados: dict[str, dict[str, Any]], margens: dict[str, An
             item = margens[nome]
             if estudo in item["estudos"]:
                 celula = _celula(r, DELTA_DO_COORTE[item["delta"]], "coorte", item["metrica"])
-                regras[nome] = {"delta": item["delta"], "metrica": item["metrica"],
-                                **_regra((celula or {}).get(item["estatistica"]), item)}
+                regras[nome] = {"delta": item["delta"], "metrica": item["metrica"], **_regra(celula, item)}
         item = margens["paineis_com_regressao_inaceitavel"]
         if estudo in item.get("estudos", []) and item.get("paineis"):
             por_painel = {}
             for painel in item["paineis"]:
                 celula = _celula(r, DELTA_DO_COORTE[item["delta"]], f"painel:{painel}", item["metrica"])
-                por_painel[painel] = _regra((celula or {}).get(item["estatistica"]), item)
+                por_painel[painel] = _regra(celula, item)
             regras["paineis_com_regressao_inaceitavel"] = {"delta": item["delta"], "metrica": item["metrica"],
                                                            "por_painel": por_painel,
                                                            "atende": _combinar(list(por_painel.values()))}
@@ -192,8 +198,7 @@ def avaliar_margens(resultados: dict[str, dict[str, Any]], margens: dict[str, An
                     "aplicavel": False, "atende": None, "paineis_com_suporte": com_suporte,
                     "motivo": "suporte em menos de dois paineis: a condicao 3 do Mosaic nao se aplica"}
             else:
-                sem = {p: _regra((_celula(r, coorte, f"sem_painel:{p}", item["metrica"]) or {}).get(
-                    item["estatistica"]), item) for p in com_suporte}
+                sem = {p: _regra(_celula(r, coorte, f"sem_painel:{p}", item["metrica"]), item) for p in com_suporte}
                 regras["beneficio_nao_explicado_por_um_painel"] = {
                     "aplicavel": True, "delta": item["delta"], "metrica": item["metrica"],
                     "paineis_com_suporte": com_suporte, "sem_cada_painel": sem, "atende": _combinar(list(sem.values()))}
@@ -203,10 +208,16 @@ def avaliar_margens(resultados: dict[str, dict[str, Any]], margens: dict[str, An
             celula = (((r.get("interacao") or {}).get(interacao["metrica"]) or {}).get("por_unidade") or {}).get(
                 bootstrap["unidade_principal"], {}).get("interacao") or {}
             regras["interacao"] = {"metrica": interacao["metrica"], "unidade": bootstrap["unidade_principal"],
-                                   **_regra(celula.get(interacao["estatistica"]), interacao)}
+                                   **_regra(celula, interacao)}
         if not regras:
             saida["por_estudo"][estudo] = {"regras": {}, "atende_todas": None,
                                            "nota": "nenhuma regra declarada para este estudo: nada a atender"}
             continue
         saida["por_estudo"][estudo] = {"regras": regras, "atende_todas": _combinar(list(regras.values()))}
+    papeis = margens["papel_dos_estudos"]
+    exigidos = [e for e in ESTUDOS if papeis[e] == "exigido"]
+    saida["sucesso"] = {
+        "regra": "todas as regras aplicaveis de cada estudo EXIGIDO; estudo descritivo so e relatado",
+        "estudos_exigidos": exigidos, "estudos_descritivos": [e for e in ESTUDOS if papeis[e] == "descritivo"],
+        "atende": _combinar([{"atende": (saida["por_estudo"].get(e) or {}).get("atende_todas")} for e in exigidos])}
     return saida

@@ -116,13 +116,16 @@ baseline nos estudos antes do G7.
 
 Métrica, margem e regra se fixam juntas e antes; não se escolhe depois a combinação mais favorável.
 
-**Como declarar (24/09).** A seção `g6.margens` da declaração traz o modelo com os campos nulos: cada regra é
-`estatística >= limite` sobre um delta MR − M0, com `estudos`, `delta` (Δ_BR_full ou Δ_BR_matched na melhoria;
-Δ_control no controle), `metrica` (AUROC ou AUPRC), `estatistica` (estimativa ou `p2_5`, o limite inferior do IC) e
-`limite` finito (≥ 0 na melhoria, ≤ 0 na regressão); painéis entre missense, splice e noncoding (lista vazia só com
-motivo); a condição 3 com `suporte_minimo_por_painel`; a interação com `criterio_proprio` explícito. O bootstrap
-traz `unidade_principal` e `unidade_de_sensibilidade` (entre `cluster_conjunto` e `par`). O construtor recusa
-congelar com qualquer campo nulo ou fora do domínio.
+**Como declarar (25/09).** A seção `g6.margens` traz o modelo com os campos nulos. Cada regra tem `estudos`,
+`delta` (Δ_BR_full ou Δ_BR_matched na melhoria; Δ_control no controle), `metrica` (AUROC ou AUPRC) e uma lista de
+**condições**, todas exigidas: `{estatistica: estimativa | p2_5, comparacao: >= | >, limite}` (limite ≥ 0 na melhoria,
+≤ 0 na regressão). As duas formas da revisão de 25/09 são **regras diferentes**, e as duas se escrevem: (a)
+"estimativa ≥ 0,02 com IC excluindo zero" = `[{estimativa, >=, 0.02}, {p2_5, >, 0}]` — "excluir zero" é estrito; (b)
+"limite inferior ≥ 0,02" = `[{p2_5, >=, 0.02}]`, que exige evidência mais forte. `papel_dos_estudos` diz, por estudo,
+se ele é **exigido** (as condições 1 a 3 do Mosaic valem para ele) ou **descritivo** (só relatado, sem regra); o G7
+sai com `sucesso` = todas as regras de todos os estudos exigidos. O 0,02 do plano é **proposta**, não requisito. O
+bootstrap traz a recomendação (`cluster_conjunto` principal, `par` sensibilidade, 1.000 réplicas, seed 20260901) ainda
+como `RECOMENDADO`; só congela confirmado. O construtor recusa congelar com qualquer campo nulo ou fora do domínio.
 
 **Duas perguntas separadas para as margens.** (a) Qual melhora seria **cientificamente relevante**? É a decisão do
 Eduardo, e não se reduz a margem para facilitar um resultado positivo. (b) Com os dados disponíveis, que melhora se

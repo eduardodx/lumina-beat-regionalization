@@ -530,7 +530,10 @@ def avaliar_estudo(membros: pd.DataFrame, estudo: str, pontos: dict[str, pd.Seri
         "estudo": estudo,
         "pareamento": {"casos": int(len(completo)), "pareados": int(len(casos)),
                        "sem_par": int(len(completo) - len(casos)),
-                       "taxa_de_pareamento": len(casos) / len(completo) if len(completo) else None},
+                       "taxa_de_pareamento": len(casos) / len(completo) if len(completo) else None,
+                       "leitura": (f"o coorte completo descreve os {len(completo)} casos publicados; a interacao e as "
+                                   f"sensibilidades descrevem os {len(casos)} pareados; uma conclusao sobre a "
+                                   f"interacao nao se transfere aos {len(completo) - len(casos)} casos sem par")},
         "metricas_com_limiar": ("com o limiar do ensemble congelado no G6" if limiares is not None
                                 else "omitidas: sem limiar externo congelado"),
         "brier": ("sobre as probabilidades calibradas do ensemble (cada cabeca calibrada no fold 1 do core_locus); "
