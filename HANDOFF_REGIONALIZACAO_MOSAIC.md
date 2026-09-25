@@ -1295,3 +1295,11 @@ quatro sistemas.
 - O ambiente numérico e o hash do FASTA são conferidos no início da extração real.
 - **A partir daqui, a declaração e os arquivos de código do G6/G7 não mudam**: o manifesto guarda o sha256 de cada um
   e o G7 recusa divergência. Só documentação pode ser commitada até o G7 rodar.
+
+**Extração dos estudos COMPLETA (25/09, 19:53–20:36; revisão `90d5410`, que só acrescenta o runbook
+`docs/runbooks/extrair_g7_gpu.sh`).** Log `~/artifacts/redesenho/g7_extracao_20260925_195308.log`, GPU NVIDIA L4. Os
+quatro caches estão em `~/artifacts/redesenho/g7_cache/{M0,MR_a1,MR_a2,MR_a3}`: 8.875 de 8.875 variantes em cada,
+`completo: true` e zero falhas de janela. A identidade de cada cache foi aceita contra a do desenvolvimento do mesmo
+sistema, então o ambiente numérico e o FASTA conferem. Velocidade: 0,054 s por variante no M0 e 0,074 no MR, igual ao
+desenvolvimento. A função `passo` do bloco enviado no chat perderia o `exit_` de uma falha sob `set -e`; a do runbook
+(`|| s=$?`) está certa, mas nada falhou. Próximo passo: `avaliar_estudos.py` no modo real, uma única vez.
