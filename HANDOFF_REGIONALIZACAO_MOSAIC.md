@@ -1141,3 +1141,20 @@ abraom=…` e `--entrada regra_ampla=… --entrada exposicao=…` (já existe `g
 - Ensaio local do G7 real refeito com o esquema novo: regras com as condições avaliadas, por painel e sem cada painel,
   e a linha `SUCESSO`. O ensaio do avaliador só usa a unidade do bootstrap quando ela está **declarada**; a
   recomendada aparece como tal.
+
+**Folha de decisão para o Eduardo (depois da décima revisão).** Página privada, que o Gabriel compartilha pelo menu
+Share: <https://claude.ai/artifact/CYd1cukg8ULPYv1mDPNGL4>. Traz as duas confirmações (chr8 e bootstrap) e a tabela
+de sucesso por estudo, e monta a resposta já no formato de `g6.margens`. Não mostra resultado de desenvolvimento nem
+score dos estudos, só contagens de rótulo. Dois achados ao prepará-la:
+- **Origem do 0,02.** A proposta C1 da fase 0 (`docs/decisoes_eduardo_fase0.md`, nunca confirmada) punha o 0,02 no
+  ΔAUROC BR-específico M2 × M1 da escada antiga, uma diferença-em-diferenças (§7.1 do `HANDOFF_CONTEXTO_VALIDADOR.md`).
+  O análogo aqui é a **interação**, não a melhoria no coorte BR da condição 1. A C1 pedia também a mesma direção em ≥ 2
+  de 3 sementes, que o G7 (ensemble) não avalia: seria código novo, como um guardrail de Brier. Os guardrails do PDF
+  (AUROC e AP não regridem mais de 0,02, Brier não piora mais de 0,01, chr8 só descritivo com n_P ou n_B < 20) entram
+  na página como referências **não aprovadas**.
+- **Limite do esquema.** Cada regra de `g6.margens` vale com os mesmos parâmetros para uma lista de estudos. Se os dois
+  estudos forem exigidos com critérios diferentes nas condições 1 a 3, `g6.py` e `g7.py` precisam de uma extensão
+  pequena antes do G6. A interação e os painéis já podem valer só para parte dos estudos. A extensão não é feita antes
+  da resposta; a página avisa quando a escolha a exigir.
+- Pendente na página: contagens por painel e chr8 por estudo, de um bloco no notebook que só lê rótulos (o
+  `ensaio_relatorio.json` já tem a composição por painel de cada coorte).
