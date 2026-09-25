@@ -146,6 +146,10 @@ def imprimir(relatorio: dict[str, Any]) -> None:
     prefixo = "[ENSAIO] " if relatorio["modo"] == "ENSAIO" else ""
     if prefixo:
         print(f"\n{AVISO_DO_ENSAIO}")
+    oficial, boot = relatorio["tabela_oficial"], relatorio["bootstrap"]
+    print(f"{prefixo}tabela oficial: {oficial['variantes']:,} variantes ({oficial['no_chr8']} no chr8), conteudo "
+          f"{oficial['conteudo_sha256'][:12]} | bootstrap: {boot['replicas']} replicas, seed {boot['seed']}, unidade "
+          f"principal {boot['unidade_principal_da_interacao']} ({boot['origem']})")
     for estudo, bloco in relatorio["estudos"].items():
         sistemas = bloco["sistemas"]
         print(f"\n{prefixo}== {estudo} == pareamento {sistemas['pareamento']}")
