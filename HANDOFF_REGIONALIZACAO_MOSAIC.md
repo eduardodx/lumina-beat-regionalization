@@ -1081,3 +1081,39 @@ Nenhuma das três pede treino, extração ou calibração de novo. Ensaio local 
 G1 com um alelo trocado recusado na extração; cache dos estudos coerente consigo mesmo mas com um alelo trocado
 recusado no G7 ("não é a tabela oficial"); tabela oficial com os membros do chr8. O chr8 no G7 fica para registrar
 na decisão E com o Eduardo (a revisão concordou que é coerente com a reserva do treino).
+
+**Ensaio na membership real (25/09, 01:06; revisão `87e1fe8`): PASSOU.** Log
+`~/artifacts/redesenho/g7_ensaio_20260925_010644.log`. Testes no notebook: 26 + 4 + 19 + 25 + 7 + 7 (cobertura, com o
+script inteiro e o `comparator_score` real) + 3 (ensaio) e os dois ponta a ponta com torch (G6 e **G7 real**), todos
+sem falha nem pulo. As três correções da nona revisão foram exercidas lá: `--replicas 10` recusado ("diverge do
+manifesto"), bootstrap do relatório = 1.000/20260901/`cluster_conjunto` "manifesto congelado"; G1 com alelo trocado
+recusado na extração e cache com alelo trocado recusado no G7; raridade no ABraOM constante nos controles com AUROC
+0,5000 marcada `constante`.
+
+| Leitura dos artefatos reais (scores SINTÉTICOS; nenhuma métrica é resultado) | ensaio | esperado |
+|---|---|---|
+| hashes lógicos de `membership`, `pb_annotations`, `pb_examples` | conferem | referência declarada (ADR 0006) |
+| tabela oficial | 8.875 variantes, 171 no chr8 | 8.875 membros; nenhuma variante nos dois estudos (clínico = consensus, populacional = gold) |
+| clínico: casos / pareados / sem par | 3.119 / 3.116 / 3 | idem (G1) |
+| clínico: P / B no coorte completo | 2.808 / 311 | `suite.yaml`: 2.808 / 311 |
+| populacional: casos / pareados / sem par | 1.889 / 751 / 1.138 | idem (G1) |
+| populacional: P / B no coorte completo; nos pareados | 89 / 1.800; 88 / 663 | `suite.yaml`: 89 / 1.800 |
+| pares fora do ABraOM (clínico) | 2.744 mantidos, 372 retirados | 323 casos e 71 controles presentes (22 pares com os dois) |
+| sem controles com SCV brasileira | 3.072 mantidos, **44** retirados | 44 declarados |
+| exposição empatada (raio 4.096) | clínico 1.849 / 1.267; populacional 682 / 69 | — |
+
+**Exposição de locus, medida agora no snapshot final (`g6_exposicao_janela2048_r4096`, dado real, sem score):**
+treino 99.992 variantes em 1.576 clusters; no clínico, 77,6% dos casos e 76,0% dos controles sem nenhuma variante de
+treino a até 4.096 bp; média 3,11 × 3,31; nos 3.116 pares, 59,3% empatados e, entre os 1.267 diferentes, caso maior em
+48,2% — praticamente simétrico (diferença média −0,2). Por cluster (`n_treino`), caso maior em 49,2% dos 2.218 pares
+diferentes. O registro anterior (0,4832; média +1,55) era **só das benignas** do clínico: outro subconjunto, não
+contradiz. Descritivo: exposição igual não implica efeito igual nos dois sistemas.
+
+**Precisão que o G7 vai ter (contagens, não resultado):** o clínico tem só **311 benignas** (e 2.805 patogênicas nos
+pareados); o populacional, só **88 patogênicas** nos pareados (e 89 no coorte completo, que é 95% benigno por causa
+dos 1.138 casos sem par). Os ICs do G7 dependerão dessas classes minoritárias — informação para as margens do
+Eduardo, não motivo para ajustá-las.
+
+Pendências de código e o ensaio passam a `FEITO` com a evidência acima. Bloqueios que restam para o G6 definitivo:
+margens e unidade do bootstrap (Eduardo), chr8 na decisão E (171 membros) e, na hora de congelar, `--proveniencia
+abraom=…` e `--entrada regra_ampla=… --entrada exposicao=…` (já existe `g6_exposicao_janela2048_r4096`).
