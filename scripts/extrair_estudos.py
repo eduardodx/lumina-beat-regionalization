@@ -4,8 +4,11 @@ CONGELADO.
 
 O QUE FAZ
     1. le o manifesto congelado (sha256 a parte; rascunho e recusado) e confere que a declaracao ainda e a dele;
-    2. tabela: uma linha por variante dos dois estudos (saida do G1, com coordenadas), papel `estudo`
-       (`g7.tabela_dos_estudos`). Membros no chr8 entram (`g7.LEITURA_DO_CHR8`);
+    2. tabela RECONSTRUIDA das tabelas oficiais do release -- membership + coordenadas e alelos do `pb_examples`,
+       os dois com o hash logico do Mosaic igual a referencia congelada no manifesto (`g7.tabela_oficial`): uma
+       linha por variante, papel `estudo`. Um arquivo intermediario com os mesmos ids e outra sequencia nao passa.
+       `--membros` (a saida do G1), se dado, e conferido campo a campo contra ela. Membros no chr8 entram
+       (`g7.LEITURA_DO_CHR8`);
     3. monta o sistema (M0, ou MR da semente) com as funcoes do extrator de desenvolvimento -- nenhum dos 12 arquivos
        da identidade muda --, com a janela, o lote e o fragmento do cache de desenvolvimento do MESMO sistema (lidos
        da identidade dele, cujo sha256 o manifesto registrou), e o adapter declarado congelado para a semente;
@@ -18,6 +21,7 @@ O QUE FAZ
 USO (notebook, GPU; um sistema por vez)
     PYTHONPATH="$PWD" python3 scripts/extrair_estudos.py --manifesto ~/artifacts/redesenho/g6_final \\
         --sistema MR --semente-do-adapter 20260922 \\
+        --release-root ~/mosaic-v1 --mosaic-root ~/testeArq/lumina-mosaic \\
         --membros ~/artifacts/redesenho/g1_brazil_studies/brazil_study_variants.parquet \\
         --checkpoint ~/artifacts/r03/best_checkpoint.pt --fasta ~/hg38/hg38.fa \\
         --out-dir ~/artifacts/redesenho/g7_cache/MR_a2
@@ -36,7 +40,8 @@ sys.path.insert(0, str(RAIZ))
 
 from eval.campanha import g6, g7  # noqa: E402
 from eval.campanha.cache import sha256_do_arquivo  # noqa: E402
-from eval.campanha.recortes import carregar_campanha  # noqa: E402
+from eval.campanha.recortes import carregar_campanha, hash_do_conteudo  # noqa: E402
+from scripts import conferir_cobertura_das_baselines as cobertura  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,7 +49,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifesto", required=True, type=Path, help="pasta do G6 congelado")
     parser.add_argument("--sistema", required=True, choices=("M0", "MR"))
     parser.add_argument("--semente-do-adapter", type=int, help="so MR")
-    parser.add_argument("--membros", required=True, type=Path, help="brazil_study_variants.parquet do G1")
+    parser.add_argument("--release-root", required=True, type=Path, help="o release do Mosaic (~/mosaic-v1)")
+    parser.add_argument("--mosaic-root", required=True, type=Path, help="o repositorio do Mosaic (hash logico)")
+    parser.add_argument("--membros", type=Path, help="brazil_study_variants.parquet do G1: conferido contra a oficial")
     parser.add_argument("--checkpoint", required=True, type=Path)
     parser.add_argument("--fasta", required=True, type=Path)
     parser.add_argument("--campanha", type=Path, default=RAIZ / "configs" / "campanha_r03_desenvolvimento.json")
@@ -79,7 +86,20 @@ def main(argv: list[str] | None = None) -> int:
     faltando = [c for c in ("janela_bp", "lote", "fragmento", "checkpoint_sha256") if c not in identidade_dev]
     if faltando:
         return _falhar([f"a identidade de desenvolvimento nao tem {faltando}: nao ha parametros a reproduzir"])
-    tabela = g7.tabela_dos_estudos(pd.read_parquet(args.membros.expanduser()))
+    release = args.release_root.expanduser()
+    problemas = cobertura.conferir_contratos(
+        release, cobertura.carregar_hash_logico(args.mosaic_root.expanduser()),
+        manifesto["proveniencia"]["declarada"]["release_do_mosaic"], (cobertura.MEMBERSHIP, cobertura.EXEMPLOS))
+    if problemas:
+        return _falhar(problemas)
+    tabela = g7.tabela_oficial(pd.read_parquet(release / cobertura.MEMBERSHIP),
+                               pd.read_parquet(release / cobertura.EXEMPLOS,
+                                               columns=["variant_id", *g7.COLUNAS_DE_SEQUENCIA, "binary_label",
+                                                        "label_tier"]))
+    if args.membros is not None:
+        diferentes = g7.diferencas_de_tabela(tabela, g7.tabela_dos_estudos(pd.read_parquet(args.membros.expanduser())))
+        if diferentes:
+            return _falhar([f"--membros difere da tabela oficial em {diferentes}"])
     adapter = None
     if args.sistema == "MR":
         adapter = Path(manifesto["adapters_congelados"][chave]["arquivo"]).expanduser()
@@ -95,9 +115,12 @@ def main(argv: list[str] | None = None) -> int:
         fragmento=int(identidade_dev["fragmento"]), out_dir=args.out_dir.expanduser())
     print(f"[estudos] manifesto {sha_do_manifesto[:12]} | {chave} | {len(tabela):,} variantes | janela "
           f"{parametros.window_bp} | lote {parametros.variantes_por_lote} | fragmento {parametros.fragmento}")
+    print(f"  tabela oficial: {len(tabela):,} variantes, {int((tabela['chrom'] == 'chr8').sum())} no chr8, "
+          f"conteudo {hash_do_conteudo(tabela)[:12]}")
     print(f"  {g7.LEITURA_DO_CHR8}")
     if args.so_conferir:
-        print("PASSOU (so conferir): manifesto, declaracao, cache de desenvolvimento, adapter e R03 conferem")
+        print("PASSOU (so conferir): manifesto, declaracao, release, tabela oficial, cache de desenvolvimento, "
+              "adapter e R03 conferem")
         return 0
 
     import torch

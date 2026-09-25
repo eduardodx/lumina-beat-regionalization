@@ -206,7 +206,9 @@ menos a tabela. Tabela: uma linha por variante (quem está nos dois estudos é e
 do release e são os mesmos). O extrator de desenvolvimento recusa membros dos estudos por construção: a extração dos
 estudos é um script próprio, que exige o manifesto do G6: `scripts/extrair_estudos.py` (lê janela, lote e
 fragmento da identidade de desenvolvimento do mesmo sistema e recusa, antes de extrair, identidade que difira além da
-tabela). Membros no chr8 entram (o Mosaic avalia o membership inteiro; a reserva do chr8 é do treino e das janelas) —
+tabela). A tabela é **reconstruída das tabelas oficiais** — `membership` + coordenadas e alelos do `pb_examples`, os
+dois com hash lógico conferido —, e o G7 confere que cada cache dos estudos extraiu exatamente essa tabela. O G7 real
+usa as réplicas, a seed e a unidade principal da interação do manifesto. Membros no chr8 entram (o Mosaic avalia o membership inteiro; a reserva do chr8 é do treino e das janelas) —
 a confirmar com o Eduardo junto com a decisão E. A pontuação e o relatório são `scripts/avaliar_estudos.py`, com um
 modo `--ensaio-sintetico` que exercita o mesmo caminho na membership real, com scores sintéticos.
 

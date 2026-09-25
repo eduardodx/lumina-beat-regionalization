@@ -147,9 +147,9 @@ class BootstrapTests(unittest.TestCase):
         for coorte in (COORTE_COMPLETO, CASOS_PAREADOS, CONTROLES):
             delta = r["coortes"][coorte]["coorte"]["delta"]["auroc"]
             self.assertEqual((delta["estimativa"], delta["p2_5"], delta["p97_5"]), (0.0, 0.0, 0.0), coorte)
-        for chave in ("interacao", "interacao_sensibilidade_por_par"):
-            faixa = r["interacao"]["auroc"][chave]
-            self.assertEqual((faixa["estimativa"], faixa["p2_5"], faixa["p97_5"]), (0.0, 0.0, 0.0), chave)
+        for unidade in ("cluster_conjunto", "par"):
+            faixa = r["interacao"]["auroc"]["por_unidade"][unidade]["interacao"]
+            self.assertEqual((faixa["estimativa"], faixa["p2_5"], faixa["p97_5"]), (0.0, 0.0, 0.0), unidade)
 
     def test_mesmos_sorteios_para_os_dois_sistemas(self):
         # Transformacao monotona: mesma ordem, AUROC igual em TODA replica -> delta sempre zero, embora a AUROC de
@@ -179,7 +179,7 @@ class BootstrapTests(unittest.TestCase):
         controles = m.loc[m["member_role"] == "control", "variant_id"]
         p[REGIONALIZADO].loc[controles] = p[BASE].loc[controles]
         v = estudos.visoes(m, estudos.ESTUDO_CLINICO)
-        r = estudos.interacao(v[CASOS_PAREADOS], v[CONTROLES], p, replicas=50)
+        r = estudos.interacao(v[CASOS_PAREADOS], v[CONTROLES], p, replicas=50, unidade_principal="cluster_conjunto")
         faixa = r["auroc"]["delta_control"]
         self.assertEqual((faixa["estimativa"], faixa["p2_5"], faixa["p97_5"]), (0.0, 0.0, 0.0))
         self.assertEqual(faixa["replicas_validas"], 50)
@@ -191,7 +191,23 @@ class BootstrapTests(unittest.TestCase):
         m.loc[m["member_role"] == "case", "binary_label"] = 0   # pares mantem o mesmo rotulo
         r = estudos.avaliar_estudo(m, estudos.ESTUDO_CLINICO, _pontos(m), replicas=20)
         self.assertIsNone(r["interacao"]["auroc"]["interacao"]["estimativa"])
-        self.assertEqual(r["interacao"]["auroc"]["interacao"]["replicas_validas"], 0)
+        for unidade in ("cluster_conjunto", "par"):
+            self.assertEqual(r["interacao"]["auroc"]["por_unidade"][unidade]["interacao"]["replicas_validas"], 0)
+
+    def test_o_ic_do_nivel_de_cima_e_o_da_unidade_declarada(self):
+        m = _membros(n_pares=60, seed=5)
+        v = estudos.visoes(m, estudos.ESTUDO_CLINICO)
+        p = _pontos(m, ruido_reg=0.4)
+        sem = estudos.interacao(v[CASOS_PAREADOS], v[CONTROLES], p, replicas=30)
+        self.assertNotIn("p2_5", sem["auroc"]["interacao"], "sem unidade declarada, so a estimativa")
+        self.assertIsNone(sem["reamostragem"]["unidade_principal"])
+        for unidade, outra in (("cluster_conjunto", "par"), ("par", "cluster_conjunto")):
+            r = estudos.interacao(v[CASOS_PAREADOS], v[CONTROLES], p, replicas=30, unidade_principal=unidade)
+            self.assertEqual(r["auroc"]["interacao"], r["auroc"]["por_unidade"][unidade]["interacao"])
+            self.assertEqual(r["reamostragem"]["unidade_de_sensibilidade"], outra)
+            self.assertEqual(r["auroc"]["por_unidade"], sem["auroc"]["por_unidade"], "os dois ICs nao dependem dela")
+        with self.assertRaises(estudos.EstudoInvalido):
+            estudos.interacao(v[CASOS_PAREADOS], v[CONTROLES], p, replicas=5, unidade_principal="componente")
 
 
 class AnalisesTests(unittest.TestCase):

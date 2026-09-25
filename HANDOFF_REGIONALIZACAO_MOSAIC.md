@@ -1056,3 +1056,28 @@ cabeças congeladas, prob. do sistema = média das três, e três adulterações
 real rodou aqui com cabeças lineares no lugar do `.pt`: congelou, conferiu, pontuou, a média bateu com as três
 cabeças e as adulterações (ambiente trocado, caches de adapter trocados, entrada mudada) reprovaram pelo motivo
 certo. As pendências escritas ficam `ESCRITO` até os testes do notebook passarem.
+
+**Nona revisão (24/09), antes do ensaio: aceita inteira; três correções de integridade do G7 real.**
+1. **Bootstrap do G7 real = o do manifesto.** O avaliador recebia `--replicas` e `--seed` também no modo real — daria
+   para congelar uma configuração e rodar outra (por exemplo, levar as 50 réplicas do ensaio). Agora o manifesto
+   registra réplicas, seed e unidade principal da interação (da declaração), o G7 real usa esses valores e **recusa**
+   `--replicas`/`--seed` divergentes; as opções livres ficam só no ensaio. A interação passou a trazer os dois ICs em
+   `por_unidade` (`cluster_conjunto`, `par`) e, no nível de cima, o da unidade **declarada** como principal — nenhuma
+   das duas é chamada de sensibilidade por padrão; sem unidade declarada, o nível de cima só tem a estimativa. A margem
+   da interação lê o IC da unidade declarada em `por_unidade`.
+2. **Coordenadas amarradas às tabelas oficiais.** A extração lia `--membros` (a saída do G1) sem conferir a identidade:
+   um arquivo com os mesmos ids e outra sequência passaria. Agora a tabela é **reconstruída** do `membership` e do
+   `pb_examples` do release, os dois com o hash lógico do Mosaic igual à referência congelada (o do `pb_examples`,
+   `3c556259…`, n 326.826, entrou na declaração, dos invariantes da ADR 0006); `--membros`, se dado, é conferido campo a
+   campo (`g7.diferencas_de_tabela`), **antes** de montar o sistema. E o G7 real confere que o conteúdo da tabela de
+   cada cache dos estudos é o da tabela oficial.
+3. **Score constante marcado, não apagado.** Com as duas classes, a AUROC de um score constante é 0,5 e a AUPRC é a
+   prevalência positiva; retornar `None` descartava essas réplicas do bootstrap e distorcia o IC (sobretudo na ausência
+   no ABraOM, binária). Agora a métrica sai definida e o coorte fica marcado `constante`. A decisão explícita de não
+   relatar a presença no ABraOM no populacional continua (é outra coisa).
+
+Nenhuma das três pede treino, extração ou calibração de novo. Ensaio local do G7 real refeito: bootstrap do relatório
+= 1.000 réplicas, seed 20260901, unidade `cluster_conjunto`, origem "manifesto congelado"; `--replicas 10` recusado;
+G1 com um alelo trocado recusado na extração; cache dos estudos coerente consigo mesmo mas com um alelo trocado
+recusado no G7 ("não é a tabela oficial"); tabela oficial com os membros do chr8. O chr8 no G7 fica para registrar
+na decisão E com o Eduardo (a revisão concordou que é coerente com a reserva do treino).

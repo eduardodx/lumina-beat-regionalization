@@ -311,6 +311,7 @@
         "copia": "~/mosaic-v1 no notebook, no layout anterior a ADR 0006 (bundle.manifest.json)",
         "artifact_contracts_hash": "4a2077e95eeb302612fd96ab880ce9290f06f82d73cb0a6353ac9fb10384d519",
         "logical_hash": {
+          "pb_examples.parquet": {"n": 326826, "logical_hash": "3c556259bd8dc5a1b55e28816874304eb19c219e58725645adfb1f614658bea2"},
           "pb_annotations.parquet": {"n": 326826, "logical_hash": "7a6ae9b22216d0ccd437282b6d3aacdc31da70384c23c05d39fa7f09bca5478e"},
           "studies/brazil/membership.parquet": {"n": 8875, "logical_hash": "1c1cd65d29c1f6c5cd2488b9313010c67cec52910bcfc96b95f1d1028d20cec2"}
         },

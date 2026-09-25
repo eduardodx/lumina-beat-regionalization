@@ -103,7 +103,8 @@ class CoberturaTests(unittest.TestCase):
 
         referencia = carregar_campanha(RAIZ / "configs" / "campanha_r03_desenvolvimento.json")["g6"][
             "proveniencia"]["release_do_mosaic"]
-        self.assertEqual(sorted(referencia["logical_hash"]), sorted(cob.CHAVES))
+        self.assertTrue(set(cob.CHAVES_DO_RELEASE) <= set(referencia["logical_hash"]))
+        self.assertTrue(referencia["logical_hash"][cob.EXEMPLOS]["logical_hash"].startswith("3c556259"))
         self.assertTrue(referencia["logical_hash"]["studies/brazil/membership.parquet"]["logical_hash"]
                         .startswith("1c1cd65d"), "o conferido no G1")
         self.assertEqual(referencia["logical_hash"]["studies/brazil/membership.parquet"]["n"], 8875)

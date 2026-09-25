@@ -43,7 +43,10 @@ from eval.campanha.recortes import carregar_campanha  # noqa: E402
 
 ANOTACOES = "pb_annotations.parquet"
 MEMBERSHIP = "studies/brazil/membership.parquet"
+EXEMPLOS = "pb_examples.parquet"
 CHAVES = {ANOTACOES: ("variant_id",), MEMBERSHIP: ("variant_id", "study_id")}
+#: A chave primaria de cada parquet do release que o G7 le (a de `PUBLISHED_PARQUETS` no `identity.py` do Mosaic).
+CHAVES_DO_RELEASE = {**CHAVES, EXEMPLOS: ("variant_id",)}
 COLUNAS_DAS_ANOTACOES = ("variant_id", "gnomad_v4_af", "gnomad_status", "abraom_af", "abraom_status", "present_abraom")
 #: A especificacao do comparador oficial que a baseline usa, como declarada em `analises_secundarias`.
 GNOMAD_RARITY = {"id": "gnomad_rarity", "column": "gnomad_v4_af", "formula": "neg_gnomad_v4_af",
@@ -60,6 +63,28 @@ def comparar_contrato(publicado: dict[str, Any] | None, recalculado: dict[str, A
         return [f"{caminho}: sem contrato no {origem}"]
     return [f"{caminho}: {campo} recalculado != {origem}" for campo in campos
             if publicado.get(campo) != recalculado.get(campo)]
+
+
+def conferir_contratos(raiz: Path, logical_contract: Callable[..., dict[str, Any]], referencia: dict[str, Any],
+                       caminhos: tuple[str, ...]) -> list[str]:
+    """Hash logico e n de cada parquet, recalculados com o `logical_contract` do Mosaic, contra a referencia
+    declarada (`g6.proveniencia.release_do_mosaic.logical_hash`)."""
+    import pyarrow.parquet as pq
+
+    problemas = []
+    for caminho in caminhos:
+        recalculado = logical_contract(pq.read_table(raiz / caminho), CHAVES_DO_RELEASE[caminho])
+        problemas += comparar_contrato(referencia["logical_hash"].get(caminho), recalculado, caminho,
+                                       campos=("logical_hash", "n"), origem="referencia declarada")
+    return problemas
+
+
+def carregar_hash_logico(mosaic_root: Path) -> Callable[..., dict[str, Any]]:
+    """So o `logical_contract` do Mosaic (pyarrow; nao precisa de pyyaml)."""
+    sys.path.insert(0, str(mosaic_root / "src"))
+    from mosaic.hashing import logical_contract
+
+    return logical_contract
 
 
 def manifesto_da_copia(raiz: Path) -> tuple[str | None, dict[str, Any]]:

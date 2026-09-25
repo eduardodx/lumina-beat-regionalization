@@ -327,8 +327,11 @@ def _estudos(raiz: Path, montado: dict, mosaic: Path) -> dict:
         stratum="x", gnomad_af_bin="rare", core_fold=2, br_lab_any=False).to_parquet(release / cobertura.MEMBERSHIP,
                                                                                     index=False)
     teste_g7.anotacoes_sinteticas(membros).to_parquet(release / cobertura.ANOTACOES, index=False)
+    membros.drop_duplicates("variant_id")[["variant_id", "chrom", "pos_1based", "ref", "alt", "binary_label",
+                                           "label_tier"]].assign(sequence_eligible=True).to_parquet(
+        release / cobertura.EXEMPLOS, index=False)
     referencia = {caminho: {k: v for k, v in logical_contract(pq.read_table(release / caminho), chave).items()
-                            if k in ("n", "logical_hash")} for caminho, chave in cobertura.CHAVES.items()}
+                            if k in ("n", "logical_hash")} for caminho, chave in cobertura.CHAVES_DO_RELEASE.items()}
     controles = membros[(membros["study_id"] == "br_clinical_evidence") & (membros["member_role"] == "control")]
     montado["entradas"]["regra_ampla"].write_text("\n".join(controles["variant_id"].iloc[:2]) + "\n", encoding="utf-8")
     pd.DataFrame({"variant_id": membros["variant_id"], "study_id": membros["study_id"],
@@ -392,20 +395,31 @@ def test_g7_real_de_ponta_a_ponta():
             manifesto, _sha = g6.ler_manifesto_congelado(raiz / "g6_final")
             assert set(manifesto["entradas_das_analises_secundarias"]) == {"regra_ampla", "exposicao"}
 
-            extracao = ["--manifesto", str(raiz / "g6_final"), "--membros", str(e["membros"]), "--checkpoint",
-                        str(montado["checkpoint"]), "--fasta", str(raiz / "hg38_ausente.fa"), "--campanha", str(resolvida),
-                        "--so-conferir"]
+            extracao = ["--manifesto", str(raiz / "g6_final"), "--release-root", str(e["release"]), "--mosaic-root",
+                        str(mosaic), "--membros", str(e["membros"]), "--checkpoint", str(montado["checkpoint"]),
+                        "--fasta", str(raiz / "hg38_ausente.fa"), "--campanha", str(resolvida), "--so-conferir"]
             assert extrator.main([*extracao, "--sistema", "M0", "--out-dir", str(raiz / "x")]) == 0
             assert extrator.main([*extracao, "--sistema", "MR", "--out-dir", str(raiz / "x")]) == 2, \
                 "MR sem semente"
+            # Um G1 com os mesmos ids e outro alelo nao passa: a tabela e reconstruida das tabelas oficiais.
+            g1_alterado = pd.read_parquet(e["membros"])
+            g1_alterado.loc[g1_alterado.index[0], "alt"] = "T" if g1_alterado.loc[g1_alterado.index[0], "alt"] != "T" else "C"
+            g1_alterado.to_parquet(raiz / "g1_alterado.parquet", index=False)
+            alterada = [a if a != str(e["membros"]) else str(raiz / "g1_alterado.parquet") for a in extracao]
+            assert extrator.main([*alterada, "--sistema", "M0", "--out-dir", str(raiz / "x")]) == 2
 
             caches = [a for chave, p in e["caches"].items() for a in ("--cache-estudos", f"{chave}={p}")]
             g7_args = ["--manifesto", str(raiz / "g6_final"), "--raiz", str(raiz), *caches, "--release-root",
                        str(e["release"]), "--mosaic-root", str(mosaic), *_entradas(montado), "--campanha",
-                       str(resolvida), "--replicas", "10"]
+                       str(resolvida)]
+            assert avaliar.main([*g7_args, "--replicas", "10", "--out-dir", str(raiz / "g7_r")]) == 2, \
+                "o G7 real usa as replicas do manifesto"
             assert avaliar.main([*g7_args, "--out-dir", str(raiz / "g7")]) == 0
             relatorio = json.loads((raiz / "g7" / "g7_relatorio.json").read_text(encoding="utf-8"))
             assert relatorio["modo"] == "REAL" and relatorio["margens"]["avaliado"]
+            assert relatorio["bootstrap"] == {"replicas": 1000, "seed": 20260901,
+                                              "unidade_principal_da_interacao": "cluster_conjunto",
+                                              "origem": "manifesto congelado"}, relatorio["bootstrap"]
             assert relatorio["limiares"]["base"] == manifesto["sistemas"]["base"]["limiar"]["threshold"]
 
             # A probabilidade do sistema base e a media das tres cabecas congeladas sobre o cache dos estudos do M0.
@@ -424,9 +438,31 @@ def test_g7_real_de_ponta_a_ponta():
             ident.write_text(guardada, encoding="utf-8")
             trocados = [a.replace(f"{SEMENTES[1]}={e['caches'][SEMENTES[1]]}", f"{SEMENTES[1]}={e['caches'][SEMENTES[2]]}")
                         for a in g7_args]
+            regra_original = montado["entradas"]["regra_ampla"].read_text(encoding="utf-8")
             assert avaliar.main([*trocados, "--out-dir", str(raiz / "g7_c")]) == 2
             montado["entradas"]["regra_ampla"].write_text("outra lista\n", encoding="utf-8")
             assert avaliar.main([*g7_args, "--out-dir", str(raiz / "g7_d")]) == 2
+            # Cache coerente consigo mesmo, mas extraido de uma tabela com outro alelo: nao e a tabela oficial.
+            from eval.campanha import cache as cache_io
+            from eval.campanha.recortes import hash_da_tabela, hash_do_conteudo
+
+            alterada = e["tabela"].copy()
+            alterada.loc[alterada.index[0], "alt"] = "C" if alterada.loc[alterada.index[0], "alt"] != "C" else "T"
+            falso = raiz / "g7_cache_alterado" / "M0"
+            falso.mkdir(parents=True)
+            dev = json.loads((montado["caches"]["M0"] / "identidade.json").read_text(encoding="utf-8"))
+            (falso / "identidade.json").write_text(json.dumps(dict(
+                dev, tabela_sha256_conteudo=hash_do_conteudo(alterada), tabela_sha256_composicao=hash_da_tabela(alterada),
+                papeis=["estudo"])), encoding="utf-8")
+            (falso / "manifesto.json").write_text(json.dumps({"completo": True}), encoding="utf-8")
+            alterada.to_parquet(falso / "tabela.parquet", index=False)
+            cache_io.gravar_fragmento(falso, 0, variant_id=alterada["variant_id"].to_numpy().astype(str),
+                                      papel=alterada["papel"].to_numpy().astype(str),
+                                      matrizes={n: np.zeros((len(alterada), d), dtype=np.float32)
+                                                for n, d in (("cabecas_172", 172), ("leitura_antiga_1344", 1344))})
+            montado["entradas"]["regra_ampla"].write_text(regra_original, encoding="utf-8")
+            trocado = [a.replace(f"M0={e['caches']['M0']}", f"M0={falso}") for a in g7_args]
+            assert avaliar.main([*trocado, "--out-dir", str(raiz / "g7_e")]) == 2
         finally:
             construtor.estado_do_codigo, avaliar.estado_do_codigo = originais
 

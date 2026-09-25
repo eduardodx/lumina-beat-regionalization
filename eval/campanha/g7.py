@@ -56,6 +56,40 @@ def tabela_dos_estudos(membros: pd.DataFrame) -> pd.DataFrame:
     return tabela.sort_values(["papel", "variant_id"], kind="mergesort").reset_index(drop=True)
 
 
+#: As colunas de sequencia vem do `pb_examples` do release; o resto, da membership. As duas com hash logico
+#: conferido: a tabela extraida fica amarrada as tabelas oficiais, nao a um arquivo intermediario.
+COLUNAS_DE_SEQUENCIA = ("chrom", "pos_1based", "ref", "alt")
+
+
+def tabela_oficial(membership: pd.DataFrame, exemplos: pd.DataFrame) -> pd.DataFrame:
+    """A tabela dos estudos reconstruida das tabelas OFICIAIS: membership + coordenadas e alelos do `pb_examples`
+    (o mesmo casamento do G1). Recusa membro sem exemplo e rotulo ou tier que divirjam entre as duas. Pura."""
+    faltando = [c for c in ("variant_id", *COLUNAS_DE_SEQUENCIA, "binary_label", "label_tier") if c not in exemplos]
+    if faltando:
+        raise G7Invalido(f"pb_examples sem as colunas {faltando}")
+    if exemplos["variant_id"].duplicated().any():
+        raise G7Invalido("pb_examples com variant_id repetido")
+    juntos = membership.merge(exemplos[["variant_id", *COLUNAS_DE_SEQUENCIA, "binary_label", "label_tier"]],
+                              on="variant_id", how="left", suffixes=("", "_exemplo"), validate="many_to_one")
+    if juntos["pos_1based"].isna().any():
+        raise G7Invalido(f"{int(juntos['pos_1based'].isna().sum())} membros sem linha no pb_examples")
+    for coluna in ("binary_label", "label_tier"):
+        divergentes = juntos[coluna].astype(str) != juntos[f"{coluna}_exemplo"].astype(str)
+        if divergentes.any():
+            raise G7Invalido(f"{int(divergentes.sum())} membros com {coluna} diferente do pb_examples")
+    juntos["pos_1based"] = juntos["pos_1based"].astype("int64")
+    return tabela_dos_estudos(juntos.drop(columns=["binary_label_exemplo", "label_tier_exemplo"]))
+
+
+def diferencas_de_tabela(oficial: pd.DataFrame, outra: pd.DataFrame) -> list[str]:
+    """Onde uma tabela dos estudos difere da oficial (ids, e em cada coluna da extracao). Pura."""
+    if sorted(oficial["variant_id"].astype(str)) != sorted(outra["variant_id"].astype(str)):
+        return ["variantes diferentes"]
+    a = oficial.set_index(oficial["variant_id"].astype(str))
+    b = outra.set_index(outra["variant_id"].astype(str)).loc[a.index]
+    return [c for c in COLUNAS if (a[c].astype(str).to_numpy() != b[c].astype(str).to_numpy()).any()]
+
+
 def diferencas_do_estudo(desenvolvimento: dict[str, Any], estudo: dict[str, Any]) -> list[str]:
     """Campos em que a identidade do cache dos estudos difere da do cache de desenvolvimento do MESMO sistema, alem
     dos que so dependem da tabela. Qualquer um invalida o cache: seria outro caminho numerico. Pura."""
@@ -165,9 +199,9 @@ def avaliar_margens(resultados: dict[str, dict[str, Any]], margens: dict[str, An
                     "paineis_com_suporte": com_suporte, "sem_cada_painel": sem, "atende": _combinar(list(sem.values()))}
         interacao = margens["interacao"]
         if interacao["criterio_proprio"] and estudo in interacao["estudos"]:
-            chave = ("interacao" if bootstrap["unidade_principal"] == "cluster_conjunto"
-                     else "interacao_sensibilidade_por_par")
-            celula = ((r.get("interacao") or {}).get(interacao["metrica"]) or {}).get(chave) or {}
+            # O IC da unidade DECLARADA, lido em `por_unidade`: nao depende do que o consumidor pos no nivel de cima.
+            celula = (((r.get("interacao") or {}).get(interacao["metrica"]) or {}).get("por_unidade") or {}).get(
+                bootstrap["unidade_principal"], {}).get("interacao") or {}
             regras["interacao"] = {"metrica": interacao["metrica"], "unidade": bootstrap["unidade_principal"],
                                    **_regra(celula.get(interacao["estatistica"]), interacao)}
         if not regras:

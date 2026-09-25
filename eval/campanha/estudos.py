@@ -20,12 +20,13 @@ REGRAS DE AVALIACAO DO MOSAIC (commit 814e7f0: `specs/PLAN.md` 13.3-13.5 e `prot
     - bootstrap pareado por `overlap_cluster_id` (os MESMOS sorteios para os dois sistemas), 1.000 replicas, seed
       20260901, percentis 2,5 e 97,5.
 
-O QUE O MOSAIC NAO DEFINE E FICA DECLARADO AQUI (plano, secao 6.3; PROPOSTO ate o G6)
-    - a reamostragem da interacao, com dois metodos de pressupostos diferentes, relatados juntos:
-        * clusters sorteados EM CONJUNTO sobre a uniao de casos pareados e controles: preserva a dependencia
-          genomica (um cluster entra inteiro), mas NAO preserva os pares -- caso e controle em clusters diferentes
-          sao sorteados independentemente;
-        * sorteio por PAR: preserva o pareamento, mas nao a dependencia entre pares do mesmo cluster;
+O QUE O MOSAIC NAO DEFINE E FICA DECLARADO AQUI (plano, secao 6.3; a unidade principal e decisao do G6)
+    - a reamostragem da interacao, com dois metodos de pressupostos diferentes, relatados juntos em `por_unidade`:
+        * `cluster_conjunto`: clusters sorteados EM CONJUNTO sobre a uniao de casos pareados e controles: preserva a
+          dependencia genomica (um cluster entra inteiro), mas NAO preserva os pares -- caso e controle em clusters
+          diferentes sao sorteados independentemente;
+        * `par`: sorteio por PAR: preserva o pareamento, mas nao a dependencia entre pares do mesmo cluster;
+      o IC do nivel de cima e o da unidade PRINCIPAL declarada no G6; sem unidade declarada, so a estimativa;
     - cada analise tem o proprio gerador, com a seed declarada, para o resultado de uma nao depender de quais outras
       rodam;
     - a interacao SUBTRAI os deltas observados; nao remove confundimento nem diferencas de composicao entre casos e
@@ -37,7 +38,7 @@ O QUE O MOSAIC NAO DEFINE E FICA DECLARADO AQUI (plano, secao 6.3; PROPOSTO ate 
       ausente nao faz a analise sumir: ela sai marcada como nao calculada, com o motivo;
     - Brier, so dos SISTEMAS e so sobre probabilidades calibradas (`com_brier`); nunca sobre um score de ordenacao;
     - baselines (`avaliar_baseline`): scores FORA dos sistemas, com metricas absolutas na propria cobertura; score
-      constante num coorte nao discrimina por construcao e sai sem metrica, com o motivo.
+      constante num coorte fica MARCADO (AUROC 0,5 e AUPRC igual a prevalencia, por construcao), sem sumir do IC.
 """
 from __future__ import annotations
 
@@ -314,20 +315,31 @@ def _indices_do_par(casos: pd.DataFrame, controles: pd.DataFrame) -> tuple[np.nd
     return np.arange(len(casos)), np.asarray(parceiros, dtype=int)
 
 
+UNIDADES_DA_INTERACAO = {
+    "cluster_conjunto": "overlap_cluster_id sorteado em CONJUNTO sobre casos pareados + controles: preserva a "
+                        "dependencia genomica, nao os pares",
+    "par": "sorteio por par: preserva o pareamento, nao a dependencia entre pares do mesmo cluster",
+}
+NOMES_DA_INTERACAO = ("delta_br_matched", "delta_control", "interacao")
+
+
 def interacao(casos: pd.DataFrame, controles: pd.DataFrame, pontos: dict[str, pd.Series], *,
-              replicas: int = REPLICAS, seed: int = SEED) -> dict[str, Any]:
+              replicas: int = REPLICAS, seed: int = SEED, unidade_principal: str | None = None) -> dict[str, Any]:
     """delta_br_matched - delta_control, cada delta na intersecao de cobertura do proprio grupo (regra do Mosaic).
 
-    Dois ICs, com pressupostos diferentes (PROPOSTO, plano 6.3), sempre com os mesmos sorteios para os dois
-    sistemas: (1) clusters sorteados EM CONJUNTO sobre a uniao de casos pareados e controles -- preserva a
-    dependencia genomica, nao os pares (caso e controle em clusters diferentes saem em sorteios independentes);
-    (2) sorteio por PAR -- preserva o pareamento, nao a dependencia entre pares do mesmo cluster.
+    Dois ICs, com pressupostos diferentes (plano 6.3), sempre com os mesmos sorteios para os dois sistemas e ambos
+    em `por_unidade`: `cluster_conjunto` (clusters sorteados EM CONJUNTO sobre a uniao de casos pareados e controles
+    -- preserva a dependencia genomica, nao os pares) e `par` (preserva o pareamento, nao a dependencia entre pares do
+    mesmo cluster). O nivel de cima traz o IC da unidade PRINCIPAL declarada no G6; sem ela, so a estimativa --
+    nenhuma das duas e chamada de sensibilidade por padrao.
 
     Com cobertura incompleta, a intersecao de cada grupo pode deixar casos e controles que ja nao correspondem par a
     par: por isso sai a contagem de pares com os dois membros cobertos pelos dois sistemas.
     """
     if len(casos) != len(controles):
         raise EstudoInvalido(f"{len(casos)} casos pareados e {len(controles)} controles: o pareamento e 1:1")
+    if unidade_principal is not None and unidade_principal not in UNIDADES_DA_INTERACAO:
+        raise EstudoInvalido(f"unidade principal {unidade_principal!r} fora de {sorted(UNIDADES_DA_INTERACAO)}")
     ac, ak = _arrays(casos, pontos), _arrays(controles, pontos)
     linhas_caso, linhas_controle = _indices_do_par(casos, controles)
     coberto_caso = np.isfinite(ac[BASE]) & np.isfinite(ac[REGIONALIZADO])
@@ -345,6 +357,7 @@ def interacao(casos: pd.DataFrame, controles: pd.DataFrame, pontos: dict[str, pd
     # Uniao: as primeiras len(casos) linhas sao casos, as demais controles.
     clusters = np.concatenate([ac["clusters"], ak["clusters"]])
     conjunta, por_par = _Acumulador(), _Acumulador()
+    acumuladores = {"cluster_conjunto": conjunta, "par": por_par}
     todas = grupos(clusters)
     rng = np.random.default_rng(seed)
     for _ in range(replicas):
@@ -352,7 +365,7 @@ def interacao(casos: pd.DataFrame, controles: pd.DataFrame, pontos: dict[str, pd
         ic, ik = indices[indices < len(casos)], indices[indices >= len(casos)] - len(casos)
         replica = estimar(ic, ik) if ic.size and ik.size else {k: {} for k in CONTINUAS}
         for k in CONTINUAS:
-            for nome in ("delta_br_matched", "delta_control", "interacao"):
+            for nome in NOMES_DA_INTERACAO:
                 conjunta.guardar((k, nome), replica[k].get(nome))
 
     rng_par = np.random.default_rng(seed)
@@ -360,26 +373,32 @@ def interacao(casos: pd.DataFrame, controles: pd.DataFrame, pontos: dict[str, pd
         pares = rng_par.integers(0, len(linhas_caso), size=len(linhas_caso))
         replica = estimar(linhas_caso[pares], linhas_controle[pares])
         for k in CONTINUAS:
-            por_par.guardar((k, "interacao"), replica[k].get("interacao"))
+            for nome in NOMES_DA_INTERACAO:
+                por_par.guardar((k, nome), replica[k].get(nome))
 
     saida: dict[str, Any] = {
         "definicao": "delta_br_matched - delta_control (sem unmatched_case), deltas regionalized - base; subtrai "
                      "os deltas observados, nao remove confundimento nem diferencas de composicao",
-        "reamostragem": {"principal": "overlap_cluster_id em CONJUNTO sobre casos pareados + controles: preserva a "
-                                      "dependencia genomica, nao os pares",
-                         "sensibilidade": "por par: preserva o pareamento, nao a dependencia entre pares do mesmo "
-                                          "cluster",
-                         "estado": "PROPOSTO (plano 6.3); mesmos sorteios para os dois sistemas nos dois metodos"},
+        "reamostragem": {
+            "unidade_principal": unidade_principal,
+            "unidade_de_sensibilidade": (next(u for u in UNIDADES_DA_INTERACAO if u != unidade_principal)
+                                         if unidade_principal else None),
+            "unidades": UNIDADES_DA_INTERACAO,
+            "estado": ("unidade principal declarada: o IC do nivel de cima e o dela" if unidade_principal
+                       else "unidade principal nao declarada: os dois ICs so em por_unidade"),
+            "sorteios": "os mesmos para os dois sistemas nos dois metodos"},
         "pares": int(len(casos)),
         "pares_com_os_dois_membros_cobertos": pares_cobertos,
         "cobertura_desfaz_pares": pares_cobertos < len(casos),
         "clusters_na_uniao": int(len(todas)),
     }
     for k in CONTINUAS:
-        saida[k] = {nome: {"estimativa": observado[k][nome], **conjunta.intervalo((k, nome))}
-                    for nome in ("delta_br_matched", "delta_control", "interacao")}
-        saida[k]["interacao_sensibilidade_por_par"] = {"estimativa": observado[k]["interacao"],
-                                                        **por_par.intervalo((k, "interacao"))}
+        por_unidade = {unidade: {nome: {"estimativa": observado[k][nome], **acumulador.intervalo((k, nome))}
+                                 for nome in NOMES_DA_INTERACAO}
+                       for unidade, acumulador in acumuladores.items()}
+        saida[k] = ({nome: dict(por_unidade[unidade_principal][nome]) for nome in NOMES_DA_INTERACAO}
+                    if unidade_principal else {nome: {"estimativa": observado[k][nome]} for nome in NOMES_DA_INTERACAO})
+        saida[k]["por_unidade"] = por_unidade
     return saida
 
 
@@ -402,12 +421,14 @@ def filtrar_pares(casos: pd.DataFrame, controles: pd.DataFrame, manter: np.ndarr
 
 
 def _sensibilidade(nome: str, natureza: str, casos: pd.DataFrame, controles: pd.DataFrame, manter: np.ndarray,
-                   pontos: dict[str, pd.Series], *, replicas: int, seed: int) -> dict[str, Any]:
+                   pontos: dict[str, pd.Series], *, replicas: int, seed: int,
+                   unidade_principal: str | None = None) -> dict[str, Any]:
     casos_mantidos, controles_mantidos = filtrar_pares(casos, controles, manter)
     return {"analise": nome, "natureza": natureza, "pares_mantidos": int(len(casos_mantidos)),
             "pares_retirados": int(len(casos) - len(casos_mantidos)),
             "composicao": {CASOS_PAREADOS: composicao(casos_mantidos), CONTROLES: composicao(controles_mantidos)},
-            "interacao": (interacao(casos_mantidos, controles_mantidos, pontos, replicas=replicas, seed=seed)
+            "interacao": (interacao(casos_mantidos, controles_mantidos, pontos, replicas=replicas, seed=seed,
+                                    unidade_principal=unidade_principal)
                           if len(casos_mantidos) else None)}
 
 
@@ -418,13 +439,14 @@ def _nao_calculada(nome: str, motivo: str) -> dict[str, Any]:
 
 def sensibilidades(estudo: str, casos: pd.DataFrame, controles: pd.DataFrame, pontos: dict[str, pd.Series], *,
                    replicas: int, seed: int, controles_com_scv_brasileira: set[str] | None,
-                   exposicao: pd.Series | None, tolerancia_de_exposicao: int) -> dict[str, Any]:
+                   exposicao: pd.Series | None, tolerancia_de_exposicao: int,
+                   unidade_principal: str | None = None) -> dict[str, Any]:
     """As analises secundarias pre-declaradas da interacao. Todas mantem pares inteiros; nenhuma muda o resultado
     oficial; nenhuma e escolhida depois dos resultados -- e entrada ausente vira `nao_calculada`, nao silencio."""
     parceiros = controles_dos_casos(casos, controles)
     ids_dos_controles = parceiros["variant_id"].astype(str)
     saida: dict[str, Any] = {}
-    kwargs = {"pontos": pontos, "replicas": replicas, "seed": seed}
+    kwargs = {"pontos": pontos, "replicas": replicas, "seed": seed, "unidade_principal": unidade_principal}
 
     if estudo == ESTUDO_CLINICO:
         manter = (~casos["present_abraom"].astype(bool).to_numpy()
@@ -483,7 +505,7 @@ def avaliar_estudo(membros: pd.DataFrame, estudo: str, pontos: dict[str, pd.Seri
                    limiares: dict[str, float] | None = None,
                    controles_com_scv_brasileira: set[str] | None = None,
                    exposicao: pd.Series | None = None, tolerancia_de_exposicao: int = 0,
-                   com_brier: bool = False,
+                   com_brier: bool = False, unidade_principal: str | None = None,
                    progresso: Callable[[str], None] | None = None) -> dict[str, Any]:
     """Tudo o que o protocolo pede de UM estudo, mais as analises secundarias declaradas para ele.
 
@@ -525,7 +547,8 @@ def avaliar_estudo(membros: pd.DataFrame, estudo: str, pontos: dict[str, pd.Seri
         saida["coortes"][nome] = analise_do_coorte(frame, pontos, replicas=replicas, seed=seed, limiares=limiares,
                                                    por_painel=True, com_brier=com_brier)
     avisar(f"{estudo}: interacao")
-    saida["interacao"] = interacao(casos, controles, pontos, replicas=replicas, seed=seed)
+    saida["interacao"] = interacao(casos, controles, pontos, replicas=replicas, seed=seed,
+                                   unidade_principal=unidade_principal)
 
     if estudo == ESTUDO_CLINICO:
         presentes = completo[completo["present_abraom"].astype(bool)].reset_index(drop=True)
@@ -540,7 +563,8 @@ def avaliar_estudo(membros: pd.DataFrame, estudo: str, pontos: dict[str, pd.Seri
     avisar(f"{estudo}: sensibilidades")
     saida["sensibilidades"] = sensibilidades(estudo, casos, controles, pontos, replicas=replicas, seed=seed,
                                              controles_com_scv_brasileira=controles_com_scv_brasileira,
-                                             exposicao=exposicao, tolerancia_de_exposicao=tolerancia_de_exposicao)
+                                             exposicao=exposicao, tolerancia_de_exposicao=tolerancia_de_exposicao,
+                                             unidade_principal=unidade_principal)
     return saida
 
 
@@ -554,11 +578,11 @@ def _um_score(frame: pd.DataFrame, score: pd.Series) -> dict[str, np.ndarray]:
 
 
 def _metricas_de_um_score(y: np.ndarray, s: np.ndarray) -> dict[str, Any]:
-    """AUROC e AUPRC na cobertura do proprio score. Score constante na cobertura nao discrimina por construcao."""
+    """AUROC e AUPRC na cobertura do proprio score, definidas sempre que houver as duas classes -- inclusive para
+    score constante (AUROC 0,5; AUPRC = prevalencia positiva), que fica apenas MARCADO: descartar essas replicas
+    distorceria o IC (revisao de 24/09)."""
     coberto = np.isfinite(s)
-    if np.unique(s[coberto]).size <= 1:
-        return {"auroc": None, "auprc": None, "constante": True}
-    return {**continuas(y[coberto], s[coberto]), "constante": False}
+    return {**continuas(y[coberto], s[coberto]), "constante": bool(np.unique(s[coberto]).size <= 1)}
 
 
 def avaliar_score_unico(frame: pd.DataFrame, score: pd.Series, *, replicas: int = REPLICAS,
@@ -589,7 +613,8 @@ def avaliar_score_unico(frame: pd.DataFrame, score: pd.Series, *, replicas: int 
                        **{chave: {"estimativa": resultado[chave], **acumulador.intervalo((nome, chave))}
                           for chave in CONTINUAS}}
         if resultado["constante"]:
-            saida[nome]["motivo"] = "score constante na cobertura: nao discrimina por construcao"
+            saida[nome]["motivo"] = ("score constante na cobertura: AUROC 0,5 e AUPRC igual a prevalencia positiva, "
+                                     "por construcao -- nao discrimina")
     return saida
 
 

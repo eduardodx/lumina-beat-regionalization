@@ -129,8 +129,13 @@ class BaselinesTests(unittest.TestCase):
                                                 especificacao=esp[baselines.RARIDADE_NO_ABRAOM], replicas=10)
         controles = populacional["coortes"][CONTROLES]["coorte"]
         self.assertTrue(controles["constante"])
-        self.assertIsNone(controles["auroc"]["estimativa"])
-        self.assertIn("nao discrimina por construcao", controles["motivo"])
+        # Constante com as duas classes: AUROC 0,5 e AUPRC = prevalencia, definidas (revisao de 24/09).
+        y = m[(m["study_id"] == estudos.ESTUDO_POPULACIONAL) & (m["member_role"] == "control")]["binary_label"]
+        self.assertEqual(controles["auroc"]["estimativa"], 0.5)
+        self.assertAlmostEqual(controles["auprc"]["estimativa"], float(y.mean()))
+        self.assertEqual((controles["auroc"]["p2_5"], controles["auroc"]["p97_5"]), (0.5, 0.5))
+        self.assertEqual(controles["auroc"]["replicas_validas"], 10, "replica constante nao some do IC")
+        self.assertIn("nao discrimina", controles["motivo"])
         self.assertFalse(populacional["coortes"][COORTE_COMPLETO]["coorte"]["constante"])
         self.assertEqual(populacional["sem_brier"], "score de ordenacao, nao probabilidade")
         ausencia = estudos.avaliar_baseline(m, estudos.ESTUDO_POPULACIONAL, s[baselines.AUSENCIA_NO_ABRAOM],
@@ -171,6 +176,26 @@ class TabelaEIdentidadeTests(unittest.TestCase):
             g7.tabela_dos_estudos(errada)
         with self.assertRaises(g7.G7Invalido):
             g7.tabela_dos_estudos(m.drop(columns=["pos_1based"]))
+
+    def test_tabela_oficial_vem_da_membership_e_do_pb_examples(self):
+        m = membros_sinteticos()
+        membership = m.drop(columns=["chrom", "pos_1based", "ref", "alt"])
+        exemplos = pd.concat([m.drop_duplicates("variant_id")[["variant_id", "chrom", "pos_1based", "ref", "alt",
+                                                                "binary_label", "label_tier"]],
+                              pd.DataFrame({"variant_id": ["fora"], "chrom": ["chr3"], "pos_1based": [1], "ref": ["A"],
+                                            "alt": ["C"], "binary_label": [0], "label_tier": ["gold"]})])
+        oficial = g7.tabela_oficial(membership, exemplos)
+        self.assertEqual(g7.diferencas_de_tabela(oficial, g7.tabela_dos_estudos(m)), [])
+        # Mesmos ids, outra sequencia: um arquivo intermediario assim nao passa.
+        alterado = m.copy()
+        alterado.loc[alterado["variant_id"] == "ccaso3", "alt"] = "T"
+        self.assertEqual(g7.diferencas_de_tabela(oficial, g7.tabela_dos_estudos(alterado)), ["alt"])
+        with self.assertRaises(g7.G7Invalido):
+            g7.tabela_oficial(membership, exemplos[exemplos["variant_id"] != "ccaso3"])
+        rotulo_errado = exemplos.copy()
+        rotulo_errado.loc[rotulo_errado["variant_id"] == "ccaso3", "binary_label"] = 7
+        with self.assertRaises(g7.G7Invalido):
+            g7.tabela_oficial(membership, rotulo_errado)
 
     def test_identidade_so_pode_diferir_na_tabela(self):
         dev = {"codigo": {"x": 1}, "ambiente": {"gpu": "L4"}, "tabela_sha256_conteudo": "a", "papeis": ["train"],
@@ -236,7 +261,7 @@ class MargensTests(unittest.TestCase):
         regras = saida["por_estudo"][estudos.ESTUDO_CLINICO]["regras"]
         self.assertFalse(regras["melhoria_minima_no_coorte_br"]["atende"])
         self.assertFalse(saida["por_estudo"][estudos.ESTUDO_CLINICO]["atende_todas"])
-        esperado = self.r[estudos.ESTUDO_CLINICO]["interacao"]["auroc"]["interacao_sensibilidade_por_par"]["estimativa"]
+        esperado = self.r[estudos.ESTUDO_CLINICO]["interacao"]["auroc"]["por_unidade"]["par"]["interacao"]["estimativa"]
         self.assertEqual(regras["interacao"]["valor"], esperado)
         self.assertEqual(regras["interacao"]["unidade"], "par")
 

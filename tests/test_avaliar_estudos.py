@@ -58,10 +58,13 @@ def _release(pasta: Path, *, resolvida=False):
     (pasta / "release" / "studies" / "brazil").mkdir(parents=True)
     membership.to_parquet(pasta / "release" / cobertura.MEMBERSHIP, index=False)
     teste_g7.anotacoes_sinteticas(membros).to_parquet(pasta / "release" / cobertura.ANOTACOES, index=False)
+    membros.drop_duplicates("variant_id")[["variant_id", "chrom", "pos_1based", "ref", "alt", "binary_label",
+                                           "label_tier"]].assign(sequence_eligible=True).to_parquet(
+        pasta / "release" / cobertura.EXEMPLOS, index=False)
     campanha = json.loads((RAIZ / "configs" / "campanha_r03_desenvolvimento.json").read_text(encoding="utf-8"))
     campanha["g6"]["proveniencia"]["release_do_mosaic"]["logical_hash"] = {
         caminho: {k: v for k, v in logical_contract(pq.read_table(pasta / "release" / caminho), chave).items()
-                  if k in ("n", "logical_hash")} for caminho, chave in cobertura.CHAVES.items()}
+                  if k in ("n", "logical_hash")} for caminho, chave in cobertura.CHAVES_DO_RELEASE.items()}
     if resolvida:
         margens = teste_g7._margens()
         campanha["g6"]["margens"] = margens
@@ -112,6 +115,10 @@ class EnsaioTests(unittest.TestCase):
             self.assertEqual(r["baselines"]["cobertura_do_score"]["gnomad_rarity"]["pontuadas"],
                              r["baselines"]["cobertura_do_score"]["gnomad_rarity"]["membros_unicos"])
             self.assertFalse((pasta / "e1" / "g7_pontos.parquet").exists(), "o ensaio nao grava scores")
+            self.assertIsNone(r["bootstrap"]["unidade_principal_da_interacao"], "a declaracao de hoje nao tem unidade")
+            self.assertEqual(r["bootstrap"]["replicas"], 10)
+            self.assertEqual(r["tabela_oficial"]["no_chr8"], 4, "chr8 entra no G7 (o par 0 de cada estudo)")
+            self.assertNotIn("p2_5", clinico["sistemas"]["interacao"]["auroc"]["interacao"])
             self.assertEqual(avaliar.main(["--ensaio-sintetico", *argumentos, "--out-dir", str(pasta / "e1")]), 2)
 
     def test_ensaio_com_margens_declaradas_aplica_as_regras(self):
@@ -121,6 +128,9 @@ class EnsaioTests(unittest.TestCase):
             self.assertEqual(avaliar.main(["--ensaio-sintetico", *argumentos, "--out-dir", str(pasta / "e2")]), 0)
             r = json.loads((pasta / "e2" / "ensaio_relatorio.json").read_text(encoding="utf-8"))
             self.assertTrue(r["margens"]["avaliado"])
+            self.assertEqual(r["bootstrap"]["unidade_principal_da_interacao"], "cluster_conjunto")
+            interacao = r["estudos"][estudos.ESTUDO_CLINICO]["sistemas"]["interacao"]["auroc"]
+            self.assertEqual(interacao["interacao"], interacao["por_unidade"]["cluster_conjunto"]["interacao"])
             regras = r["margens"]["por_estudo"][estudos.ESTUDO_CLINICO]["regras"]
             self.assertIn(regras["melhoria_minima_no_coorte_br"]["atende"], (True, False))
 

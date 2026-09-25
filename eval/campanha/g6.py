@@ -468,8 +468,13 @@ def montar_manifesto(campanha: dict[str, Any], *, declaracao_sha256: str, decisa
         "sobreposicoes_declaradas": g6["sobreposicoes_declaradas"],
         "proveniencia": {"declarada": g6["proveniencia"], "reconferida_nos_arquivos": proveniencia},
         "margens": g6["margens"],
-        "bootstrap": {"replicas": 1000, "seed": 20260901, "unidade": "overlap_cluster_id",
-                      "percentis": [2.5, 97.5], "interacao": g6["bootstrap_da_interacao"],
+        "bootstrap": {"replicas": int(g6["bootstrap_da_interacao"].get("replicas") or 1000),
+                      "seed": int(g6["bootstrap_da_interacao"].get("seed") or 20260901),
+                      "unidade": "overlap_cluster_id", "percentis": [2.5, 97.5],
+                      "unidade_principal_da_interacao": g6["bootstrap_da_interacao"].get("unidade_principal"),
+                      "interacao": g6["bootstrap_da_interacao"],
+                      "uso": "o G7 real usa estas replicas, esta seed e esta unidade principal; a linha de comando "
+                             "nao as muda",
                       "leitura": "ICs condicionais aos sistemas congelados: reamostram variantes (por cluster), nao o "
                                  "treino dos adapters e das cabecas"},
         "analises_secundarias": g6["analises_secundarias"],

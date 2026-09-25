@@ -8,11 +8,13 @@ MODO REAL (exige o G6 congelado)
     2. release: membership e anotacoes com o hash logico do Mosaic igual a referencia declarada;
     3. entradas das analises secundarias (regra ampla, exposicao): sha256 igual ao do manifesto;
     4. caches dos estudos (um por sistema): identidade igual a do cache de desenvolvimento do MESMO sistema em tudo
-       menos a tabela; tabela = exatamente as variantes da membership; cache completo;
+       menos a tabela; conteudo da tabela = o da tabela OFICIAL (membership + pb_examples, hash logico conferido):
+       ids, coordenadas e alelos amarrados ao release; cache completo;
     5. as seis cabecas (sha256 do manifesto) recarregadas e aplicadas ao cache do seu sistema; predicao do sistema =
        media das tres probabilidades calibradas; limiares = os do manifesto;
     6. consumidor por estudo, com Brier (so dos sistemas: probabilidades); baselines com regra, papel e cobertura
-       explicitos (sem Brier: sao scores de ordenacao); e as margens declaradas, aplicadas mecanicamente.
+       explicitos (sem Brier: sao scores de ordenacao); e as margens declaradas, aplicadas mecanicamente. Replicas,
+       seed e unidade principal da interacao sao as do MANIFESTO: --replicas ou --seed diferentes sao recusados.
 MODO ENSAIO (--ensaio-sintetico; sem manifesto)
     passos 2, 3 e 6 com scores SINTETICOS para os sistemas e para as baselines: nenhum modelo e lido e nenhuma
     metrica real sai. Os scores reais das baselines so sao calculados para contar a cobertura. O relatorio sai
@@ -47,7 +49,7 @@ sys.path.insert(0, str(RAIZ))
 from eval.campanha import baselines, estudos, g6, g7  # noqa: E402
 from eval.campanha.cache import sha256_do_arquivo  # noqa: E402
 from eval.campanha.leitura_do_cache import carregar_cache  # noqa: E402
-from eval.campanha.recortes import carregar_campanha  # noqa: E402
+from eval.campanha.recortes import carregar_campanha, hash_do_conteudo  # noqa: E402
 from scripts import conferir_cobertura_das_baselines as cobertura  # noqa: E402
 from scripts.construir_g6 import estado_do_codigo, ler_pares  # noqa: E402
 
@@ -55,18 +57,15 @@ AVISO_DO_ENSAIO = "ENSAIO: scores SINTETICOS; nenhum numero aqui e resultado de 
 
 
 def ler_release(raiz: Path, logical_contract: Any, referencia: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame,
-                                                                                         list[str]]:
-    """Membership e anotacoes do release, com o hash logico conferido contra a referencia declarada."""
-    import pyarrow.parquet as pq
-
-    problemas = []
-    for caminho, chave in cobertura.CHAVES.items():
-        recalculado = logical_contract(pq.read_table(raiz / caminho), chave)
-        problemas += cobertura.comparar_contrato(referencia["logical_hash"].get(caminho), recalculado, caminho,
-                                                 campos=("logical_hash", "n"), origem="referencia declarada")
+                                                                                         pd.DataFrame, list[str]]:
+    """Membership, anotacoes e a tabela oficial dos estudos (membership + pb_examples), com o hash logico dos tres
+    parquets conferido contra a referencia declarada."""
+    problemas = cobertura.conferir_contratos(raiz, logical_contract, referencia, tuple(cobertura.CHAVES_DO_RELEASE))
     membros = pd.read_parquet(raiz / cobertura.MEMBERSHIP)
     anotacoes = pd.read_parquet(raiz / cobertura.ANOTACOES, columns=list(baselines.COLUNAS_DAS_ANOTACOES))
-    return membros, anotacoes, problemas
+    exemplos = pd.read_parquet(raiz / cobertura.EXEMPLOS, columns=["variant_id", *g7.COLUNAS_DE_SEQUENCIA,
+                                                                    "binary_label", "label_tier"])
+    return membros, anotacoes, g7.tabela_oficial(membros, exemplos), problemas
 
 
 def ler_entradas(caminhos: dict[str, Path], registradas: dict[str, Any] | None) -> tuple[set[str], pd.DataFrame,
@@ -94,12 +93,13 @@ def exposicao_do_estudo(exposicao: pd.DataFrame, estudo: str) -> pd.Series:
 
 
 def pontuar_sistemas(manifesto: dict[str, Any], raiz: Path, pastas: dict[str, Path],
-                     ids: set[str]) -> tuple[dict[str, pd.Series], dict[str, Any], list[str]]:
+                     oficial: pd.DataFrame) -> tuple[dict[str, pd.Series], dict[str, Any], list[str]]:
     """As seis cabecas do manifesto sobre os caches dos estudos: media das tres probabilidades por sistema."""
     from eval.campanha.cabeca import carregar_cabeca_salva, pontuar_salva
 
     problemas, registro, carregados = [], {}, {}
     extracao = manifesto["extracao_dos_caches"]["extracao"]
+    conteudo_oficial = hash_do_conteudo(oficial)
     for chave, pasta in sorted(pastas.items()):
         desenvolvimento = manifesto["caches_de_desenvolvimento"].get(chave)
         if desenvolvimento is None:
@@ -113,9 +113,9 @@ def pontuar_sistemas(manifesto: dict[str, Any], raiz: Path, pastas: dict[str, Pa
         diferentes = g7.diferencas_do_estudo(json.loads(arquivo.read_text(encoding="utf-8")), cache["identidade"])
         if diferentes:
             problemas.append(f"cache dos estudos {chave} difere do de desenvolvimento em {diferentes}")
-        variantes = set(cache["tabela"]["variant_id"].astype(str))
-        if variantes != ids:
-            problemas.append(f"cache dos estudos {chave}: {len(variantes ^ ids)} variantes diferem da membership")
+        if cache["identidade"].get("tabela_sha256_conteudo") != conteudo_oficial:
+            problemas.append(f"cache dos estudos {chave}: a tabela extraida nao e a oficial (membership + pb_examples)"
+                             f": {g7.diferencas_de_tabela(oficial, cache['tabela']) or 'conteudo diferente'}")
         carregados[chave] = cache
         registro[chave] = {"pasta": str(pasta), "identidade_sha256": sha256_do_arquivo(Path(pasta) / "identidade.json")}
     if problemas:
@@ -162,12 +162,14 @@ def imprimir(relatorio: dict[str, Any]) -> None:
                       f"{_n(c['regionalized'][metrica]['estimativa'])}  delta {_n(d['estimativa'], '+.4f')} "
                       f"[{_n(d['p2_5'], '+.4f')}; {_n(d['p97_5'], '+.4f')}]"
                       + ("  (Brier: negativo = melhor)" if metrica == "brier" else ""))
+        principal = sistemas["interacao"]["reamostragem"]["unidade_principal"]
         for metrica in ("auroc", "auprc"):
             i = sistemas["interacao"][metrica]
-            print(f"  interacao {metrica}: {_n(i['interacao']['estimativa'], '+.4f')} "
-                  f"[{_n(i['interacao']['p2_5'], '+.4f')}; {_n(i['interacao']['p97_5'], '+.4f')}] (clusters em conjunto)"
-                  f" | por par [{_n(i['interacao_sensibilidade_por_par']['p2_5'], '+.4f')}; "
-                  f"{_n(i['interacao_sensibilidade_por_par']['p97_5'], '+.4f')}]")
+            faixas = " | ".join(
+                f"{unidade}{' (principal)' if unidade == principal else ''} [{_n(v['interacao']['p2_5'], '+.4f')}; "
+                f"{_n(v['interacao']['p97_5'], '+.4f')}]" for unidade, v in i["por_unidade"].items())
+            print(f"  interacao {metrica}: {_n(i['interacao']['estimativa'], '+.4f')} | {faixas}"
+                  + ("" if principal else " (unidade principal nao declarada)"))
         partes = []
         for nome, s in sistemas["sensibilidades"].items():
             if "nao_calculada" in s:
@@ -184,7 +186,7 @@ def imprimir(relatorio: dict[str, Any]) -> None:
             partes = []
             for coorte in (estudos.COORTE_COMPLETO, estudos.CASOS_PAREADOS, estudos.CONTROLES):
                 c = b["coortes"][coorte]["coorte"]
-                partes.append(f"{coorte} " + ("constante" if c["constante"] else _n(c["auroc"]["estimativa"])))
+                partes.append(f"{coorte} {_n(c['auroc']['estimativa'])}" + (" (constante)" if c["constante"] else ""))
             print(f"  baseline {nome} (AUROC): " + " | ".join(partes))
     margens = relatorio["margens"]
     if not margens.get("avaliado"):
@@ -210,8 +212,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mosaic-root", required=True, type=Path)
     parser.add_argument("--entrada", action="append", default=[], help="regra_ampla=arquivo, exposicao=arquivo")
     parser.add_argument("--campanha", type=Path, default=RAIZ / "configs" / "campanha_r03_desenvolvimento.json")
-    parser.add_argument("--replicas", type=int, default=estudos.REPLICAS)
-    parser.add_argument("--seed", type=int, default=estudos.SEED)
+    parser.add_argument("--replicas", type=int, help="so no ensaio (padrao 1000); no modo real, as do manifesto")
+    parser.add_argument("--seed", type=int, help="so no ensaio (padrao 20260901); no modo real, a do manifesto")
     parser.add_argument("--seed-do-ensaio", type=int, default=20260925)
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
@@ -242,15 +244,28 @@ def main(argv: list[str] | None = None) -> int:
             if not (RAIZ / arquivo).exists() or sha256_do_arquivo(RAIZ / arquivo) != sha:
                 problemas.append(f"codigo diferente do congelado: {arquivo}")
         problemas += g6.problemas_do_codigo(estado_do_codigo(sorted(manifesto["codigo"]["arquivos"])))
+        replicas, seed = int(manifesto["bootstrap"]["replicas"]), int(manifesto["bootstrap"]["seed"])
+        for opcao, dado, congelado in (("--replicas", args.replicas, replicas), ("--seed", args.seed, seed)):
+            if dado is not None and dado != congelado:
+                problemas.append(f"{opcao} {dado} diverge do manifesto ({congelado}): o G7 real usa o congelado")
+        unidade = manifesto["bootstrap"]["interacao"]["unidade_principal"]
+        origem_do_bootstrap = "manifesto congelado"
         if problemas:
             return _falhar(problemas)
+    else:
+        replicas = args.replicas if args.replicas is not None else estudos.REPLICAS
+        seed = args.seed if args.seed is not None else estudos.SEED
+        declarada = campanha["g6"]["bootstrap_da_interacao"].get("unidade_principal")
+        unidade = declarada if declarada in estudos.UNIDADES_DA_INTERACAO else None
+        origem_do_bootstrap = "ensaio: linha de comando; unidade da declaracao, se ja houver"
 
     logical_contract, especificacao, comparator_score, codigo_do_mosaic = cobertura.carregar_mosaic(
         args.mosaic_root.expanduser())
     problemas += cobertura.conferir_especificacao(especificacao)
     referencia = (manifesto["proveniencia"]["declarada"] if real else campanha["g6"]["proveniencia"])[
         "release_do_mosaic"]
-    membros, anotacoes, problemas_do_release = ler_release(args.release_root.expanduser(), logical_contract, referencia)
+    membros, anotacoes, oficial, problemas_do_release = ler_release(args.release_root.expanduser(), logical_contract,
+                                                                    referencia)
     problemas += problemas_do_release
     regra_ampla, exposicao, hashes_das_entradas, problemas_das_entradas = ler_entradas(
         ler_pares(args.entrada, "--entrada"), manifesto["entradas_das_analises_secundarias"] if real else None)
@@ -269,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
         if set(pastas) != esperadas:
             return _falhar([f"--cache-estudos {sorted(pastas)}, o manifesto pede {sorted(esperadas)}"])
         pontos, registro_dos_caches, problemas_dos_caches = pontuar_sistemas(manifesto, args.raiz.expanduser(), pastas,
-                                                                             ids)
+                                                                             oficial)
         if problemas_dos_caches:
             return _falhar(problemas_dos_caches)
         scores = scores_reais
@@ -284,17 +299,19 @@ def main(argv: list[str] | None = None) -> int:
 
     resultados, relatorio_dos_estudos = {}, {}
     for estudo in estudos.ESTUDOS:
-        print(f"[g7] {estudo}: consumidor ({args.replicas} replicas)", flush=True)
+        print(f"[g7] {estudo}: consumidor ({replicas} replicas, seed {seed}, unidade principal {unidade})",
+              flush=True)
         resultados[estudo] = estudos.avaliar_estudo(
-            membros, estudo, pontos, replicas=args.replicas, seed=args.seed, limiares=limiares,
+            membros, estudo, pontos, replicas=replicas, seed=seed, limiares=limiares,
             controles_com_scv_brasileira=regra_ampla, exposicao=exposicao_do_estudo(exposicao, estudo),
-            tolerancia_de_exposicao=0, com_brier=True, progresso=lambda texto: print(f"  {texto}", flush=True))
+            tolerancia_de_exposicao=0, com_brier=True, unidade_principal=unidade,
+            progresso=lambda texto: print(f"  {texto}", flush=True))
         print(f"[g7] {estudo}: baselines", flush=True)
         relatorio_dos_estudos[estudo] = {
             "sistemas": resultados[estudo],
             "baselines": {nome: estudos.avaliar_baseline(membros, estudo, scores[nome],
                                                          especificacao=baselines.ESPECIFICACOES[nome],
-                                                         replicas=args.replicas, seed=args.seed)
+                                                         replicas=replicas, seed=seed)
                           for nome in baselines.ESPECIFICACOES}}
     relatorio = {
         "formato": "campanha_r03_g7_relatorio_v1", "modo": "REAL" if real else "ENSAIO",
@@ -306,13 +323,17 @@ def main(argv: list[str] | None = None) -> int:
         "caches_dos_estudos": registro_dos_caches,
         "limiares": limiares if real else "ensaio: 0,5 fixo, sem significado",
         "leitura_do_chr8": g7.LEITURA_DO_CHR8,
+        "tabela_oficial": {"variantes": int(len(oficial)), "no_chr8": int((oficial["chrom"] == "chr8").sum()),
+                           "conteudo_sha256": hash_do_conteudo(oficial),
+                           "origem": "membership + pb_examples do release, hash logico conferido"},
+        "bootstrap": {"replicas": replicas, "seed": seed, "unidade_principal_da_interacao": unidade,
+                      "origem": origem_do_bootstrap},
         "baselines": {"especificacoes": baselines.ESPECIFICACOES, "cobertura_do_score": cobertura_das_baselines,
                       "frequencia_observada": baselines.frequencia_observada(membros, anotacoes),
                       "leitura": "cobertura do score nao e frequencia observada: a regra de cada baseline diz o que "
                                  "recebeu imputacao"},
         "estudos": relatorio_dos_estudos,
         "margens": g7.avaliar_margens(resultados, margens, bootstrap),
-        "replicas": args.replicas, "seed": args.seed,
         "segundos": round(time.perf_counter() - inicio, 1),
     }
     destino.mkdir(parents=True)
