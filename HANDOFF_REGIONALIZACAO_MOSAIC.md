@@ -1340,3 +1340,22 @@ Avaliação única, com 1.000 réplicas, seed 20260901 e bootstrap por clusters 
 - **Pendentes pré-declarados:** a leitura das secundárias que o resumo não imprime (painéis com IC, sem plof,
   métricas com limiar, subconjunto `present_abraom`, interação nas sensibilidades), que já estão no JSON. E a
   `sanidade_no_fold0` (AUROC/AUPRC de M0 e MR no teste do core_locus), que ainda não tem código nem extração do fold 0.
+
+**Secundárias pré-declaradas do G7 (lidas do `g7_relatorio.json` em 27/09; nenhuma tem regra).** Há cerca de uma
+centena de intervalos no relatório, então um ou dois excluírem zero por acaso é o esperado. Leitura:
+- **Clínico, métricas no limiar congelado:** o MR perde sensibilidade e ganha especificidade **igualmente** nos casos
+  (−0,0100 [−0,0158; −0,0050] e +0,0193 [0,0000; +0,0404]) e nos controles (−0,0118 e +0,0225). É deslocamento de
+  limiar ou calibração, não efeito brasileiro. MCC −0,0155 [−0,0377; +0,0073].
+- **Clínico, painéis (coorte completo):** missense +0,0009 [−0,0074; +0,0091], splice −0,0014 [−0,0045; +0,0008],
+  noncoding **−0,0188 [−0,0364; −0,0030]** (95 P / 60 B; nos controles −0,0081 [−0,0235; +0,0052]). O noncoding não
+  tem regra, porque só o missense foi declarado protegido.
+- **Lacuna do plof fechada na leitura:** sem plof, −0,0009 [−0,0051; +0,0034]. O resultado nulo não depende do plof.
+- **`present_abraom` (exigido pelo Mosaic, 214 P / 110 B):** −0,0042 [−0,0129; +0,0046]. Não há ganho nem onde a
+  presença no ABraOM seria mais informativa.
+- **Sensibilidades da interação (clínico):** sem os pares com variante no ABraOM, −0,0008 [−0,0065; +0,0057]; sem
+  controles com SCV brasileira, −0,0017 [−0,0059; +0,0026]; com exposição empatada, −0,0016 [−0,0078; +0,0043]. O
+  nulo é robusto.
+- **Populacional (descritivo):** o MCC no limiar sobe +0,0549 [+0,0021; +0,0866], puxado pela especificidade
+  (+0,0672) numa coorte 95% benigna, o mesmo deslocamento de limiar. Missense +0,0122 [−0,0058; +0,0313]. O noncoding
+  tem 4 P e não se lê. A interação com exposição empatada dá +0,0123 [+0,0010; +0,0210], o único IC de interação que
+  exclui zero, numa análise secundária de um estudo descritivo: fica como hipótese, não resultado.
