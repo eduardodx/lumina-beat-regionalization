@@ -16,7 +16,7 @@ Mesma receita de cabeça, mesmas cinco execuções, mesmas linhas em todos.
 | E | leitura `leitura_antiga_1344` do R03 congelado | o que a representação oferece |
 | E+F | E + F | se o R03 acrescenta ao prior global |
 | E+F+BR | E + F + bloco ABraOM | se há ganho adicional com a informação brasileira |
-| S+F | score de E + F, regressão logística | o braço `system_plus_frequency` oficial do Mosaic, identificado à parte |
+| S+F | score de E + F, regressão logística | variante treinada de `system_plus_frequency`, com score de treino por cross-fitting interno |
 
 **Bloco ABraOM (BR).** É lido de `variant-annotations.parquet`:
 - `log10(abraom_af + 1e-6)`;
@@ -127,9 +127,11 @@ E+F+BR não entra nas células, porque é circular ali.
    **Resultado (04/10, 15:59; revisão `946ae22`).** Log `~/artifacts/mosaic_v1/passo2_saida_20261004_155759_667.out`.
    - **Caches antigos:** os dois passaram na validação completa (identidade, manifesto, tabela, fragmentos,
      coordenadas).
-   - **Conferência:** 512 variantes reextraídas (0,0636 s/variante) batem **bit a bit** com os dois caches. As 256
-     de cada cache dão diferença máxima 0,0 nas duas leituras, `cabecas_172` e `leitura_antiga_1344`.
+   - **Conferência:** as 512 variantes reextraídas (0,0636 s/variante) são **numericamente idênticas na amostra**.
+     As 256 de cada cache dão diferença máxima 0,0 nas duas leituras, `cabecas_172` e `leitura_antiga_1344`.
      Registro em `~/artifacts/mosaic_v1/cache_conferencia_20261004_155759_824/conferencia.json`.
+     A conferência não reextraiu os 180.595 vetores antigos; a autorização de reaproveitamento combina essa
+     amostra com as checagens de identidade, coordenadas e integridade do cache inteiro.
    - **Complemento:** a corrida interrompida (revisão `3be6982`) já tinha gravado as 146.223 variantes em 36
      fragmentos. A retomada conferiu identidade, tabela e fragmentos, encontrou 0 pendentes e fechou com
      `"completo": true` em `~/artifacts/mosaic_v1/cache_M0_complemento/`, com `fontes_da_extracao.json`.
@@ -150,6 +152,8 @@ E+F+BR não entra nas células, porque é circular ali.
    - **Cabeça:** `LogisticRegression` L2 do sklearn (newton-cholesky, tol 1e-6), com intercepto sem penalidade. C
      percorre a grade em ordem crescente, com warm start; empate na macro da validation fica com o menor C. O score é
      o logit.
+     Um C cujo ajuste não convergiu não concorre; se não houver C convergido com macro finita, a corrida para.
+     Qualquer modelo interno de E sem convergência também interrompe S+F. A grade e os motivos ficam registrados.
    - **S+F:** o `build_frequency_arms.py` oficial não serve para sistema treinado, porque toma um score por variante
      sem respeitar a execução.
      - Aqui, S nas linhas de treino vem de cross-fitting pelos três folds de treino da execução, com o C escolhido

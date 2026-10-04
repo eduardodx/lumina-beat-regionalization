@@ -89,6 +89,7 @@ RECEITA: dict[str, Any] = {
     "warm_start": "C em ordem crescente; o otimo de cada C e unico (L2 estritamente convexa)",
     "padronizacao": "media e desvio (ddof 0) das linhas de treino da execucao; desvio < 1e-8 vira 1",
     "selecao": "macro AUROC nao ponderada de missense, splice e noncoding na validation; empate fica com o menor C",
+    "ajustes_invalidos": "C sem convergencia nao concorre; se nenhum concorrer, interromper. No S interno, nao convergir interrompe",
     "score": "decision function (logit); maior = mais patogenico",
 }
 #: Ordem de execucao: E vem antes de S+F, que usa o C e os scores de E da mesma execucao.
@@ -353,14 +354,16 @@ AJUSTADOR: Ajustador = ajustar_sklearn
 
 
 class CabecaSemSelecao(FalhaDaFase1):
-    """Nenhum C teve a macro definida na validation."""
+    """Nenhum C convergido teve a macro finita e definida na validation."""
 
 
 def escolher_c(grade: list[dict[str, Any]]) -> int:
-    """Indice do C com a maior macro da validation; empate fica com o menor C (a grade e crescente)."""
-    validos = [(r["macro_validacao"], -i) for i, r in enumerate(grade) if r["macro_validacao"] is not None]
+    """Maior macro entre ajustes convergidos; empate fica com o menor C (a grade e crescente)."""
+    validos = [(r["macro_validacao"], -i) for i, r in enumerate(grade)
+               if r.get("convergiu", False) and r["macro_validacao"] is not None
+               and np.isfinite(r["macro_validacao"])]
     if not validos:
-        raise CabecaSemSelecao("nenhum C com macro definida na validation")
+        raise CabecaSemSelecao("nenhum C convergido com macro finita e definida na validation")
     return -max(validos)[1]
 
 
@@ -382,6 +385,11 @@ def treinar_braco(dados: Dados, run: int, blocos: tuple[str, ...], ajustador: Aj
     Xva = padronizar(montar(dados, blocos, idx["validation"], s=None if s is None else s["validation"]), media, desvio)
     y_va, p_va = dados.y[idx["validation"]], dados.paineis[idx["validation"]]
     for r in grade:
+        if not r.get("convergiu", False):
+            r["macro_validacao"] = None
+            r["auroc_validacao_por_painel"] = {}
+            r["motivo_de_exclusao"] = "ajuste nao convergiu"
+            continue
         painel = metricas.por_painel(pontuar(Xva, r["coef"], r["intercepto"]), y_va, p_va)
         r["macro_validacao"] = metricas.macro(painel)
         r["auroc_validacao_por_painel"] = {nome: v["auroc"] for nome, v in painel.items()}
@@ -441,6 +449,9 @@ def s_fora_da_amostra(dados: Dados, run: int, c: float, ajustador: Ajustador) ->
         X = montar(dados, ("e",), parte["treino"])
         media, desvio = padronizador(X)
         ajuste = ajustador(padronizar(X, media, desvio), y_i, (c,))[0]
+        if not ajuste.get("convergiu", False):
+            raise FalhaDaFase1(f"run {run}, fold interno {parte['fold']}: ajuste de E nao convergiu; "
+                              "nao publicar S fora da amostra")
         del X
         Xt = padronizar(montar(dados, ("e",), parte["teste"]), media, desvio)
         s[np.searchsorted(treino, parte["teste"])] = pontuar(Xt, ajuste["coef"], ajuste["intercepto"])

@@ -285,10 +285,54 @@ class LinhasTests(unittest.TestCase):
         self.assertEqual(perto.tolist(), [True, False, False])
 
     def test_escolha_de_c(self):
-        grade = [{"macro_validacao": v} for v in (0.6, 0.7, 0.7, None, 0.65)]
+        grade = [{"macro_validacao": v, "convergiu": True} for v in (0.6, 0.7, 0.7, None, 0.65)]
         self.assertEqual(bracos.escolher_c(grade), 1, "empate fica com o menor C")
         with self.assertRaises(bracos.CabecaSemSelecao):
             bracos.escolher_c([{"macro_validacao": None}])
+
+    def test_nao_convergido_ou_macro_nao_finita_nao_concorre(self):
+        grade = [{"macro_validacao": 0.7, "convergiu": True},
+                 {"macro_validacao": 0.9, "convergiu": False},
+                 {"macro_validacao": np.nan, "convergiu": True},
+                 {"macro_validacao": np.inf, "convergiu": True}]
+        self.assertEqual(bracos.escolher_c(grade), 0)
+        with self.assertRaisesRegex(bracos.CabecaSemSelecao, "nenhum C convergido"):
+            bracos.escolher_c(grade[1:])
+
+    def test_s_interno_nao_convergido_interrompe(self):
+        df = _linhas_do_release()
+        por_run, _ = bracos.linhas_por_execucao(df)
+        elegiveis = df[df["sequence_eligible"]].reset_index(drop=True)
+        E = np.ones((len(elegiveis), 3))
+        dados = bracos.montar_dados(elegiveis, E, por_run)
+        ajustador = lambda Z, y, grade: [{"convergiu": False}]
+        with self.assertRaisesRegex(bracos.FalhaDaFase1, "fold interno.*nao convergiu"):
+            bracos.s_fora_da_amostra(dados, 0, 1.0, ajustador)
+
+    def test_braco_sem_ajuste_convergido_nao_pontua_teste(self):
+        df = _linhas_do_release()
+        por_run, _ = bracos.linhas_por_execucao(df)
+        elegiveis = df[df["sequence_eligible"]].reset_index(drop=True)
+        dados = bracos.montar_dados(elegiveis, np.ones((len(elegiveis), 3)), por_run)
+        ajustador = lambda Z, y, grade: [{"C": c, "convergiu": False} for c in grade]
+        with patch.object(bracos, "pontuar", side_effect=AssertionError("nao deveria pontuar")):
+            with self.assertRaises(bracos.CabecaSemSelecao):
+                bracos.treinar_braco(dados, 0, ("e",), ajustador)
+
+    def test_braco_exclui_c_nao_convergido_e_registra_motivo(self):
+        df = _linhas_do_release()
+        por_run, _ = bracos.linhas_por_execucao(df)
+        elegiveis = df[df["sequence_eligible"]].reset_index(drop=True)
+        dados = bracos.montar_dados(elegiveis, np.ones((len(elegiveis), 3)), por_run)
+
+        def ajustador(Z, y, grade):
+            return [{"C": c, "coef": np.zeros(Z.shape[1]), "intercepto": 0.0, "convergiu": i != 0}
+                    for i, c in enumerate(grade)]
+
+        r = bracos.treinar_braco(dados, 0, ("e",), ajustador)
+        self.assertEqual(r["C"], bracos.GRADE_C[1])
+        self.assertIsNone(r["grade"][0]["macro_validacao"])
+        self.assertEqual(r["grade"][0]["motivo_de_exclusao"], "ajuste nao convergiu")
 
 
 class LeituraTests(unittest.TestCase):
