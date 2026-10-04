@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Fase 1, passo 2: leitura do M0 (R03 congelado) no release novo. O notebook nao tem tmux: rodar desacoplado do
 # terminal, para sobreviver se a aba fechar, e acompanhar pelo arquivo de saida:
-#   nohup setsid bash docs/runbooks/extrair_mosaic_v1_gpu.sh > ~/artifacts/mosaic_v1/passo2_saida.out 2>&1 < /dev/null &
-#   tail -f ~/artifacts/mosaic_v1/passo2_saida.out
+#   SAIDA="$HOME/artifacts/mosaic_v1/passo2_saida_$(date +%Y%m%d_%H%M%S)_$$.out"
+#   nohup setsid bash docs/runbooks/extrair_mosaic_v1_gpu.sh > "$SAIDA" 2>&1 < /dev/null &
+#   echo "pid=$! saida=$SAIDA"
+#   tail -f "$SAIDA"
+# Isso protege contra o fechamento do terminal; nao contra desligar/reiniciar a instancia.
 # Primeiro confere os caches antigos numa amostra (minutos). So se passar, extrai o complemento (~2 h).
 # Usa o python3 do conda (torch e Mamba-3), como a extracao da campanha; nao usa o .venv do Mosaic.
 set -euo pipefail
@@ -11,7 +14,7 @@ REPO=$PWD
 MV=${MOSAIC_ENTREGA_DIR:-"$HOME/mosaic-v1-2026-09-30"}
 A="$HOME/artifacts/mosaic_v1"
 R="$HOME/artifacts/redesenho"
-H=$(date +%Y%m%d_%H%M%S)
+H=$(date +%Y%m%d_%H%M%S)_$$
 LOG="$A/passo2_extracao_$H.log"
 CK="$HOME/artifacts/r03/best_checkpoint.pt"
 FA="$HOME/hg38/hg38.fa"

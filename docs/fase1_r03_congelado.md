@@ -116,6 +116,13 @@ E+F+BR não entra nas células, porque é circular ali.
    As duas exigem a identidade da referência em tudo menos a tabela; qualquer diferença (código, ambiente, FASTA,
    lote) recusa a extração. Se a identidade divergir ou a conferência reprovar, o reaproveitamento deixa de valer
    e a saída é extrair as 326.818 variantes de novo, com identidade própria.
+   A revisão de 04/10 também confere **cada cache antigo**, incluindo o dos estudos: manifesto completo, hashes
+   da tabela, dimensões, finitude, duplicatas e cobertura dos fragmentos. As coordenadas e alelos de cada ID em
+   comum têm de concordar com o release novo; rótulos, painéis e folds continuam vindo do release novo. A amostra
+   é comparada separadamente contra cada cache, e NaN, formas incompatíveis ou vetores ausentes reprovam.
+   `fontes_da_extracao.json` registra os hashes dos arquivos reaproveitados e das entradas do release. Os logs
+   externos e internos recebem nomes únicos; `nohup`/`setsid` protegem contra fechar o terminal, não contra
+   desligar a instância. Essas mudanças não alteram o caminho numérico do extrator da campanha.
 3. **Braços (CPU).** As cinco execuções dos seis braços, em `predictions.parquet` e `system.yaml` no formato do
    Mosaic, com a exposição declarada.
 4. **Leituras (CPU).** Avaliador oficial do núcleo e o consumidor próprio para os deltas, os proxies, o benefício, as

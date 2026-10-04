@@ -19,8 +19,8 @@ USO (notebook, GPU; primeiro a conferencia, depois o complemento)
         --checkpoint ~/artifacts/r03/best_checkpoint.pt --fasta ~/hg38/hg38.fa \\
         --out-dir ~/artifacts/mosaic_v1/cache_conferencia
 
-SAIDAS: o cache em --out-dir (fragmentos, tabela, identidade e manifesto, como na campanha) e, na conferencia,
-conferencia.json com a maior diferenca absoluta por extracao.
+SAIDAS: o cache em --out-dir (fragmentos, tabela, identidade e manifesto, como na campanha), os hashes das fontes
+em fontes_da_extracao.json e, na conferencia, conferencia.json com a maior diferenca por extracao e cache antigo.
 """
 from __future__ import annotations
 
@@ -37,8 +37,8 @@ import pandas as pd
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
-from eval.campanha.cache import indices_existentes, nome_do_fragmento, sha256_do_arquivo  # noqa: E402
-from eval.campanha.recortes import COLUNAS  # noqa: E402
+from eval.campanha.cache import indices_existentes, ler_fragmentos, nome_do_fragmento, sha256_do_arquivo  # noqa: E402
+from eval.campanha.recortes import COLUNAS, hash_da_tabela, hash_do_conteudo  # noqa: E402
 
 RELEASE = "artifacts/mosaic-v1-2026-09-30"
 VISTA = "views/4kb/partitions.parquet"
@@ -69,6 +69,55 @@ def ids_do_cache(pasta: Path) -> set[str]:
         with open(pasta / nome_do_fragmento(indice), "rb") as arquivo, np.load(arquivo, allow_pickle=False) as dados:
             ids.update(dados["variant_id"].astype(str).tolist())
     return ids
+
+
+def validar_cache_antigo(pasta: Path, referencia: dict[str, Any], release: pd.DataFrame) -> tuple[set[str], dict]:
+    """Confere CADA fonte antes de descontar seus IDs do complemento; nao modifica o cache antigo."""
+    for nome in ("identidade.json", "manifesto.json", "tabela.parquet"):
+        if not (pasta / nome).is_file():
+            raise ValueError(f"{pasta}: falta {nome}")
+    ident = json.loads((pasta / "identidade.json").read_text(encoding="utf-8"))
+    diferentes = sorted(k for k in set(referencia) | set(ident)
+                        if k not in CAMPOS_DA_TABELA and referencia.get(k) != ident.get(k))
+    if diferentes:
+        raise ValueError(f"{pasta}: identidade difere da referencia em {diferentes}")
+    if ident.get("sistema") != "M0" or ident.get("adapter_sha256") is not None:
+        raise ValueError(f"{pasta}: o cache tem de ser M0, sem adapter")
+    manifesto = json.loads((pasta / "manifesto.json").read_text(encoding="utf-8"))
+    if manifesto.get("completo") is not True:
+        raise ValueError(f"{pasta}: manifesto nao declara cache completo")
+    declarada = manifesto.get("identidade", {})
+    if any(ident.get(k) != declarada.get(k) for k in (set(ident) | set(declarada)) - {"revisao_do_codigo"}):
+        raise ValueError(f"{pasta}: identidade do manifesto diverge de identidade.json")
+    tabela = pd.read_parquet(pasta / "tabela.parquet")
+    if tabela["variant_id"].duplicated().any():
+        raise ValueError(f"{pasta}: tabela com variant_id repetido")
+    if (hash_do_conteudo(tabela) != ident.get("tabela_sha256_conteudo")
+            or hash_da_tabela(tabela) != ident.get("tabela_sha256_composicao")):
+        raise ValueError(f"{pasta}: hashes da tabela nao conferem")
+    ids, problemas = ler_fragmentos(pasta, tabela)
+    if problemas:
+        raise ValueError(f"{pasta}: fragmentos invalidos: {'; '.join(problemas[:5])}")
+    if ids != set(tabela["variant_id"].astype(str)):
+        raise ValueError(f"{pasta}: fragmentos nao cobrem a tabela inteira")
+    if (manifesto.get("variantes_na_tabela") != len(tabela)
+            or manifesto.get("variantes_no_cache") != len(ids) or manifesto.get("faltando") != 0):
+        raise ValueError(f"{pasta}: contagens do manifesto nao conferem")
+
+    # Rotulo, painel, cluster e papel pertencem ao release atual. Para reutilizar o vetor,
+    # o mesmo ID precisa continuar identificando a MESMA sequencia e o mesmo alelo.
+    coordenadas = ["chrom", "pos_1based", "ref", "alt"]
+    antiga = tabela.assign(variant_id=tabela["variant_id"].astype(str)).set_index("variant_id")
+    atual = release.assign(variant_id=release["variant_id"].astype(str)).set_index("variant_id")
+    comuns = sorted(ids & set(atual.index))
+    a, b = antiga.loc[comuns, coordenadas], atual.loc[comuns, coordenadas]
+    divergentes = a.ne(b).any(axis=1) | a.isna().any(axis=1) | b.isna().any(axis=1)
+    if divergentes.any():
+        raise ValueError(f"{pasta}: coordenadas/alelos divergem do release para {list(a.index[divergentes])[:5]}")
+    arquivos = ["identidade.json", "manifesto.json", "tabela.parquet"]
+    arquivos += [nome_do_fragmento(i) for i in indices_existentes(pasta)]
+    return ids, {"n": len(ids), "no_release_elegivel": len(comuns),
+                 "sha256": {nome: sha256_do_arquivo(pasta / nome) for nome in arquivos}}
 
 
 def _menores_hashes(ids: list[str], n: int) -> list[str]:
@@ -111,20 +160,30 @@ def comparar(novos: dict[str, dict[str, np.ndarray]], antigos: dict[str, dict[st
              tolerancia: float) -> dict[str, Any]:
     """Maior diferenca absoluta por extracao entre o vetor reextraido e o do cache antigo, variante a variante."""
     saida: dict[str, Any] = {"tolerancia": tolerancia, "extracoes": {}}
-    passou = True
+    passou = bool(novos) and set(novos) == set(antigos) and bool(np.isfinite(tolerancia) and tolerancia >= 0)
     for nome, por_id in novos.items():
         comuns = sorted(set(por_id) & set(antigos.get(nome, {})))
         faltando = sorted(set(por_id) - set(antigos.get(nome, {})))
+        faltando_no_novo = sorted(set(antigos.get(nome, {})) - set(por_id))
         if not comuns:
             saida["extracoes"][nome] = {"comparadas": 0, "faltando_no_antigo": len(faltando)}
             passou = False
             continue
-        diferencas = np.array([float(np.max(np.abs(por_id[v] - antigos[nome][v]))) for v in comuns])
+        diferencas, invalidos = [], []
+        for v in comuns:
+            a, b = np.asarray(por_id[v]), np.asarray(antigos[nome][v])
+            if a.ndim != 1 or a.size == 0 or a.shape != b.shape or not (np.isfinite(a).all() and np.isfinite(b).all()):
+                invalidos.append(v)
+            else:
+                diferencas.append(float(np.max(np.abs(a.astype(np.float64) - b.astype(np.float64)))))
+        diferencas = np.asarray(diferencas)
         bloco = {"comparadas": len(comuns), "faltando_no_antigo": len(faltando),
-                 "max_abs": float(diferencas.max()), "mediana_abs": float(np.median(diferencas)),
+                 "faltando_no_novo": len(faltando_no_novo), "vetores_invalidos": len(invalidos),
+                 "max_abs": float(diferencas.max()) if diferencas.size else None,
+                 "mediana_abs": float(np.median(diferencas)) if diferencas.size else None,
                  "acima_da_tolerancia": int((diferencas > tolerancia).sum())}
         saida["extracoes"][nome] = bloco
-        passou &= bloco["acima_da_tolerancia"] == 0 and not faltando
+        passou &= bloco["acima_da_tolerancia"] == 0 and not faltando and not faltando_no_novo and not invalidos
     saida["passou"] = bool(passou)
     return saida
 
@@ -144,12 +203,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", required=True, type=Path)
     args = parser.parse_args(argv)
 
+    if not args.cache_antigo or args.n_amostra <= 0:
+        return _falhar(["declare pelo menos um --cache-antigo e --n-amostra positivo"])
+
     referencia = args.referencia.expanduser()
     identidade_ref = json.loads((referencia / "identidade.json").read_text(encoding="utf-8"))
     if identidade_ref.get("sistema") != "M0" or identidade_ref.get("adapter_sha256") is not None:
         return _falhar(["a referencia tem de ser um cache do M0 (R03 congelado, sem adapter)"])
-    caches = {str(p.expanduser()): ids_do_cache(p.expanduser()) for p in args.cache_antigo}
-    tabela = selecionar(tabela_do_release(args.entrega.expanduser() / RELEASE), args.modo, caches, args.n_amostra)
+    try:
+        release = tabela_do_release(args.entrega.expanduser() / RELEASE)
+        caches, fontes = {}, {}
+        for p in args.cache_antigo:
+            pasta = p.expanduser()
+            ids, fonte = validar_cache_antigo(pasta, identidade_ref, release)
+            if not (ids & set(release["variant_id"].astype(str))):
+                raise ValueError(f"{pasta}: nenhum ID elegivel em comum com o release para conferir")
+            caches[str(pasta)], fontes[str(pasta)] = ids, fonte
+            print(f"[cache antigo] {pasta}: {len(ids):,} variantes, identidade e fragmentos conferidos")
+    except (ValueError, KeyError, OSError) as exc:
+        return _falhar([str(exc)])
+    tabela = selecionar(release, args.modo, caches, args.n_amostra)
     print(f"[mosaic_v1] modo {args.modo}: {len(tabela):,} variantes a extrair "
           f"(caches antigos: {', '.join(f'{len(v):,}' for v in caches.values())})")
     if tabela.empty:
@@ -190,16 +263,26 @@ def main(argv: list[str] | None = None) -> int:
                         f"extraido; reaproveitar os caches antigos deixa de valer (extrair tudo de novo)"])
     fetch, _leitor = abrir_fasta(args.fasta.expanduser())
     codigo = rodar_extracao(parametros, modelo, tabela, fetch, identidade_nova)
+    if codigo == 0:
+        proveniencia = {"modo": args.modo, "caches_antigos": fontes,
+                       "referencia": str(referencia), "script_sha256": sha256_do_arquivo(Path(__file__)),
+                       "release_sha256": {nome: sha256_do_arquivo(args.entrega.expanduser() / RELEASE / nome)
+                                          for nome in ("clinical-variants.parquet", "evaluation-panels.parquet", VISTA)}}
+        (parametros.out_dir / "fontes_da_extracao.json").write_text(json.dumps(proveniencia, indent=2), encoding="utf-8")
     if codigo != 0 or args.modo == "complemento":
         return codigo
 
     extracoes = sorted(identidade_nova["extracoes"])
     ids = set(tabela["variant_id"].astype(str))
-    antigos: dict[str, dict[str, np.ndarray]] = {nome: {} for nome in extracoes}
-    for pasta in caches:
-        for nome, por_id in vetores(Path(pasta), ids, extracoes).items():
-            antigos[nome].update(por_id)
-    resultado = comparar(vetores(parametros.out_dir, ids, extracoes), antigos, TOLERANCIA_NUMERICA)
+    novos = vetores(parametros.out_dir, ids, extracoes)
+    por_cache = {}
+    for pasta, cobertos in caches.items():
+        comuns = ids & cobertos
+        recorte = {nome: {v: vetor for v, vetor in por_id.items() if v in comuns}
+                   for nome, por_id in novos.items()}
+        por_cache[pasta] = comparar(recorte, vetores(Path(pasta), comuns, extracoes), TOLERANCIA_NUMERICA)
+    resultado = {"tolerancia": TOLERANCIA_NUMERICA, "por_cache": por_cache,
+                 "passou": all(r["passou"] for r in por_cache.values())}
     (parametros.out_dir / "conferencia.json").write_text(json.dumps(resultado, indent=2), encoding="utf-8")
     print(json.dumps(resultado, indent=2))
     if not resultado["passou"]:
