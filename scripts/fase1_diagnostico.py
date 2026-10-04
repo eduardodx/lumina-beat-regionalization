@@ -193,10 +193,12 @@ def especificidade_equivalente(pbr: pd.DataFrame, chamadas: dict[str, pd.DataFra
     positiva_base = (c_base["chamada"] == "positive").to_numpy()
     corte = pbr["run"].map(limiares_novos).to_numpy(dtype=float)
     positiva_novo = np.isfinite(c_novo["score"].to_numpy()) & (c_novo["score"].to_numpy() >= corte)
+    perdidas, ganhas = positiva_base & ~positiva_novo, positiva_novo & ~positiva_base
     return {"natureza": "posterior ao teste; limiares na validation; nao substitui o resultado do passo 4",
             "por_execucao": por_run, "sensibilidade_base": float(positiva_base.mean()),
             "sensibilidade_novo": float(positiva_novo.mean()),
-            "perdidas": int((positiva_base & ~positiva_novo).sum()), "ganhas": int((positiva_novo & ~positiva_base).sum())}
+            "perdidas": int(perdidas.sum()), "ganhas": int(ganhas.sum()),
+            "ids_perdidas": pbr.index[perdidas].astype(str).tolist(), "ids_ganhas": pbr.index[ganhas].astype(str).tolist()}
 
 
 def criticas_com_fpr(lista: list[dict[str, Any]], raiz: Path, chamadas: dict[str, pd.DataFrame],
@@ -208,7 +210,7 @@ def criticas_com_fpr(lista: list[dict[str, Any]], raiz: Path, chamadas: dict[str
             saida.append({**item, "bracos": None, "nota": "fora do release: sem score nesta fase"})
             continue
         vid, por_braco = item["variant_id"], {}
-        for braco in bracos.BRACOS:
+        for braco in chamadas:
             if vid not in chamadas[braco].index:
                 por_braco[braco] = {"chamada": None, "nota": "sem score"}
                 continue
@@ -227,13 +229,16 @@ def _f(valor: Any, casas: int = 3) -> str:
     return "—" if valor is None or (isinstance(valor, float) and not math.isfinite(valor)) else f"{valor:.{casas}f}"
 
 
-def relatorio(d: dict[str, Any]) -> str:
-    L = ["# Fase 1: diagnóstico das perdas e ganhos de P-BR (posterior ao teste)", "",
+def relatorio(d: dict[str, Any],
+              titulo: str = "# Fase 1: diagnóstico das perdas e ganhos de P-BR (posterior ao teste)") -> str:
+    nomes = d["bracos"]
+    L = [titulo, "",
          "Desenvolvimento exploratório. Não altera o resultado do passo 4 nem a regra de segurança. `fpr exigido` = "
          "falso-positivo de validation que a chamada da variante exigiria; mecanismo `ponto_de_operacao` = o braço novo "
          "ainda chamaria a variante no falso-positivo de validation da base.", ""]
     for nome, par in d["pares"].items():
         perd, ganh, eq = par["perdidas"], par["ganhas"], par["especificidade_equivalente"]
+        folgas = [r["especificidade_obtida"] - r["especificidade_alvo"] for r in eq["por_execucao"].values()]
         L += [f"## {nome}", "",
               f"- **Perdidas:** {perd['n']} | tier {perd['por_tier']} | mecanismo {perd['mecanismo']}",
               f"  - painel {perd['por_painel']}",
@@ -242,22 +247,43 @@ def relatorio(d: dict[str, Any]) -> str:
               f"{_f(perd['fpr_exigido_novo']['p10'])}; p90 {_f(perd['fpr_exigido_novo']['p90'])})",
               f"- **Ganhas:** {ganh['n']} | tier {ganh['por_tier']} | mecanismo {ganh['mecanismo']}",
               f"- **Especificidade equivalente (posterior):** sensibilidade base {_f(eq['sensibilidade_base'])}, "
-              f"novo {_f(eq['sensibilidade_novo'])}; perdidas {eq['perdidas']}, ganhas {eq['ganhas']}", ""]
+              f"novo {_f(eq['sensibilidade_novo'])}; perdidas {eq['perdidas']}, ganhas {eq['ganhas']}; especificidade "
+              f"obtida acima do alvo em até {_f(max(folgas), 4)} (validation, por execução)", ""]
     L += ["## Críticas: fpr exigido por braço (chamada)", "", "| gene | variante | ABraOM | tier | "
-          + " | ".join(bracos.BRACOS) + " |", "|---|---|---|---|" + "---|" * len(bracos.BRACOS)]
+          + " | ".join(nomes) + " |", "|---|---|---|---|" + "---|" * len(nomes)]
     for c in d["criticas"]:
         if c["bracos"] is None:
-            L.append(f"| {c['gene']} | {c['hgvs']} | — | — | " + " | ".join("fora do release" for _ in bracos.BRACOS)
-                     + " |")
+            L.append(f"| {c['gene']} | {c['hgvs']} | — | — | " + " | ".join("fora do release" for _ in nomes) + " |")
             continue
         celulas = []
-        for braco in bracos.BRACOS:
+        for braco in nomes:
             b = c["bracos"][braco]
             celulas.append("sem score" if b.get("chamada") is None else
                            f"{_f(b['fpr_exigido'])} ({'+' if b['chamada'] == 'positive' else '−'})")
         L.append(f"| {c['gene']} | {c['hgvs']} | {'sim' if c['present_abraom'] else 'não'} | {c['tier']} | "
                  + " | ".join(celulas) + " |")
     return "\n".join(L) + "\n"
+
+
+def diagnosticar(pbr: pd.DataFrame, chamadas: dict[str, pd.DataFrame], benignas: dict[str, dict[int, np.ndarray]],
+                 pares: tuple[tuple[str, str], ...],
+                 gravados: dict[str, Any] | None = None) -> tuple[dict[str, Any], list[pd.DataFrame]]:
+    """Perdas, ganhos e especificidade equivalente de cada par. Com `gravados` (o `p_br.pares` de uma leitura), recusa
+    se as perdas e os ganhos recontados nao forem os mesmos."""
+    saida, tabelas = {}, []
+    for base, novo in pares:
+        nome = leituras.nome_do_par(base, novo)
+        linhas = linhas_do_par(pbr, chamadas, benignas, base, novo)
+        if gravados is not None:
+            for tipo, chave in (("perdida", "ids_perdidas"), ("ganha", "ids_ganhas")):
+                if set(linhas.index[linhas["tipo"] == tipo]) != set(gravados[nome][chave]):
+                    raise FalhaDaFase1(f"{nome}: as {tipo}s nao reproduzem as da leitura gravada")
+        saida[nome] = {"base": base, "novo": novo,
+                       "perdidas": resumo_do_grupo(linhas[linhas["tipo"] == "perdida"]),
+                       "ganhas": resumo_do_grupo(linhas[linhas["tipo"] == "ganha"]),
+                       "especificidade_equivalente": especificidade_equivalente(pbr, chamadas, benignas, base, novo)}
+        tabelas.append(linhas[linhas["tipo"] != "igual"].assign(par=nome))
+    return saida, tabelas
 
 
 # ---------------------------------------------------------------------------------------------------- main
@@ -290,26 +316,17 @@ def main(argv: list[str] | None = None) -> int:
     except (FalhaDaFase1, ValueError, KeyError, OSError) as exc:
         return leituras._falhar([f"{type(exc).__name__}: {exc}"])
 
-    pares, tabelas = {}, []
-    for base, novo in leituras.PARES:
-        nome = leituras.nome_do_par(base, novo)
-        linhas = linhas_do_par(pbr, chamadas, benignas, base, novo)
-        gravado = lidas["p_br"]["pares"][nome]
-        for tipo, chave in (("perdida", "ids_perdidas"), ("ganha", "ids_ganhas")):
-            if set(linhas.index[linhas["tipo"] == tipo]) != set(gravado[chave]):
-                return leituras._falhar([f"{nome}: as {tipo}s nao reproduzem as do passo 4"])
-        pares[nome] = {"base": base, "novo": novo,
-                       "perdidas": resumo_do_grupo(linhas[linhas["tipo"] == "perdida"]),
-                       "ganhas": resumo_do_grupo(linhas[linhas["tipo"] == "ganha"]),
-                       "especificidade_equivalente": especificidade_equivalente(pbr, chamadas, benignas, base, novo)}
-        tabelas.append(linhas[linhas["tipo"] != "igual"].assign(par=nome))
+    try:
+        pares, tabelas = diagnosticar(pbr, chamadas, benignas, leituras.PARES, lidas["p_br"]["pares"])
+    except FalhaDaFase1 as exc:
+        return leituras._falhar([str(exc)])
     diagnostico = {
         "formato": "fase1_diagnostico_v1",
         "natureza": "desenvolvimento exploratorio, definido depois do teste; nao altera o passo 4",
         "fontes": {"bracos": str(pasta_bracos), "leituras": str(pasta_leituras),
                    "leituras_sha256": sha256_do_arquivo(pasta_leituras / "leituras.json"),
                    "script_sha256": sha256_do_arquivo(Path(__file__)), "revisao": bracos.revisao_do_repositorio()},
-        "n_p_br": int(len(pbr)), "pares": pares,
+        "n_p_br": int(len(pbr)), "bracos": list(chamadas), "pares": pares,
         "criticas": criticas_com_fpr(lista_de_criticas, raiz, chamadas, benignas),
     }
     destino.mkdir(parents=True)

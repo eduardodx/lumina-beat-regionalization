@@ -222,7 +222,8 @@ def linhas_por_execucao(release: pd.DataFrame) -> tuple[list[dict[str, np.ndarra
     return por_run, contagens
 
 
-def carregar_leitura(caches: list[Path], raiz: Path, ids: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
+def carregar_leitura(caches: list[Path], raiz: Path, ids: np.ndarray,
+                     extracao: str = EXTRACAO) -> tuple[np.ndarray, dict[str, Any]]:
     """A `leitura_antiga_1344` de cada variante elegivel, alinhada a `ids`, da uniao dos caches do passo 2.
 
     Cada cache passa pela validacao do passo 2 (`validar_cache_antigo`) contra a identidade do primeiro: mesma
@@ -236,7 +237,7 @@ def carregar_leitura(caches: list[Path], raiz: Path, ids: np.ndarray) -> tuple[n
         raise FalhaDaFase1("o primeiro cache tem de ser do M0 (R03 congelado, sem adapter)")
     tabela = tabela_do_release(raiz)
     posicao = pd.Series(np.arange(len(ids), dtype=np.float64), index=pd.Index(ids))
-    matriz = np.zeros((len(ids), EXTRACOES[EXTRACAO][1]), dtype=np.float32)
+    matriz = np.zeros((len(ids), EXTRACOES[extracao][1]), dtype=np.float32)
     preenchida = np.zeros(len(ids), dtype=bool)
     fontes: dict[str, Any] = {}
     for pasta in caches:
@@ -254,16 +255,16 @@ def carregar_leitura(caches: list[Path], raiz: Path, ids: np.ndarray) -> tuple[n
                 linhas = alvo[usar].astype(np.int64)
                 if preenchida[linhas].any():
                     raise FalhaDaFase1(f"{pasta}: variantes ja lidas de outro cache")
-                matriz[linhas] = np.asarray(dados[EXTRACAO], dtype=np.float32)[usar]
+                matriz[linhas] = np.asarray(dados[extracao], dtype=np.float32)[usar]
                 preenchida[linhas] = True
                 lidas += int(usar.sum())
         identidade = json.loads((pasta / "identidade.json").read_text(encoding="utf-8"))
         fontes[str(pasta)] = {**fonte, "lidas_no_release": lidas,
                               "identidade": {campo: identidade.get(campo) for campo in CAMPOS_DA_IDENTIDADE}}
     if not preenchida.all():
-        raise FalhaDaFase1(f"{int((~preenchida).sum())} variantes elegiveis sem {EXTRACAO} nos caches")
+        raise FalhaDaFase1(f"{int((~preenchida).sum())} variantes elegiveis sem {extracao} nos caches")
     if not np.isfinite(matriz).all():
-        raise FalhaDaFase1(f"{EXTRACAO} com valores nao finitos")
+        raise FalhaDaFase1(f"{extracao} com valores nao finitos")
     return matriz, fontes
 
 

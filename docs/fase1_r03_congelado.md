@@ -376,6 +376,19 @@ respectivamente. O E+F+BR não entra nas células, porque é circular ali.
          sem execução. Nenhuma execução pedida difere do `trained_run`.
        - **Tamanhos no S3:** `bias-cells` tem 524 MB (já baixado); o CADD tem 165 MB (ainda não baixado).
 
+   **BR v2 (04/10, preparado, ainda não rodado).** Primeiro experimento da proposta, em CPU, sem nova extração.
+   - **Especificação:** em [fase1_br2_especificacao.md](fase1_br2_especificacao.md), escrita antes de rodar, com as
+     features, a hipótese de cada uma e a leitura declarada.
+   - **Treino:** `scripts/fase1_br2_treinar.py` treina só o braço E+F+BR2, com as linhas, a receita e o contrato do
+     passo 3. Antes, confere AC/AN/AF por estado.
+   - **Leituras:** `scripts/fase1_br2_ler.py` mede E+F, E+F+BR e E+F+BR2 com o código do passo 4 e do diagnóstico. A
+     reprodução de E+F → E+F+BR é conferida contra o passo 4. Também saem:
+     - a recuperação das perdas do BR original;
+     - os coeficientes;
+     - as cabeças populacionais nativas, como leitura auxiliar.
+   - **Runbook:** [br2_mosaic_v1.sh](runbooks/br2_mosaic_v1.sh). Inclui o avaliador oficial no braço novo.
+   - **Insumos ausentes:** a classe CEGH e os homozigotos não estão no release; ficam fora desta versão.
+
    **Proposta após o diagnóstico.** Há base suficiente para discutir uma arquitetura antes de uma nova corrida
    longa. O [rascunho para Eduardo](proposta_regionalizacao_r03_pos_fase1.md) usa E+F como referência, propõe uma
    ablação CPU do BR com suporte amostral e um alvo regional explícito para adaptação, com controle global R2c.

@@ -96,6 +96,7 @@ def _linhas_do_release() -> pd.DataFrame:
                 "abraom_status": abraom,
                 "abraom_af": {"present": af, "ac0": 0.0}.get(abraom, np.nan),
                 "abraom_an": {"present": 2342.0, "ac0": 2000.0, "no_call": 0.0}.get(abraom, np.nan),
+                "abraom_ac": {"present": float(max(1, round(af * 2342))), "ac0": 0.0}.get(abraom, np.nan),
                 "abraom_filter": {"present": "PASS" if j % 5 == 0 else "LowQual", "ac0": "PASS",
                                   "no_call": "."}.get(abraom),
                 "present_abraom": abraom == "present"})
@@ -120,7 +121,7 @@ def _gravar_release(entrega: Path, df: pd.DataFrame) -> None:
         "gene_transfer_group_id"]].to_parquet(
         raiz / bracos.VISTA, index=False)
     df[["variant_id", "primary_panel"]].to_parquet(raiz / "evaluation-panels.parquet", index=False)
-    df[["variant_id", *bracos.COLUNAS_DO_GNOMAD, *bracos.COLUNAS_DO_ABRAOM]].to_parquet(
+    df[["variant_id", *bracos.COLUNAS_DO_GNOMAD, *bracos.COLUNAS_DO_ABRAOM, "abraom_ac"]].to_parquet(
         raiz / "variant-annotations.parquet", index=False)
 
 

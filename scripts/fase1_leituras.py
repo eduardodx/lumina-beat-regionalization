@@ -218,24 +218,32 @@ def _com_scores(frame: pd.DataFrame, preds: dict[str, pd.DataFrame], colunas: di
     return frame
 
 
+def ids_padrao() -> dict[str, str]:
+    """Braco -> id do sistema dos seis bracos da Fase 1; outras leituras (BR v2) passam o proprio mapa."""
+    return {braco: cfg["id"] for braco, cfg in bracos.BRACOS.items()}
+
+
 def nucleo(ferramentas: dict[str, Callable[..., Any]], raiz: Path, release: pd.DataFrame,
            preds: dict[str, pd.DataFrame], *, replicas: int, seed: int,
-           avisar: Callable[[str], None]) -> dict[str, Any]:
+           avisar: Callable[[str], None], pares: tuple[tuple[str, str], ...] = PARES,
+           descritivos: tuple[tuple[str, str], ...] = (PAR_DESCRITIVO_DO_NUCLEO,),
+           ids: dict[str, str] | None = None) -> dict[str, Any]:
+    ids = ids or ids_padrao()
     teste, validacao = ferramentas["core_cohort"](raiz, JANELA_BP)
     gold = release[(release["label_tier"] == "gold") & release["sequence_eligible"]]
     frame = gold[["variant_id", "binary_label", "overlap_cluster_id", "primary_panel"]].reset_index(drop=True)
     saida: dict[str, Any] = {"coorte": {"teste": int(len(teste)), "validation": int(len(validacao)),
                                         "teste_gold_elegivel": int(len(frame))}, "pares": {}}
-    for base, novo in (*PARES, PAR_DESCRITIVO_DO_NUCLEO):
+    for base, novo in (*pares, *descritivos):
         nome = nome_do_par(base, novo)
         avisar(f"nucleo: {nome}")
-        a, b = bracos.BRACOS[novo]["id"], bracos.BRACOS[base]["id"]
+        a, b = ids[novo], ids[base]
         t = _com_scores(teste, preds, {novo: a, base: b})
         v = _com_scores(validacao, preds, {novo: a, base: b})
         oficial = ferramentas["paired_contrast"](t, v, a=a, b=b, aggregate="fold_weighted", n_replicates=replicas,
                                                  seed=seed)
         saida["pares"][nome] = {
-            "base": base, "novo": novo, "descritivo": (base, novo) == PAR_DESCRITIVO_DO_NUCLEO,
+            "base": base, "novo": novo, "descritivo": (base, novo) in descritivos,
             "oficial": {"definicao": "contrasts.paired_contrast: a = novo, b = base; delta = a - b", "linhas": oficial},
             "por_painel": estudos.analise_do_coorte(frame, pontos(preds, base, novo), replicas=replicas, seed=seed,
                                                     por_painel=True)}
@@ -243,9 +251,9 @@ def nucleo(ferramentas: dict[str, Callable[..., Any]], raiz: Path, release: pd.D
 
 
 def proxies(membros: pd.DataFrame, preds: dict[str, pd.DataFrame], *, replicas: int, seed: int,
-            avisar: Callable[[str], None]) -> dict[str, Any]:
+            avisar: Callable[[str], None], pares: tuple[tuple[str, str], ...] = PARES) -> dict[str, Any]:
     saida: dict[str, Any] = {}
-    for base, novo in PARES:
+    for base, novo in pares:
         nome = nome_do_par(base, novo)
         saida[nome] = {"base": base, "novo": novo}
         for estudo in estudos.ESTUDOS:
@@ -258,13 +266,15 @@ def proxies(membros: pd.DataFrame, preds: dict[str, pd.DataFrame], *, replicas: 
 
 def beneficio(ferramentas: dict[str, Callable[..., Any]], raiz: Path, release: pd.DataFrame,
               preds: dict[str, pd.DataFrame], chamadas: dict[str, pd.DataFrame], *, replicas: int, seed: int,
-              avisar: Callable[[str], None]) -> dict[str, Any]:
+              avisar: Callable[[str], None], pares: tuple[tuple[str, str], ...] = PARES,
+              ids_dos_sistemas: dict[str, str] | None = None) -> dict[str, Any]:
+    sistemas = ids_dos_sistemas or ids_padrao()
     teste, _ = ferramentas["regional_clinical_cohort"](raiz, JANELA_BP)
     teste = teste.reset_index(drop=True)
     ids = teste["variant_id"].astype(str)
     y = teste["y"].to_numpy(dtype=int)
     por_braco = {}
-    for braco in bracos.BRACOS:
+    for braco in chamadas:
         c = chamadas[braco].reindex(ids)
         s, chamada = c["score"].to_numpy(dtype=float), c["chamada"].to_numpy()
         por_painel = {p: {"auroc": metricas.auroc(s[m], y[m]), "auprc": metricas.auprc(s[m], y[m]),
@@ -274,14 +284,14 @@ def beneficio(ferramentas: dict[str, Callable[..., Any]], raiz: Path, release: p
                             **endpoints_de_chamada(y, chamada), "por_painel": por_painel}
     linhas = release.set_index("variant_id").loc[ids]
     frame = linhas.reset_index()[["variant_id", "binary_label", "overlap_cluster_id", "primary_panel"]]
-    pares: dict[str, Any] = {}
-    for base, novo in PARES:
+    lidos: dict[str, Any] = {}
+    for base, novo in pares:
         nome = nome_do_par(base, novo)
         avisar(f"beneficio: {nome}")
-        a, b = bracos.BRACOS[novo]["id"], bracos.BRACOS[base]["id"]
+        a, b = sistemas[novo], sistemas[base]
         t = teste.assign(**{a: chamadas[novo]["chamada"].reindex(ids).to_numpy(),
                             b: chamadas[base]["chamada"].reindex(ids).to_numpy()})
-        pares[nome] = {
+        lidos[nome] = {
             "base": base, "novo": novo,
             "chamadas_oficial": {"definicao": "contrasts.paired_call_contrast: a = novo, b = base; delta = a - b",
                                  "linhas": ferramentas["paired_call_contrast"](t, a=a, b=b, n_replicates=replicas,
@@ -290,7 +300,7 @@ def beneficio(ferramentas: dict[str, Callable[..., Any]], raiz: Path, release: p
                                                    por_painel=True)}
     return {"coorte": {"n": int(len(teste)), "n_P": int((y == 1).sum()), "n_B": int((y == 0).sum()),
                        "unidades": int(teste["unit"].nunique())},
-            "por_braco": por_braco, "pares": pares}
+            "por_braco": por_braco, "pares": lidos}
 
 
 def limite_superior_cp(x: int, n: int, confianca: float = 0.95) -> float:
@@ -325,7 +335,7 @@ def _chave(frame: pd.DataFrame) -> pd.Series:
 
 
 def p_br(release: pd.DataFrame, chamadas: dict[str, pd.DataFrame], criticas: list[dict[str, Any]], *,
-         margem: float = MARGEM_DA_PERDA) -> dict[str, Any]:
+         margem: float = MARGEM_DA_PERDA, pares: tuple[tuple[str, str], ...] = PARES) -> dict[str, Any]:
     """P/LP do release presentes no ABraOM (gold e consensus), cada uma chamada pela execucao que a testa."""
     pbr = release[(release["binary_label"] == 1) & release["present_abraom"]].reset_index(drop=True)
     ids = pbr["variant_id"].astype(str)
@@ -338,7 +348,7 @@ def p_br(release: pd.DataFrame, chamadas: dict[str, pd.DataFrame], criticas: lis
         return (chamadas[braco]["chamada"].reindex(ids) == "positive").to_numpy()
 
     por_braco = {}
-    for braco in bracos.BRACOS:
+    for braco in chamadas:
         pos = positivas(braco)
         por_braco[braco] = {
             "positivas": int(pos.sum()), "sensibilidade": float(pos.mean()) if len(pos) else None,
@@ -347,13 +357,13 @@ def p_br(release: pd.DataFrame, chamadas: dict[str, pd.DataFrame], criticas: lis
                            for p, g in pbr.groupby("primary_panel", sort=True)},
             "por_tier": {str(t): {"n": int(len(g)), "positivas": int(pos[g.index].sum())}
                          for t, g in pbr.groupby("label_tier", sort=True)}}
-    pares = {}
-    for base, novo in PARES:
+    lidos = {}
+    for base, novo in pares:
         r0, r1 = positivas(base), positivas(novo)
         perdidas, ganhas = r0 & ~r1, r1 & ~r0
         x = int(perdidas.sum())
         superior = limite_superior_cp(x, n_grupos)
-        pares[nome_do_par(base, novo)] = {
+        lidos[nome_do_par(base, novo)] = {
             "base": base, "novo": novo, "reconhecidas_pela_base": int(r0.sum()), "perdidas": x, "ganhas": int(ganhas.sum()),
             "taxa_bruta_de_perda": x / len(pbr) if len(pbr) else None, "limite_superior_95": superior,
             "margem": margem, "criticas_perdidas": int((perdidas & critica).sum()),
@@ -364,11 +374,11 @@ def p_br(release: pd.DataFrame, chamadas: dict[str, pd.DataFrame], criticas: lis
                           "limite superior unilateral de Clopper-Pearson a 95% com n = grupos de gene com P-BR"),
             "n_p_br": int(len(pbr)), "n_grupos_de_gene": n_grupos,
             "por_tier": {str(t): int(n) for t, n in pbr["label_tier"].value_counts().sort_index().items()},
-            "criticas_entre_as_p_br": int(critica.sum()), "por_braco": por_braco, "pares": pares}
+            "criticas_entre_as_p_br": int(critica.sum()), "por_braco": por_braco, "pares": lidos}
 
 
-def criticas_por_braco(lista: list[dict[str, Any]], release: pd.DataFrame,
-                       chamadas: dict[str, pd.DataFrame]) -> list[dict[str, Any]]:
+def criticas_por_braco(lista: list[dict[str, Any]], release: pd.DataFrame, chamadas: dict[str, pd.DataFrame],
+                       pares: tuple[tuple[str, str], ...] = PARES) -> list[dict[str, Any]]:
     """As 13 uma a uma: a conferencia que `evaluate_safety.py` nao faz para as ausentes do ABraOM."""
     saida = []
     for item in criticas_do_release(lista, release):
@@ -376,7 +386,7 @@ def criticas_por_braco(lista: list[dict[str, Any]], release: pd.DataFrame,
             saida.append({**item, "bracos": None, "nota": "fora do release: sem score nesta fase"})
             continue
         vid, por_braco = item["variant_id"], {}
-        for braco in bracos.BRACOS:
+        for braco in chamadas:
             if vid in chamadas[braco].index:
                 linha = chamadas[braco].loc[vid]
                 por_braco[braco] = {"run": int(linha["run"]), "score": float(linha["score"]),
@@ -384,15 +394,20 @@ def criticas_por_braco(lista: list[dict[str, Any]], release: pd.DataFrame,
             else:
                 por_braco[braco] = {"chamada": None, "nota": "sem score (nao elegivel em 4 kb)"}
         perdas = {nome_do_par(b, n): (por_braco[b]["chamada"] == "positive" and por_braco[n]["chamada"] != "positive")
-                  for b, n in PARES}
+                  for b, n in pares}
         saida.append({**item, "bracos": por_braco, "perdida_no_par": perdas})
     return saida
 
 
-def avaliador_oficial(pasta: Path, limiares_: dict[str, dict[int, float]]) -> dict[str, Any]:
-    """As metricas agregadas por fold que o avaliador oficial gravou (4 kb) e a conferencia dos limiares."""
+def avaliador_oficial(pasta: Path, limiares_: dict[str, dict[int, float]], *, ids: dict[str, str] | None = None,
+                      com_comparadores: bool = True) -> dict[str, Any]:
+    """As metricas agregadas por fold que o avaliador oficial gravou (4 kb) e a conferencia dos limiares, para os
+    bracos de `limiares_`; os comparadores oficiais vem do primeiro braco, se pedidos."""
+    ids = ids or ids_padrao()
+    nossos = set(IDS_DOS_BRACOS) | set(ids.values())
     tabela, conferidos = [], {}
-    for k, (braco, cfg) in enumerate(bracos.BRACOS.items()):
+    for k, braco in enumerate(limiares_):
+        cfg = {"id": ids[braco]}
         achados = sorted((pasta / cfg["id"]).glob("*/4kb/specialist-metrics.parquet"))
         if len(achados) != 1:
             raise FalhaDaFase1(f"{pasta / cfg['id']}: esperado um */4kb/specialist-metrics.parquet, achados "
@@ -402,7 +417,7 @@ def avaliador_oficial(pasta: Path, limiares_: dict[str, dict[int, float]]) -> di
                       & m["metric"].isin(list(METRICAS_DO_AVALIADOR))]
         for _, linha in agregadas.iterrows():
             proprio = linha["comparator_id"] == cfg["id"]
-            if proprio or (k == 0 and linha["comparator_id"] not in IDS_DOS_BRACOS):
+            if proprio or (com_comparadores and k == 0 and linha["comparator_id"] not in nossos):
                 tabela.append({"sistema": braco if proprio else str(linha["comparator_id"]), "oficial": not proprio,
                                "painel": str(linha["panel"]), "metrica": METRICAS_DO_AVALIADOR[linha["metric"]],
                                "estimativa": _float(linha["estimate"]), "ic95": [_float(linha["ci95_low"]),
@@ -445,9 +460,9 @@ def _ic_oficial(r: dict[str, Any] | None, sinal: bool = True) -> str:
     return f"{valor} [{_f(r.get('ci95_low'))}; {_f(r.get('ci95_high'))}]"
 
 
-def resumo(leituras: dict[str, Any]) -> str:
+def resumo(leituras: dict[str, Any], titulo: str = "# Fase 1, passo 4: leituras dos braços (desenvolvimento)") -> str:
     """As tabelas principais em Markdown. O JSON tem o resto (celulas sem painel, sensibilidades, ids)."""
-    L = ["# Fase 1, passo 4: leituras dos braços (desenvolvimento)", "",
+    L = [titulo, "",
          f"Passo 3 em `{leituras['proveniencia']['bracos']}`. Delta = novo − base. IC 95% por bootstrap "
          f"({leituras['declaracao']['replicas']} réplicas, seed {leituras['declaracao']['seed']}). Nada aqui é "
          "confirmatório.", ""]
@@ -513,15 +528,15 @@ def resumo(leituras: dict[str, Any]) -> str:
     for nome, r in pbr["pares"].items():
         L.append(f"| {nome} | {r['reconhecidas_pela_base']} | {r['perdidas']} | {r['ganhas']} | "
                  f"{_f(r['limite_superior_95'])} | {r['criticas_perdidas']} | {'sim' if r['seguranca_declarada'] else 'não'} |")
-    L += ["", "## Críticas", "", "| gene | variante | ABraOM | tier | " + " | ".join(bracos.BRACOS) + " |",
-          "|---|---|---|---|" + "---|" * len(bracos.BRACOS)]
+    nomes = list(leituras["limiares"])
+    L += ["", "## Críticas", "", "| gene | variante | ABraOM | tier | " + " | ".join(nomes) + " |",
+          "|---|---|---|---|" + "---|" * len(nomes)]
     for c in leituras["criticas"]:
         if c["bracos"] is None:
-            L.append(f"| {c['gene']} | {c['hgvs']} | — | — | " + " | ".join("fora do release" for _ in bracos.BRACOS)
-                     + " |")
+            L.append(f"| {c['gene']} | {c['hgvs']} | — | — | " + " | ".join("fora do release" for _ in nomes) + " |")
             continue
         L.append(f"| {c['gene']} | {c['hgvs']} | {'sim' if c['present_abraom'] else 'não'} | {c['tier']} | "
-                 + " | ".join(str(c["bracos"][b]["chamada"]) for b in bracos.BRACOS) + " |")
+                 + " | ".join(str(c["bracos"][b]["chamada"]) for b in nomes) + " |")
     return "\n".join(L) + "\n"
 
 
