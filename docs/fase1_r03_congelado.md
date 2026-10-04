@@ -327,6 +327,43 @@ E+F+BR não entra nas células, porque é circular ali.
      - `scripts/fase1b_inventario.py` conta as linhas que o próprio `evaluate_regional_bias.py` usaria, pelas
        funções dele (`scoring_rows`, `definition_frames`), por definição e célula. Desconta os caches do passo 2,
        dá o complemento a extrair e confere os pedidos `regional` do manifesto. Não extrai nem pontua.
+   - **Resultado (04/10, 21:06–21:08; revisão `6a55704`).** Diagnóstico em
+     `~/artifacts/mosaic_v1/diagnostico_20261004_210554_5161/`; inventário em
+     `~/artifacts/mosaic_v1/inventario_1b_20261004_210554_5161/`. O diagnóstico reproduziu as perdas e os ganhos do
+     passo 4 nos quatro pares. Tudo aqui é posterior ao teste.
+
+     | Par | Perdidas (ordenação / ponto de operação) | Ganhas | Especificidade equivalente: sensibilidade base → novo (perdidas / ganhas) |
+     |---|---|---|---|
+     | F → F+BR | 109 (92 / 17) | 1 | 0,430 → 0,330 (108 / 4) |
+     | E+F → E+F+BR | 21 (16 / 5) | 11 | 0,754 → 0,750 (16 / 11) |
+     | F → E+F | 18 (0 / 18) | 359 | 0,430 → 0,971 (0 / 569) |
+     | E → E+F | 150 (66 / 84) | 34 | 0,865 → 0,870 (66 / 71) |
+
+     - **Frequência global.** As 150 perdas de E → E+F vêm sobretudo do ponto de operação: o limiar de MCC de E+F é
+       mais exigente que o de E. Na especificidade de E, E+F reconhece 0,870 das P-BR (E reconhece 0,865).
+     - **ABraOM: reordena para baixo P-BR raras.**
+       - Em E+F → E+F+BR, 16 das 21 perdas são de ordenação.
+       - Entre as 21: 18 têm AF < 0,1% no gnomAD, 15 têm AF no ABraOM ≥ 5× a do gnomAD e 12 têm AF < 0,1% no
+         ABraOM (1 ou 2 alelos, com AN completo).
+       - Na especificidade de E+F, o saldo é de −5 (16 perdidas, 11 ganhas).
+       - Em F → F+BR o efeito é maior: 92 perdas de ordenação, 102 com AF < 0,1% no ABraOM e 106 com razão ≥ 5×.
+       - O perfil é compatível com o bloco BR tratar a presença numa amostra de 1.171 pessoas como sinal de
+         benignidade, mesmo quando a variante foi vista uma ou duas vezes.
+     - **HbS e HbC já ficam entre as benignas só com o R03.** A chamada exigiria falso-positivo de validation de:
+       - 0,276 e 0,130 em E;
+       - 0,574 e 0,394 em E+F;
+       - 0,678 e 0,516 em E+F+BR.
+
+       Nenhuma das duas está na lista de exceções ao BA1 do Mosaic (`config/ba1-exceptions.yaml`).
+     - **Inventário da Fase 1b.** 711.619 variantes anotadas nas células, 3.860 sem `trained_run`.
+       - **Definição `main`:** 10.741 na célula primária (censo) e 113.453 na comparável (amostra, peso total
+         3.837.461). São 124.194 variantes, 6.088 já nos caches, complemento de 118.106, cerca de 2,1 h de GPU na
+         taxa medida no passo 2.
+       - **Todas as definições** (sensibilidades e controles positivos AFR/AMR): 623.884 variantes, 34.332 nos
+         caches, complemento de 589.552, cerca de 10,4 h.
+       - **Pedidos:** os 627.233 pedidos `regional` cobrem todas as variantes das células. Os 3.349 a mais são os
+         sem execução. Nenhuma execução pedida difere do `trained_run`.
+       - **Tamanhos no S3:** `bias-cells` tem 524 MB (já baixado); o CADD tem 165 MB (ainda não baixado).
 
 ## 5. Como ler o resultado
 
