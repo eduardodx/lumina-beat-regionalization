@@ -301,13 +301,30 @@ Aceita. Os pontos verificáveis foram conferidos no código:
 
 Duas adições ao desenho do §7:
 
-1. **E+F+BR é experimento de valor da informação, não sistema regional oficial.** As células do viés são definidas
-   pela razão entre a AF do ABraOM e a do gnomAD; um classificador que lê essas duas frequências reduz FP ali por
-   construção. No R1, ele contaria o ABraOM duas vezes. O viés continua sendo medido nos sistemas sem ABraOM na
-   entrada (E, E+F) e, depois, no R2 nos blocos não expostos.
+1. **E+F+BR é experimento de valor da informação, não automaticamente o braço R1 nem regionalização aprendida.**
+   As células do viés e sua verdade dependem da AF do ABraOM; fornecer essa frequência cria circularidade, mas
+   não garante redução de FP para qualquer classificador treinado. Acrescentar as regras ABraOM de R1 a uma
+   cabeça que já recebe a frequência também pode contar a evidência duas vezes. O contraste principal de viés
+   permanece nos sistemas sem consulta direta ao ABraOM (E, E+F) e, depois, no R2 nos blocos não expostos.
 2. **Os membros dos proxies brasileiros estão no núcleo.** Cada um cai em algum fold de treino do `core_locus` de 4
    kb. Para pontuá-los fora da amostra, usa-se a execução cujo fold de teste os contém, com a mesma regra em todos
    os braços. Isso se afasta do "par congelado" do track `brazil`, porque são cinco modelos e não um, e continua
    sendo desenvolvimento.
 
 O plano executável da primeira etapa está em [fase1_r03_congelado.md](fase1_r03_congelado.md).
+
+## 10. Revisão do bloco da Fase 0 e dos pontos de decisão (04/10)
+
+O inventário só lê dados e descreve disponibilidade: listar as críticas não verifica suas chamadas, e encontrar
+IDs no cache não valida os vetores. Essas duas tarefas continuam abertas antes de usar os sistemas para
+afirmações de segurança ou reaproveitar features.
+
+O bloco inicialmente proposto usava `uv` na validação e `python3` do sistema no inventário. Também prosseguia
+após falha de validação e terminava com saída zero. O
+[runbook revisto](runbooks/inventariar_mosaic_v1.sh) usa o mesmo ambiente em todas as etapas, testa o inventário,
+mantém os logs e interrompe em falha. Nenhuma GPU ou treino é executado.
+
+Os pontos de avanço não são inferências definitivas: ausência de ganho incremental não prova que E contenha a
+informação regional, e falha de um probe congelado não prova incapacidade de um tronco adaptado. Servem para
+priorizar experimentos. O documento da Fase 1 explicita essa limitação e a exposição cross-fitted dos proxies,
+que difere da avaliação oficial do par brasileiro congelado.

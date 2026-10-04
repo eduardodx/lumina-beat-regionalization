@@ -30,8 +30,12 @@ Fase 1 mostrar sinal.
 
 **Cabeça.** Regressão logística com L2 sobre features padronizadas no treino de cada execução. C vem da grade {1e-3,
 1e-2, 1e-1, 1, 10}, escolhido pela macro AUROC de missense, splice e noncoding na validation. É um probe linear,
-para que a capacidade da cabeça não se confunda com a informação de cada braço. Um MLP fica como sensibilidade
-posterior.
+para controlar a receita da cabeça. Acrescentar colunas também aumenta o número de parâmetros: usar a mesma
+regressão não iguala capacidade exatamente. Um MLP fica como sensibilidade posterior.
+
+No S+F, S é o score do braço E, somado ao bloco F. Como E é treinado, os scores usados para ajustar o segundo
+classificador precisam de uma estratégia declarada, sem usar o teste externo: por exemplo, predições fora da
+amostra geradas dentro do treino da execução. Não confundir score de treino de E com score fora da amostra.
 
 ## 2. Divisões
 
@@ -44,8 +48,17 @@ A vista de 4 kb do release novo: `views/4kb/partitions.parquet`. Na execução `
 Sanidade: o run 0 tem de dar 194.666 de treino, 2.106 de validation e 2.110 de teste gold elegível
 (`GUIA_OPERACIONAL_DE_SPLITS.md` §10.1).
 
+Essa contagem de treino é anterior ao filtro de sequência. Para comparar os braços com as mesmas linhas, o
+treino efetivo precisa usar a interseção elegível com features disponíveis, inclusive nos braços só de frequência.
+
 Cada variante do release fora do treino é pontuada pela execução cujo fold de teste a contém. Vale para os membros
 dos proxies brasileiros, para a coorte de benefício e para as P-BR.
+
+**Exposição dos proxies.** Nesta análise exploratória, um membro pode treinar cabeças de outras execuções, embora
+não treine a execução que o pontua como teste. Portanto, não se deve afirmar que nenhum membro dos proxies entra
+no treino, nem chamar esse desenho de avaliação oficial do par brasileiro congelado. O estudo `regional` e seus
+folds de núcleo são distintos desse contrato. Uma avaliação oficial de `brazil` exigirá respeitar seu contrato
+próprio; as leituras cross-fitted desta fase ficam identificadas como desenvolvimento exploratório.
 
 ## 3. Avaliação
 
@@ -75,10 +88,34 @@ E+F+BR não entra nas células, porque é circular ali.
    - `validate-suite` e conferência dos checksums dos pedidos.
    - `scripts/inventario_mosaic_v1.py`: contagens por papel e execução, proxies, coorte de benefício, P-BR, críticas,
      pedidos, e o quanto os caches antigos do M0 cobrem.
-2. **Extração (GPU).** A leitura do R03 congelado para o que faltar das variantes do release elegíveis em 4 kb, com
-   identidade própria e o mesmo extrator, mais uma conferência numérica contra os caches antigos numa amostra em
-   comum. A decisão entre reaproveitar ou extrair de novo sai do inventário: reaproveitar exige o mesmo lote; extrair
-   tudo de novo dá uma identidade só.
+   - Executar [inventariar_mosaic_v1.sh](runbooks/inventariar_mosaic_v1.sh): ele usa o mesmo Python nos testes,
+     validação e inventário e interrompe se qualquer checagem falhar. A contagem de IDs em comum não autoriza
+     reaproveitamento dos embeddings; as 13 críticas listadas ainda não tiveram suas predições verificadas.
+   **Resultado (04/10, `~/artifacts/mosaic_v1/inventario_20261004_033946/`).** `validate-suite` ok e pedidos
+   conferidos com o release e o protocolo.
+   - **Downloads:** release com 124 MB e pedidos com 84 MB.
+   - **Execuções:** batem com o guia (run 0: 194.666 / 2.106 / 2.110), com 1.295 a 1.863 purgadas por execução.
+   - **Proxy clínico:** 3.116 pares e 3 sem par (todos P). Presença no ABraOM de 19,7% nos casos e 9,6% nos
+     controles, uma razão de 2,0×; com o recorte antigo era 4,6×.
+   - **Proxy populacional:** 621 pares (97 P / 524 B) e 1.436 sem par (1 P / 1.435 B: 1.001 noncoding, 240
+     missense, 166 synonymous, 26 splice, 2 other). O coorte completo é dominado por benignas sem par.
+   - **Benefício e P-BR:** batem com o plano (2.057 gold, 98 P, 232 unidades; 1.050 P-BR, 580 grupos de gene).
+   - **Críticas:** 11 no release, todas elegíveis em 4 kb; TP53 R337H e GBA1 N370S estão fora dele. Das 11, só 6
+     estão presentes no ABraOM (as três HBB, MYO15A, CYP1B1 e CFTR) e entram na conferência do avaliador do Mosaic.
+     PPOX, as duas POLH, TTR V50M e GBA1 G416S estão no release, mas ficam de fora dela. HbS é consensus.
+   - **Caches antigos:** os do M0 (`g3_cache` 171.720 e `g7_cache` 8.875, sem sobreposição) cobrem 180.595
+     variantes elegíveis, com extrator `campanha_r03_extracao_v2`, R03 `f2983560…`, janela 4.096, offset 2.047 e
+     lote de 8 pares. O complemento do núcleo tem 146.223 variantes. Os pedidos regionais pedem 611.233 além dos
+     caches.
+2. **Extração (GPU).** `scripts/extrair_mosaic_v1.py`, pelo
+   [runbook](runbooks/extrair_mosaic_v1_gpu.sh), em duas etapas:
+   1. **Conferência.** Reextrai uma amostra determinística de 512 variantes dos dois caches antigos e compara os
+      vetores com a tolerância do extrator (1e-5).
+   2. **Complemento.** Só se a conferência passar: as 146.223 variantes, cerca de 2 h na taxa medida do M0.
+
+   As duas exigem a identidade da referência em tudo menos a tabela; qualquer diferença (código, ambiente, FASTA,
+   lote) recusa a extração. Se a identidade divergir ou a conferência reprovar, o reaproveitamento deixa de valer
+   e a saída é extrair as 326.818 variantes de novo, com identidade própria.
 3. **Braços (CPU).** As cinco execuções dos seis braços, em `predictions.parquet` e `system.yaml` no formato do
    Mosaic, com a exposição declarada.
 4. **Leituras (CPU).** Avaliador oficial do núcleo e o consumidor próprio para os deltas, os proxies, o benefício, as
@@ -86,9 +123,19 @@ E+F+BR não entra nas células, porque é circular ali.
 
 ## 5. Como ler o resultado
 
-- **E+F+BR ganha de E+F nos proxies e no benefício, sem perder P-BR:** há informação brasileira útil. A Fase 2 testa
+- **E+F+BR ganha de E+F nos proxies ou no recorte de benefício, sem perder P-BR:** há ganho incremental nesta
+  receita e nestas amostras. A Fase 2 testa
   se ela é aprendível do embedding (cabeça populacional nos blocos expostos, avaliada nos não expostos).
-- **Não ganha:** a hipótese de que falta informação regional ao R03 perde força antes de gastar uma corrida longa.
-- **F+BR ganha de F, mas E+F+BR não ganha de E+F:** o R03 já carrega o que o ABraOM traria.
+- **Não ganha:** não detectamos ganho com esta cabeça, features e amostra. Isso orienta o orçamento, mas não
+  refuta toda proposta de adaptação regional; capacidade, regularização, cobertura e precisão também importam.
+- **F+BR ganha de F, mas E+F+BR não ganha de E+F:** resultado compatível com redundância na presença de E, mas não
+  prova que o R03 represente a informação do ABraOM. Confirmar por probe populacional e diagnósticos de precisão.
 - **Ganho com perda de P-BR:** não é regionalização segura. As perdas são lidas por painel e caso a caso nas
   críticas.
+
+Esses pontos são orientações de desenvolvimento, não critérios de parada cientificamente demonstrados. Um
+probe congelado que falha não demonstra que adaptar o tronco seja inútil: ele pode não conter a informação de
+forma recuperável por essa cabeça. Antes de medir, declarar os contrastes, o efeito relevante e as leituras de
+segurança; não escolher critérios de avanço depois de olhar os resultados. A análise de custo global precisa
+de estudos e margens próprios. `gene_transfer` e `time` estão fora desta fase, portanto ela não certifica
+“sem degradar outros splits”.
