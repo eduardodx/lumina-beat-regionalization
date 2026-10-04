@@ -123,6 +123,21 @@ E+F+BR não entra nas células, porque é circular ali.
    `fontes_da_extracao.json` registra os hashes dos arquivos reaproveitados e das entradas do release. Os logs
    externos e internos recebem nomes únicos; `nohup`/`setsid` protegem contra fechar o terminal, não contra
    desligar a instância. Essas mudanças não alteram o caminho numérico do extrator da campanha.
+
+   **Resultado (04/10, 15:59; revisão `946ae22`).** Log `~/artifacts/mosaic_v1/passo2_saida_20261004_155759_667.out`.
+   - **Caches antigos:** os dois passaram na validação completa (identidade, manifesto, tabela, fragmentos,
+     coordenadas).
+   - **Conferência:** 512 variantes reextraídas (0,0636 s/variante) batem **bit a bit** com os dois caches. As 256
+     de cada cache dão diferença máxima 0,0 nas duas leituras, `cabecas_172` e `leitura_antiga_1344`.
+     Registro em `~/artifacts/mosaic_v1/cache_conferencia_20261004_155759_824/conferencia.json`.
+   - **Complemento:** a corrida interrompida (revisão `3be6982`) já tinha gravado as 146.223 variantes em 36
+     fragmentos. A retomada conferiu identidade, tabela e fragmentos, encontrou 0 pendentes e fechou com
+     `"completo": true` em `~/artifacts/mosaic_v1/cache_M0_complemento/`, com `fontes_da_extracao.json`.
+
+   As 326.818 variantes elegíveis em 4 kb têm agora a leitura do R03 congelado, em três caches com a mesma
+   identidade numérica: `~/artifacts/redesenho/g3_cache/M0` (171.720), `~/artifacts/redesenho/g7_cache/M0`
+   (8.875) e `~/artifacts/mosaic_v1/cache_M0_complemento` (146.223). Os papéis gravados nas tabelas desses caches
+   são da campanha antiga e não valem para a Fase 1. Rótulo, painel, fold e purgas vêm sempre do release novo.
 3. **Braços (CPU).** As cinco execuções dos seis braços, em `predictions.parquet` e `system.yaml` no formato do
    Mosaic, com a exposição declarada.
 4. **Leituras (CPU).** Avaliador oficial do núcleo e o consumidor próprio para os deltas, os proxies, o benefício, as
