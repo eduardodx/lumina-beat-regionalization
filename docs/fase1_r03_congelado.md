@@ -242,6 +242,55 @@ E+F+BR não entra nas células, porque é circular ali.
      relevantes. Essa convenção não se aplica automaticamente a AUPRC, MCC ou à taxa de perda de P-BR; a margem
      P-BR de 0,01 acima é a regra distinta do avaliador oficial.
 
+   **Resultado (04/10, 18:46–19:43; revisão `af77b4a`).** Avaliador em
+   `~/artifacts/mosaic_v1/avaliacao_20261004_184608_3203/`; leituras (`resumo.md` e `leituras.json`) em
+   `~/artifacts/mosaic_v1/leituras_20261004_184608_3203/`. Os testes passaram, a regra revisada manteve todos os C
+   e os limiares dos seis braços batem com os do avaliador. IC de 95% com 1.000 réplicas.
+   - **Teste perto da validation.** O macro AUROC do avaliador no teste gold repete a validation do passo 3: F
+     0,9103; F+BR 0,9101; E 0,9134; E+F 0,9765; E+F+BR 0,9772; S+F 0,9747. O otimismo da escolha de C foi pequeno.
+   - **O R03 e a frequência global se complementam.** No contraste oficial:
+     - F → E+F dá +0,111 de macro AUPRC [0,066; 0,159];
+     - E → E+F dá +0,074 [0,044; 0,098];
+     - o MCC sobe nos dois;
+     - por painel, o R03 acrescenta mais no splice (+0,144 de AUROC sobre F) e a frequência mais no missense
+       (+0,125 sobre E).
+   - **Ao lado dos comparadores oficiais.** Os comparadores são scores congelados, não ajustados a estes rótulos, e
+     as cabeças da Fase 1 são treinadas neles; a comparação não é de igual para igual.
+     - Missense: E+F 0,948; REVEL 0,948; AlphaMissense 0,941.
+     - Splice: E+F 0,995; SpliceAI 0,988.
+     - Noncoding: E+F 0,986; `gnomad_rarity` 0,953.
+     - Sozinho, E fica em 0,828 no missense.
+   - **ABraOM no núcleo.**
+     - Macro AUPRC: F → F+BR +0,0003 [−0,0004; 0,0012]; E+F → E+F+BR +0,0009 [−0,0005; 0,0023].
+     - Por painel, só o noncoding de E+F+BR tem IC acima de zero: +0,0014 de AUROC [0,0002; 0,0030].
+   - **Proxies, Δ AUROC de E+F → E+F+BR.**
+     - Clínico: +0,0015 no coorte completo [0,0006; 0,0025]; +0,0013 nos controles [0,0005; 0,0021]; interação
+       +0,0003 [−0,0010; 0,0016].
+     - Populacional: +0,0027 [0,0007; 0,0043]; interação −0,0005 [−0,0043; 0,0039].
+     - Em F → F+BR, todos os IC incluem zero.
+   - **Benefício (2.057, 98 P).**
+     - E+F → E+F+BR: AUROC +0,0027 [0,0006; 0,0061].
+     - Nas chamadas, 2 P e 3 falso-positivos a menos: sensibilidade −0,020 [−0,055; +0,020]; falso-positivo
+       −0,0015 [−0,0044; 0,0000].
+     - F → F+BR perde sensibilidade, com IC abaixo de zero: −0,041 [−0,085; −0,009].
+   - **P-BR (1.050, 580 grupos de gene).**
+     - E+F → E+F+BR perde 21 e ganha 11 (sensibilidade de 0,754 para 0,745). O limite superior da perda é 0,052,
+       acima da margem de 0,01.
+     - F → F+BR perde 109 e ganha 1.
+     - A frequência global também custa: E → E+F perde 150 e ganha 34 (de 0,865 para 0,754).
+   - **Críticas.**
+     - E+F+BR chama as 11 do release exatamente como E+F.
+     - HbS e HbC (HBB p.Glu7Val e p.Glu7Lys) saem negativas nos seis braços, inclusive em E.
+     - TTR V50M só é positiva em E+F e E+F+BR.
+     - A regra P-BR só conta perdas em relação à base. "0 críticas perdidas" não quer dizer que as críticas foram
+       reconhecidas.
+
+   **Leitura pelo §5.** E+F+BR ganha de E+F por margens detectáveis, mas pequenas: até +0,003 de AUROC, abaixo da
+   referência de 0,01. O ganho é igual em casos e controles: a interação fica perto de zero, sem vantagem brasileira
+   detectada. E E+F+BR perde P-BR acima da margem do avaliador. É o caso "ganho com perda de P-BR": nesta receita,
+   não é regionalização segura. O ganho grande e robusto é o da combinação do R03 com a frequência global, que
+   também custa P-BR.
+
 ## 5. Como ler o resultado
 
 - **E+F+BR ganha de E+F nos proxies ou no recorte de benefício, sem perder P-BR:** há ganho incremental nesta
