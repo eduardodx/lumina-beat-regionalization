@@ -21,16 +21,16 @@ Convenções: **fato** = lido no código, na configuração ou em número public
    751 no release do G7).
 5. O `regional` cria verdade benigna por frequência no ABraOM (camadas A ≥ 5% e B 1–5%), uma verdade clínica (B/LB e
    P/LP observadas no ABraOM) e variantes críticas brasileiras; mede **viés**, **benefício** e **segurança**.
-6. O viés compara falsos positivos em benignas comuns no Brasil e raras no gnomAD (célula primária, 10.829) contra
-   benignas com frequência parecida nas duas fontes (célula comparável).
+6. O viés compara falsos positivos em benignas pelo menos cinco vezes mais frequentes no Brasil que no gnomAD
+   (célula primária, 10.829) contra benignas com frequência parecida nas duas fontes (célula comparável).
 7. Um sistema treinado participa do `regional` pelo perfil de 4.096 bp: cada variante é pontuada pelo modelo do
    `core_locus` de 4 kb da execução que a cobre (cross-fitting), com o limiar da validation daquela execução.
 8. Regionalização aprendida (R2) só vale com treino nos blocos de 1 Mb **expostos** e comparação contra uma
    continuação global de mesmo orçamento (R2c) nos blocos **não expostos**.
-9. O R03 tem uma cabeça populacional (`population_af_head`, `population_observed_head`) cujo alvo é a AF global do
-   gnomAD (`AF_joint`). O Mosaic formula exatamente isso como hipótese de mecanismo do viés regional (H-R).
-10. Os splits recompensam informação que só existe nos casos brasileiros (presença e frequência no ABraOM). Isso
-    define o que "roubar" significa e onde está o risco: segurança das patogênicas brasileiras (margem de 1 ponto).
+9. O R03 tem cabeças de log-AF e observação por alelo. O plano do Mosaic atribui o alvo ao `AF_joint`; o pacote
+   de inferência confirma a arquitetura, mas não contém a loss e o pipeline de treino para verificar esse alvo.
+10. Informação do ABraOM pode ajudar, mas a definição dos casos não garante ganho nem interação positiva.
+    É preciso distinguir consulta de frequência, mudança aprendida da representação e segurança das patogênicas.
 
 ## 1. O Mosaic novo em uma página
 
@@ -114,7 +114,7 @@ Código: `src/mosaic/brazil_study.py` (`build_brazil_membership`, `match_control
   (`config/clinvar-organizations-br.yaml`: `organization_summary` de 2026-08-22, país Brazil/Brasil, revisão manual).
   3.119 casos (2.808 P / 311 B).
 - **`br_population_observed`.** Casos: `label_tier == gold` e `present_abraom`. Pool: gold sem `present_abraom`.
-  `present_abraom` = AC > 0 no dump agregado do WGS-1171, com **qualquer FILTER** (`annotations/abraom.py:
+  `present_abraom` = AN > 0 e AC > 0 no dump agregado do WGS-1171, com **qualquer FILTER** (`annotations/abraom.py:
   classify_abraom`). 2.057 casos (98 P / 1.959 B).
 - **Pareamento.** 1:1, sem reposição, exato em `binary_label × primary_panel × gnomad_af_bin`; casos e opções de
   controle ordenados por `hash(seed, variant_id)`. Caso sem controle no estrato vira `unmatched_case`.
@@ -148,13 +148,15 @@ mudou e o `br_population_observed` passou de 1.889 casos e 751 pares para 2.057 
   sempre aparece em 1.171 genomas, então os casos do bin `common` tendem a ficar sem controle. Isso explica por que
   o coorte completo é dominado por benignas comuns sem par. No release do G7, os 1.138 sem par eram 1 P e 1.137 B,
   a maioria noncoding; agora são 1.436, contagem por painel ainda não medida.
-- Dentro de cada par, o bin do gnomAD é igual; o que difere entre caso e controle é justamente a observação no
-  ABraOM. Qualquer informação derivada do ABraOM existe **só nos casos**. Uma feature de ABraOM pode mudar o caso e
-  nunca o controle, o que tende a produzir interação positiva por construção.
-- No clínico, os especialistas já ordenam pior os casos brasileiros que os controles em missense (0,936 contra
-  0,973). É o único gap visível nos proxies, e o único em que um ganho regional teria margem para aparecer sem
-  depender só do ABraOM. No G7 os casos do clínico estavam 4,6 vezes mais presentes no ABraOM que os controles (com o
-  recorte antigo; a razão com o dump completo não foi medida).
+- Dentro de cada par, o bin do gnomAD é igual; ele não iguala a frequência exata, o gene ou o contexto. A presença
+  no ABraOM difere por construção, mas ausência é uma informação que também pode entrar no classificador. Ao
+  acrescentar features ou reajustar pesos compartilhados, os scores dos controles também podem mudar. Além disso,
+  frequência regional pode favorecer benignas e prejudicar patogênicas: não existe interação positiva garantida.
+- No clínico, o ponto estimado do REVEL em missense é menor nos casos que nos controles (0,936 contra 0,973).
+  Essa diferença merece diagnóstico, mas não prova dificuldade de ancestralidade brasileira, nem que este seja o
+  único lugar com possibilidade de ganho. `br_lab_any` identifica participação institucional, não ancestralidade
+  do portador. No G7 os casos do clínico estavam 4,6 vezes mais presentes no ABraOM que os controles (com o recorte
+  antigo; a razão com o dump completo não foi medida).
 
 ### 2.2 Estudo `regional`: o universo e a verdade
 
@@ -185,7 +187,7 @@ variante: ausência não tem denominador (`observed_only`).
 | C | AF < 1% | — | só descritiva |
 | Clínica | B/LB do ClinVar observadas no ABraOM | gold 1.959, consensus 131.050 | benefício |
 | P-BR | P/LP do ClinVar observadas no ABraOM | gold 98, consensus 952 | segurança |
-| Críticas | 13 SNVs P/LP da literatura (HbS, TP53 p.R337H e outras) | — | tolerância zero |
+| Críticas | 13 SNVs P/LP da literatura (HbS, TP53 p.R337H e outras) | — | tolerância zero declarada; cobertura do avaliador requer conferência |
 
 Limitação declarada pelo próprio plano: as camadas são proxies de frequência numa coorte de idosos de São Paulo, não
 aplicação clínica de BA1/BS1; a HbS mostra o risco (patogênica e comum no Brasil). A limpeza usa rótulos do ClinVar,
@@ -225,9 +227,13 @@ no buffer (`regional_truth.r2_roles`).
 Na prática do avaliador, para um sistema treinado: **R0 = RW-4**, isto é, o RW-2 com o candidato como provedor de
 PP3/BP4, calibrado pela adaptação do método de Pejaver na validation de cada execução, até força "forte"
 (`scripts/build_rw4.py`). **R1 = RW-4 com as regras do ABraOM** (`--abraom`): com a AF do ABraOM das chamadas
-`vSR`, BA1 se o limite inferior unilateral de 95% ≥ 5% ou acima do BA1 do gene; BS1 acima do BS1 do gene; sem PM2
-quando observada no ABraOM (`config/real-world.yaml`). Nas camadas A/B, R1 e RW-3 aplicam a mesma regra que define a verdade e acertam por
-construção; lá só informam os sistemas sem ABraOM (viés) e o R2 em blocos não expostos.
+PASS e `vSR`, BA1 se o limite inferior unilateral de 95% ultrapassa o BA1 do gene (5% por padrão); BS1 acima do
+BS1 do gene; sem PM2 quando observada no ABraOM (`config/real-world.yaml`, `real_world.rw2`). R1 e RW-3 usam a
+mesma fonte que participa da definição da verdade: a concordância pode ser circular. Isso não significa que
+acertem toda a camada B por construção, pois ela começa em 1% e BA1 padrão exige limite inferior acima de 5%.
+(O plano, §7.4, fala em acerto "por construção"; pelo código, isso só vale onde o limite inferior passa o
+limiar. O texto de `config/real-world.yaml` diz `>= 0.05`, mas `real_world.py:178` compara com `>`.)
+Essas camadas não demonstram, sozinhas, adaptação aprendida quando o sistema consulta diretamente o ABraOM.
 
 **Endpoints primários** (`config/study-protocol.yaml`, `primaries`; efeitos mínimos aprovados em 2026-09-29):
 
@@ -235,7 +241,7 @@ construção; lá só informam os sistemas sem ABraOM (viés) e o R2 em blocos n
 |---|---|---|---|
 | Viés | taxa de FP na célula primária − comparável, ajustada por painel × quartil do phyloP241 | camada B benigna, 4 kb | 1 ponto |
 | Benefício | R1 − RW-3 em cobertura de decisões corretas, com segurança | teste do núcleo de 4 kb presente no ABraOM: 2.057 gold, 98 P-BR, 232 unidades | 4 pontos |
-| Segurança | perda bruta de P-BR que o R0 reconhecia como P/LP e o R1 perde | P-BR de teste do núcleo de 4 kb, gold e consensus | ≤ 1 ponto, Clopper–Pearson com n = grupos de gene (580 em 4 kb); críticas com tolerância zero |
+| Segurança | perda bruta de P-BR que o R0 reconhecia como P/LP e o R1 perde | P-BR de teste do núcleo de 4 kb, gold e consensus | limite superior unilateral < 1 ponto no código, Clopper–Pearson com n = grupos de gene (580 em 4 kb); críticas com tolerância zero declarada |
 | Generalização do R2 | redução de FP nas camadas A/B em blocos não expostos contra R2c | camadas A/B | 25% relativo na célula primária (provisório) |
 | Custo global | regionalizado − base no `core_locus` (macro AUROC, sensibilidade) | gold do núcleo | descritivo, sem margem |
 
@@ -243,6 +249,15 @@ A taxa de FP do viés usa o limiar de MCC da validation do núcleo de 4 kb de ca
 que o sistema pontua (`scripts/evaluate_regional_bias.py`). Como as células só têm benignas, toda chamada positiva é
 FP. A simulação de segurança mostra o custo da margem: só um candidato que praticamente não perde P-BR demonstra
 segurança (com perda verdadeira de 0,25%, demonstra em 26–47% das vezes).
+
+**Lacuna encontrada na revisão de 03/10.** `scripts/evaluate_safety.py` cruza a lista crítica somente com P-BR
+presentes no ABraOM. Variantes críticas ausentes, como TP53 p.R337H segundo a própria lista, não entram no relatório.
+O script também não exige cobertura completa de R0 antes de contar as perdas. Portanto, `safety_declared` sozinho
+não comprova proteção das 13 críticas. A reprodução e a correção necessária estão em
+[revisao_nova_frente_mosaic_r03.md](revisao_nova_frente_mosaic_r03.md).
+Conferido em 04/10 no código: pela própria lista, 6 das 13 críticas são ausentes do ABraOM (TP53 R337H, PPOX
+R168H, as duas POLH, TTR V50M e GBA1 G416S) e nunca entram na conferência. E o script só sinaliza crítica perdida
+em relação ao R0: uma crítica que o R0 já não chama de P/LP não é sinalizada.
 
 **Referências medidas (fato; desenvolvimento).**
 
@@ -285,8 +300,9 @@ Fonte: `lumina-inference` (`TECHNICAL.md`, `lumina/models/model.py`, `config/lum
   global** (§1, fato 4). Não conferi o código de treino (`lumina-research`), que não está nesta máquina.
 - **Pontuação zero-shot.** LLR do MLM com a posição mascarada: `log p(alt) − log p(ref)`.
 - **O que já sabemos (campanha anterior, release antigo).**
-  - O canal `h_pure` é trivial (64 das 448 dimensões).
-  - A melhor leitura congelada foram 172 dimensões tiradas das cabeças, candidata e não vencedora.
+  - O canal `h_pure` tem 64 dimensões e vem do caminho por posição do stem; isso não demonstra informação nula
+    em todo experimento ou depois da normalização conjunta do tronco.
+  - As 172 dimensões tiradas das cabeças foram uma candidata compacta, não a vencedora do G5.
   - O G5 escolheu `leitura_antiga_1344`.
   - O adapter rsLoRA misto (60% gnomAD, 40% ABraOM) não moveu o clínico: Δ AUROC −0,0013 [−0,0043; +0,0018], com o
     M0 em 0,9286 contra 0,9020 do `gnomad_rarity`.
@@ -304,13 +320,14 @@ Fonte: `lumina-inference` (`TECHNICAL.md`, `lumina/models/model.py`, `config/lum
 
 Esta seção é inferência a partir das regras acima; cada item vira uma medição antes de virar desenho.
 
-1. **No proxy populacional e no benefício, informação do ABraOM é assimétrica por construção.** Os casos são
-   definidos pela presença no ABraOM e os controles pela ausência, no mesmo bin do gnomAD. Uma feature de ABraOM pode
-   melhorar o caso e não tem como mudar o controle. "Roubar" aqui é barato e circular: frequência do ABraOM como
-   entrada.
+1. **O proxy populacional e o benefício são coortes diferentes.** No proxy há casos presentes no ABraOM e
+   controles não presentes, pareados por classe, painel e bin do gnomAD. O benefício usa gold presente no ABraOM,
+   sem aquele grupo de controles, e compara R1 com RW-3. Consultar a frequência regional é um braço válido (R1),
+   mas não garante ganho no proxy, nem demonstra regionalização aprendida. Nas camadas de verdade por frequência,
+   usar a mesma frequência para classificar e definir a verdade é circular e deve permanecer explícito.
 2. **O número que limitaria o ganho veio do recorte antigo.** Somar ABraOM a um modelo de frequência do gnomAD não
    ajudava. O R03 não é um modelo de frequência, e o ganho que o ABraOM traria **para ele** nunca foi medido.
-3. **No proxy clínico há um gap real nos especialistas** (REVEL 0,936 contra 0,973 em missense). Entender por que os
+3. **No proxy clínico há uma diferença descritiva nos especialistas** (REVEL 0,936 contra 0,973 em missense). Entender por que os
    casos com laboratório brasileiro são mais difíceis (genes, faixa de frequência, presença no ABraOM, tipo de
    evidência) é o ponto em que um ganho regional seria menos trivial.
 4. **O viés só pode ser corrigido se existir no R03.** Nos especialistas ele quase não aparece, e os sistemas de
@@ -341,9 +358,13 @@ Esta seção é inferência a partir das regras acima; cada item vira uma mediç
 
 - **Dados no notebook.** O release novo (vista de 4 kb, `clinical-variants`, `variant-annotations`,
   `evaluation-panels`, `studies/brazilian-proxies`), o manifesto de pedidos, as células do viés, a verdade regional
-  e o extrato do ABraOM. Os caminhos estão em `docs/GUIA_DE_SUBMISSAO.md` §1.1. Nada da campanha anterior serve como
-  está: a identidade do release mudou.
+  e o extrato do ABraOM. Os caminhos estão em `docs/GUIA_DE_SUBMISSAO.md` §1.1. Os snapshots, folds, cabeças e
+  calibradores antigos não podem receber a nova identidade automaticamente. Embeddings congelados podem ser
+  reaproveitados para variantes em comum após conferir coordenadas, REF/ALT, janela, FASTA, checkpoint, código,
+  orientação, layout e condições numéricas; variantes novas precisam de extração. Reutilizar valores conferidos
+  não é reutilizar a divisão experimental antiga.
 - **`lumina-embeddings`.** Para reproduzir o probe de referência do Lumina ("fase A"), seria preciso ter acesso a
   esse repositório. Sem ele, usamos a nossa extração, declarando a diferença.
-- **Código de treino do R03 (`lumina-research`).** Necessário para confirmar o alvo da cabeça populacional e para
-  qualquer R2 que treine cabeças ou o tronco.
+- **Código de treino do R03 (`lumina-research`).** Importante para confirmar transformação, máscaras e loss do
+  alvo populacional original. Não é pré-requisito para todo R2: este consumidor já carrega o R03 e treina rsLoRA,
+  e pode construir uma cabeça auxiliar própria, com objetivo novo declarado e testes no modelo real.
