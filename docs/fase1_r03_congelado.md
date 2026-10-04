@@ -193,7 +193,9 @@ E+F+BR não entra nas células, porque é circular ali.
      - E+F 0,976 e E+F+BR 0,977;
      - S+F 0,975.
    - **Convergência:** a corrida usou o código anterior à revisão `ef4b29d`. O passo 4 confere no `selecao.json` se
-     algum ajuste deixou de convergir e recusa as leituras se a regra revisada mudar algum C.
+     algum ajuste deixou de convergir e recusa as leituras se a regra revisada mudar algum C. Conferido em 04/10
+     pelo runbook do passo 4: 165 ajustes (150 da grade e 15 internos do S+F), nenhum sem convergir, nenhum aviso
+     registrado. A regra revisada mantém todos os C, então o passo 3 vale sem repetir.
 4. **Leituras (CPU).** `scripts/fase1_leituras.py`, pelo [runbook](runbooks/leituras_mosaic_v1.sh), no `.venv` do
    Mosaic. Primeiro roda o avaliador oficial (`scripts/evaluate_candidate.py`) em cada braço; depois, as leituras do
    consumidor.
@@ -208,6 +210,9 @@ E+F+BR não entra nas células, porque é circular ali.
    - **Limiar:** o de `stats.calibrate_threshold` na validation de cada execução, sobre todos os painéis. É a regra
      do avaliador do candidato, e o script confere contra o `validation-thresholds.parquet` gravado por ele. A
      chamada é score ≥ limiar da execução que testa a variante.
+     O contraste primário oficial do núcleo (`paired_contrast`) refaz seu próprio limiar usando somente
+     missense, splice e noncoding, como define essa função. Seu MCC não usa o mesmo recorte de calibração das
+     chamadas de benefício/P-BR e das métricas gerais do avaliador.
    - **Núcleo:**
      - o contraste pareado oficial (`contrasts.paired_contrast`: macro AUPRC por fold e MCC, com bootstrap conjunto
        por cluster e o limiar refeito em cada réplica);
@@ -217,16 +222,25 @@ E+F+BR não entra nas células, porque é circular ali.
      coorte completo, pareados, controles e interação, só métricas contínuas. A interação usa `cluster_conjunto` como
      unidade principal e `par` como sensibilidade, como na campanha anterior.
      - No `br_population_observed`, o coorte é definido pela presença no ABraOM, que o bloco BR usa como feature.
-       Ganho ali é circular por construção (o próprio protocolo marca `true_by_construction`). Descreve o
-       comportamento do produto, não generalização.
+       O `true_by_construction` do protocolo descreve a sobreposição da fonte com a coorte; não garante ganho
+       de AUROC nem define o rótulo P/B pela presença. Ganho medido ali descreve o comportamento do produto
+       nessa amostra com sobreposição de fonte, não generalização independente.
    - **Benefício:** o contraste oficial das chamadas (`contrasts.paired_call_contrast`: acertos, sensibilidade e
      falso-positivo) e AUROC/AUPRC descritivos.
    - **P-BR:** a conta do `evaluate_safety.py` com o braço base no lugar de R0 e o novo no de R1. Perda bruta, limite
      superior unilateral de Clopper–Pearson a 95% com n = grupos de gene, margem 0,01. Os ganhos também saem.
-   - **Críticas:** as 13, uma a uma, com score e chamada de cada braço.
-   - **Leitura:** 0,01 de AUROC como menor diferença tratada como relevante, nos dois sentidos. É a convenção
-     declarada na campanha anterior, uma escolha de desenvolvimento e não um critério demonstrado. Diferenças menores
-     que isso, ou com IC que inclua zero, são lidas como ausência de ganho detectado.
+   - **Críticas:** as 13, uma a uma. As 11 no release recebem score e chamada; TP53 R337H e GBA1 N370S ficam
+     explicitamente sem avaliação nesta fase, pois estão fora do release. A regra P-BR cobre somente as críticas
+     presentes no ABraOM; passar nela não certifica a segurança das 13.
+   - **Leitura:** 0,01 de AUROC (1 ponto percentual) pode ser usado como referência prática de magnitude nos dois
+     sentidos. É uma escolha exploratória feita depois de ver a validation e antes do teste, não uma margem
+     clínica validada, nem uma regra automática de equivalência ou de não inferioridade. O valor repete o limiar
+     de relevância que a equipe declarou no G6 da campanha anterior (25/09), uma convenção para aquela comparação
+     M0×MR. Nem ele nem a tolerância de 0,01 da escolha de política no G5 estabelecem margem para a frente nova.
+     Magnitude e incerteza são lidas separadamente: um ganho menor com IC acima de zero é detectável nesta análise,
+     embora abaixo da referência prática; um IC que inclua zero é inconclusivo e pode admitir ganho ou piora
+     relevantes. Essa convenção não se aplica automaticamente a AUPRC, MCC ou à taxa de perda de P-BR; a margem
+     P-BR de 0,01 acima é a regra distinta do avaliador oficial.
 
 ## 5. Como ler o resultado
 
