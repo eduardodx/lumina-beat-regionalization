@@ -85,7 +85,7 @@ def _linhas_do_release() -> pd.DataFrame:
                 "pos_1based": 1_000_000 * (fold + 1) + 10_000 * j, "ref": "A", "alt": "G",
                 "binary_label": (j // 5) % 2, "label_tier": "consensus" if j % 4 == 3 else "gold",
                 "primary_panel": PAINEIS[j % 5], "sequence_eligible": f"v{i:04d}" not in NAO_ELEGIVEIS,
-                "overlap_cluster_id": f"c{i}", "core_fold": fold,
+                "overlap_cluster_id": f"c{i}", "core_fold": fold, "gene_transfer_group_id": f"g{i // 4}",
                 # j == 0: purgada do treino no run fold+1; j == 1: purgada da validation no run fold-1
                 "core_purged_runs": [(fold + 1) % 5] if j == 0 else [(fold - 1) % 5] if j == 1 else [],
                 "gnomad_status": gnomad, "gnomad_v4_af": {"present": af, "not_found": np.nan, "ac0": 0.0}[gnomad],
@@ -116,7 +116,8 @@ def _gravar_release(entrega: Path, df: pd.DataFrame) -> None:
     df = df.assign(binary_label=df["binary_label"].astype("int8"), pos_1based=df["pos_1based"].astype("int64"))
     df[["variant_id", "chrom", "pos_1based", "ref", "alt", "binary_label", "label_tier"]].to_parquet(
         raiz / "clinical-variants.parquet", index=False)
-    df[["variant_id", "sequence_eligible", "overlap_cluster_id", "core_fold", "core_purged_runs"]].to_parquet(
+    df[["variant_id", "sequence_eligible", "overlap_cluster_id", "core_fold", "core_purged_runs",
+        "gene_transfer_group_id"]].to_parquet(
         raiz / bracos.VISTA, index=False)
     df[["variant_id", "primary_panel"]].to_parquet(raiz / "evaluation-panels.parquet", index=False)
     df[["variant_id", *bracos.COLUNAS_DO_GNOMAD, *bracos.COLUNAS_DO_ABRAOM]].to_parquet(

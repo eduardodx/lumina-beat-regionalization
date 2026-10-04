@@ -70,8 +70,8 @@ próprio; as leituras cross-fitted desta fase ficam identificadas como desenvolv
 | P-BR | P/LP presentes no ABraOM, gold e consensus, no teste de 4 kb | sensibilidade no limiar da validation (regra do MCC) e perdas entre braços |
 | Críticas | as 13 de `config/critical-variants-br.yaml` | caso a caso: no release ou não, presença no ABraOM, score e chamada de cada braço |
 
-Tudo é lido por painel. Pares de braços: F → F+BR, E → E+F, E+F → E+F+BR. Bootstrap com 1.000 réplicas e seed
-20260901.
+Tudo é lido por painel. Pares de braços: F → F+BR, E → E+F, E+F → E+F+BR e F → E+F (a pergunta da linha E+F da
+tabela de braços, acrescentada antes de ler o teste; ver o passo 4). Bootstrap com 1.000 réplicas e seed 20260901.
 
 **Fora da Fase 1:**
 - os endpoints oficiais do estudo `regional` (viés nas células, RW-4, R0/R1);
@@ -173,9 +173,60 @@ E+F+BR não entra nas células, porque é circular ali.
      - `selecao.json`, `linhas.json`, `fontes.json` e `diagnosticos/s_fora_da_amostra.parquet`.
    - O passo 3 não lê métricas de teste. Imprime só a macro da validation, que é a mesma usada para escolher C e,
      portanto, otimista.
-4. **Leituras (CPU).** Avaliador oficial do núcleo e o consumidor próprio para os deltas, os proxies, o benefício, as
-   P-BR e as críticas. As P-BR usam o limiar de cada execução que o avaliador grava em
-   `validation-thresholds.parquet`.
+
+   **Resultado (04/10, 17:16–18:08; revisão `e4f4a50`).** Saída em
+   `~/artifacts/mosaic_v1/bracos_20261004_171558_1832/`.
+   - **Testes:** os 16 passaram no `.venv` do Mosaic, inclusive o que compara o sklearn com um Newton exato e o
+     ponta a ponta com as funções reais do avaliador.
+   - **Conferências:** o run 0 bate com o guia (194.666 / 2.106 / 2.110). O bloco F é igual ao oficial (diferença
+     0,0). As 326.818 elegíveis têm a leitura do R03, vinda dos três caches.
+   - **Linhas efetivas:**
+     - treino de 194.357 a 195.027 por execução, porque saem de 3 a 8 não elegíveis;
+     - nenhuma não elegível na validation, que fica igual à coorte do avaliador;
+     - teste de 65.361 a 65.366.
+   - **Tempo:** de 125 a 175 s por braço e execução com E; 53 min no total. Os ajustes do Newton levaram de 1 a 8
+     iterações.
+   - **Contrato:** os seis braços passaram nas checagens do Mosaic, com 337.398 linhas cada.
+   - **Macro da validation:** é a mesma que escolheu C, portanto otimista. Média das cinco execuções:
+     - F 0,910 e F+BR 0,910;
+     - E 0,913;
+     - E+F 0,976 e E+F+BR 0,977;
+     - S+F 0,975.
+   - **Convergência:** a corrida usou o código anterior à revisão `ef4b29d`. O passo 4 confere no `selecao.json` se
+     algum ajuste deixou de convergir e recusa as leituras se a regra revisada mudar algum C.
+4. **Leituras (CPU).** `scripts/fase1_leituras.py`, pelo [runbook](runbooks/leituras_mosaic_v1.sh), no `.venv` do
+   Mosaic. Primeiro roda o avaliador oficial (`scripts/evaluate_candidate.py`) em cada braço; depois, as leituras do
+   consumidor.
+
+   **Declaração antes de ler o teste (04/10).** Fixada depois de ver só a macro da validation do passo 3, sem nenhum
+   número de teste.
+   - **Pares:** delta = novo − base.
+     - F → F+BR e E+F → E+F+BR: a pergunta regional;
+     - F → E+F: o R03 sobre o prior global;
+     - E → E+F: a frequência sobre a representação;
+     - E+F → S+F: só no núcleo, como descrição.
+   - **Limiar:** o de `stats.calibrate_threshold` na validation de cada execução, sobre todos os painéis. É a regra
+     do avaliador do candidato, e o script confere contra o `validation-thresholds.parquet` gravado por ele. A
+     chamada é score ≥ limiar da execução que testa a variante.
+   - **Núcleo:**
+     - o contraste pareado oficial (`contrasts.paired_contrast`: macro AUPRC por fold e MCC, com bootstrap conjunto
+       por cluster e o limiar refeito em cada réplica);
+     - AUROC e AUPRC por painel no teste gold das cinco execuções juntas;
+     - as métricas de cada braço ao lado dos comparadores oficiais, pelo avaliador.
+   - **Proxies:** as regras do track `brazil` pelo consumidor da campanha anterior (`eval/campanha/estudos.py`):
+     coorte completo, pareados, controles e interação, só métricas contínuas. A interação usa `cluster_conjunto` como
+     unidade principal e `par` como sensibilidade, como na campanha anterior.
+     - No `br_population_observed`, o coorte é definido pela presença no ABraOM, que o bloco BR usa como feature.
+       Ganho ali é circular por construção (o próprio protocolo marca `true_by_construction`). Descreve o
+       comportamento do produto, não generalização.
+   - **Benefício:** o contraste oficial das chamadas (`contrasts.paired_call_contrast`: acertos, sensibilidade e
+     falso-positivo) e AUROC/AUPRC descritivos.
+   - **P-BR:** a conta do `evaluate_safety.py` com o braço base no lugar de R0 e o novo no de R1. Perda bruta, limite
+     superior unilateral de Clopper–Pearson a 95% com n = grupos de gene, margem 0,01. Os ganhos também saem.
+   - **Críticas:** as 13, uma a uma, com score e chamada de cada braço.
+   - **Leitura:** 0,01 de AUROC como menor diferença tratada como relevante, nos dois sentidos. É a convenção
+     declarada na campanha anterior, uma escolha de desenvolvimento e não um critério demonstrado. Diferenças menores
+     que isso, ou com IC que inclua zero, são lidas como ausência de ganho detectado.
 
 ## 5. Como ler o resultado
 
