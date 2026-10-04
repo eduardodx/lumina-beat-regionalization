@@ -77,8 +77,9 @@ tabela de braços, acrescentada antes de ler o teste; ver o passo 4). Bootstrap 
 - os endpoints oficiais do estudo `regional` (viés nas células, RW-4, R0/R1);
 - `gene_transfer` e `time`.
 
-O viés exige extrair as cerca de 624 mil variantes externas pedidas; fica para a Fase 1b, com os braços E e E+F. O
-E+F+BR não entra nas células, porque é circular ali.
+O viés fica para a Fase 1b, com os braços E e E+F. O inventário posterior mediu 623.884 variantes elegíveis na
+união das definições, mas a definição `main` requer apenas 124.194; os complementos novos são 589.552 e 118.106,
+respectivamente. O E+F+BR não entra nas células, porque é circular ali.
 
 ## 4. Passos
 
@@ -274,6 +275,9 @@ E+F+BR não entra nas células, porque é circular ali.
      - Nas chamadas, 2 P e 3 falso-positivos a menos: sensibilidade −0,020 [−0,055; +0,020]; falso-positivo
        −0,0015 [−0,0044; 0,0000].
      - F → F+BR perde sensibilidade, com IC abaixo de zero: −0,041 [−0,085; −0,009].
+     - A coorte de benefício e o coorte completo do `br_population_observed` são as mesmas 2.057 variantes (gold
+       presentes no ABraOM). Os deltas pontuais de AUROC coincidem nos quatro pares; só o IC muda, pela unidade
+       de bootstrap. Não são duas evidências independentes.
    - **P-BR (1.050, 580 grupos de gene).**
      - E+F → E+F+BR perde 21 e ganha 11 (sensibilidade de 0,754 para 0,745). O limite superior da perda é 0,052,
        acima da margem de 0,01.
@@ -340,7 +344,10 @@ E+F+BR não entra nas células, porque é circular ali.
      | E → E+F | 150 (66 / 84) | 34 | 0,865 → 0,870 (66 / 71) |
 
      - **Frequência global.** As 150 perdas de E → E+F vêm sobretudo do ponto de operação: o limiar de MCC de E+F é
-       mais exigente que o de E. Na especificidade de E, E+F reconhece 0,870 das P-BR (E reconhece 0,865).
+       mais exigente que o de E na escala de falso-positivo da validation. Ajustando E+F para obter pelo menos a
+       especificidade de validation de E, reconhece 0,870 das P-BR (E reconhece 0,865). Empates podem impedir
+       igualdade exata; não se garante a mesma especificidade no teste. O saldo de +5 mantém 66 perdas e 71 ganhos,
+       não demonstra preservação caso a caso nem não inferioridade e não muda a regra original de segurança.
      - **ABraOM: reordena para baixo P-BR raras.**
        - Em E+F → E+F+BR, 16 das 21 perdas são de ordenação.
        - Entre as 21: 18 têm AF < 0,1% no gnomAD, 15 têm AF no ABraOM ≥ 5× a do gnomAD e 12 têm AF < 0,1% no
@@ -348,13 +355,17 @@ E+F+BR não entra nas células, porque é circular ali.
        - Na especificidade de E+F, o saldo é de −5 (16 perdidas, 11 ganhas).
        - Em F → F+BR o efeito é maior: 92 perdas de ordenação, 102 com AF < 0,1% no ABraOM e 106 com razão ≥ 5×.
        - O perfil é compatível com o bloco BR tratar a presença numa amostra de 1.171 pessoas como sinal de
-         benignidade, mesmo quando a variante foi vista uma ou duas vezes.
-     - **HbS e HbC já ficam entre as benignas só com o R03.** A chamada exigiria falso-positivo de validation de:
+         benignidade, mesmo quando a variante foi vista uma ou duas vezes. É hipótese, não causa identificada:
+         o BR já inclui estados de observação, FILTER e AN. Conferir AC/AN/AF por variante e fazer ablação das
+         features antes de atribuir o efeito ao tamanho amostral ou a uma coluna específica.
+     - **HbS e HbC são negativas com esta leitura do R03 e cabeça linear.** A chamada exigiria falso-positivo de validation de:
        - 0,276 e 0,130 em E;
        - 0,574 e 0,394 em E+F;
        - 0,678 e 0,516 em E+F+BR.
 
-       Nenhuma das duas está na lista de exceções ao BA1 do Mosaic (`config/ba1-exceptions.yaml`).
+       Isso não demonstra que a informação esteja ausente de toda representação/cabeça do R03. Nenhuma das duas
+       está na lista de exceções ao BA1 do Mosaic (`config/ba1-exceptions.yaml`); a lista não entra no cálculo do
+       probe linear, portanto sua ausência não explica por si estas chamadas negativas.
      - **Inventário da Fase 1b.** 711.619 variantes anotadas nas células, 3.860 sem `trained_run`.
        - **Definição `main`:** 10.741 na célula primária (censo) e 113.453 na comparável (amostra, peso total
          3.837.461). São 124.194 variantes, 6.088 já nos caches, complemento de 118.106, cerca de 2,1 h de GPU na
@@ -364,6 +375,12 @@ E+F+BR não entra nas células, porque é circular ali.
        - **Pedidos:** os 627.233 pedidos `regional` cobrem todas as variantes das células. Os 3.349 a mais são os
          sem execução. Nenhuma execução pedida difere do `trained_run`.
        - **Tamanhos no S3:** `bias-cells` tem 524 MB (já baixado); o CADD tem 165 MB (ainda não baixado).
+
+   **Proposta após o diagnóstico.** Há base suficiente para discutir uma arquitetura antes de uma nova corrida
+   longa. O [rascunho para Eduardo](proposta_regionalizacao_r03_pos_fase1.md) usa E+F como referência, propõe uma
+   ablação CPU do BR com suporte amostral e um alvo regional explícito para adaptação, com controle global R2c.
+   A Fase 1b `main` complementa a hipótese de viés, mas não é pré-requisito para essa discussão. Nenhum desses
+   experimentos novos foi executado ou substitui os resultados e critérios originais da Fase 1.
 
 ## 5. Como ler o resultado
 
