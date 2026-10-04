@@ -139,9 +139,39 @@ E+F+BR não entra nas células, porque é circular ali.
    (8.875) e `~/artifacts/mosaic_v1/cache_M0_complemento` (146.223). Os papéis gravados nas tabelas desses caches
    são da campanha antiga e não valem para a Fase 1. Rótulo, painel, fold e purgas vêm sempre do release novo.
 3. **Braços (CPU).** As cinco execuções dos seis braços, em `predictions.parquet` e `system.yaml` no formato do
-   Mosaic, com a exposição declarada.
+   Mosaic, com a exposição declarada. `scripts/fase1_bracos.py`, pelo [runbook](runbooks/bracos_mosaic_v1.sh), no
+   `.venv` do Mosaic (sklearn e o pacote `mosaic`); de 1 a 2 h de CPU.
+   - **Conferências antes de treinar:**
+     - a identidade da entrega (release, protocolo e protocolo de estudos);
+     - as contagens do run 0 contra o guia;
+     - o bloco F igual ao `frequency_features` oficial, valor a valor, e o log AF e a presença do ABraOM iguais às
+       colunas oficiais;
+     - os três caches pela validação do passo 2, sem variante repetida entre eles e com toda elegível coberta.
+   - **Cabeça:** `LogisticRegression` L2 do sklearn (newton-cholesky, tol 1e-6), com intercepto sem penalidade. C
+     percorre a grade em ordem crescente, com warm start; empate na macro da validation fica com o menor C. O score é
+     o logit.
+   - **S+F:** o `build_frequency_arms.py` oficial não serve para sistema treinado, porque toma um score por variante
+     sem respeitar a execução.
+     - Aqui, S nas linhas de treino vem de cross-fitting pelos três folds de treino da execução, com o C escolhido
+       para E e purga interna: sai do treino interno toda linha a menos de 4.096 bp de alguma do fold interno de
+       teste.
+     - Na validation e no teste, S é o score do modelo E da execução.
+     - Os modelos internos treinam com cerca de dois terços do treino, então a escala de S no treino pode diferir da
+       validation. O `selecao.json` registra média e desvio de S nos três papéis.
+   - **Linhas:** as 8 variantes não elegíveis ficam sem score em todos os braços. O avaliador do Mosaic as mantém na
+     validation (cobertura menor que 1 ali), mas calibra o limiar só nas linhas pontuadas.
+   - **Exposição:** os braços com R03 declaram `training_cutoff: null` e a exposição do tronco como desconhecida. F e
+     F+BR declaram os rótulos do ClinVar 2026-06. O bloco `benchmark` leva os três hashes da entrega.
+   - **Saídas:** uma pasta nova, gravada como `.tmp` e renomeada só depois das checagens de contrato do próprio
+     Mosaic (`load_system`, `check_benchmark_reference`, `load_predictions`, `check_fold_roles`). Ela contém:
+     - um diretório por braço (`fase1-f`, `fase1-f-br`, `fase1-e`, `fase1-e-f`, `fase1-e-f-br`, `fase1-s-f`);
+     - `modelos/`, para pontuar fora do release na Fase 1b;
+     - `selecao.json`, `linhas.json`, `fontes.json` e `diagnosticos/s_fora_da_amostra.parquet`.
+   - O passo 3 não lê métricas de teste. Imprime só a macro da validation, que é a mesma usada para escolher C e,
+     portanto, otimista.
 4. **Leituras (CPU).** Avaliador oficial do núcleo e o consumidor próprio para os deltas, os proxies, o benefício, as
-   P-BR e as críticas.
+   P-BR e as críticas. As P-BR usam o limiar de cada execução que o avaliador grava em
+   `validation-thresholds.parquet`.
 
 ## 5. Como ler o resultado
 
