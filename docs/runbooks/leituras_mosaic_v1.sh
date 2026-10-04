@@ -42,6 +42,8 @@ passo ambiente "${PY[@]}" -c 'import sys, numpy, pandas, sklearn, yaml, scipy, m
 for t in test_fase1_leituras test_fase1_bracos; do
   passo "$t" "${PY[@]}" "tests/$t.py"
 done
+# Falha em segundos, antes do avaliador, se o passo 3 nao valer com a regra revisada de convergencia (ef4b29d).
+passo selecao "${PY[@]}" -c 'import json, sys; from scripts.fase1_leituras import conferir_selecao; r = conferir_selecao(json.load(open(sys.argv[1], encoding="utf-8"))); print("selecao do passo 3 vale com a regra revisada:", {k: r[k] for k in ("ajustes", "nao_convergidos_fora_da_escolha")}, "| avisos:", r["avisos"][:5])' "$BRACOS/selecao.json"
 for id in fase1-f fase1-f-br fase1-e fase1-e-f fase1-e-f-br fase1-s-f; do
   (cd "$MV" && passo "avaliador_$id" "${PY[@]}" scripts/evaluate_candidate.py \
     --predictions "$BRACOS/$id/predictions.parquet" --system "$BRACOS/$id/system.yaml" \
