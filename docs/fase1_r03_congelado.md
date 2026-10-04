@@ -246,8 +246,9 @@ E+F+BR não entra nas células, porque é circular ali.
    `~/artifacts/mosaic_v1/avaliacao_20261004_184608_3203/`; leituras (`resumo.md` e `leituras.json`) em
    `~/artifacts/mosaic_v1/leituras_20261004_184608_3203/`. Os testes passaram, a regra revisada manteve todos os C
    e os limiares dos seis braços batem com os do avaliador. IC de 95% com 1.000 réplicas.
-   - **Teste perto da validation.** O macro AUROC do avaliador no teste gold repete a validation do passo 3: F
-     0,9103; F+BR 0,9101; E 0,9134; E+F 0,9765; E+F+BR 0,9772; S+F 0,9747. O otimismo da escolha de C foi pequeno.
+   - **Teste perto da validation.** O macro AUROC do avaliador no teste gold fica perto das médias da validation
+     do passo 3: F 0,9103; F+BR 0,9101; E 0,9134; E+F 0,9765; E+F+BR 0,9772; S+F 0,9747. Essa proximidade é
+     uma checagem descritiva, não uma estimativa do otimismo da escolha de C: são coortes e agregações diferentes.
    - **O R03 e a frequência global se complementam.** No contraste oficial:
      - F → E+F dá +0,111 de macro AUPRC [0,066; 0,159];
      - E → E+F dá +0,074 [0,044; 0,098];
@@ -278,6 +279,11 @@ E+F+BR não entra nas células, porque é circular ali.
        acima da margem de 0,01.
      - F → F+BR perde 109 e ganha 1.
      - A frequência global também custa: E → E+F perde 150 e ganha 34 (de 0,865 para 0,754).
+     - Essas perdas são nos pontos de operação declarados: cada braço e execução tem seu próprio limiar,
+       escolhido por MCC na validation global. Elas não isolam a causa entre mudança de ranking, escala dos
+       scores e escolha do limiar. A melhoria de AUROC pode coexistir com menor sensibilidade nesses pontos.
+       Comparações posteriores em especificidade equivalente são diagnósticos de desenvolvimento e devem fixar
+       seus novos limiares na validation, mantendo intactos este resultado e a regra original de segurança.
    - **Críticas.**
      - E+F+BR chama as 11 do release exatamente como E+F.
      - HbS e HbC (HBB p.Glu7Val e p.Glu7Lys) saem negativas nos seis braços, inclusive em E.
@@ -286,10 +292,30 @@ E+F+BR não entra nas células, porque é circular ali.
        reconhecidas.
 
    **Leitura pelo §5.** E+F+BR ganha de E+F por margens detectáveis, mas pequenas: até +0,003 de AUROC, abaixo da
-   referência de 0,01. O ganho é igual em casos e controles: a interação fica perto de zero, sem vantagem brasileira
-   detectada. E E+F+BR perde P-BR acima da margem do avaliador. É o caso "ganho com perda de P-BR": nesta receita,
+   referência de 0,01. O ganho clínico é de magnitude semelhante em casos e controles: a interação fica perto de
+   zero, sem vantagem brasileira detectada. Isso não demonstra igualdade dos efeitos. E E+F+BR não passa na regra
+   declarada de retenção de P-BR. É o caso "ganho com perda de P-BR": nesta receita,
    não é regionalização segura. O ganho grande e robusto é o da combinação do R03 com a frequência global, que
    também custa P-BR.
+
+   **Próximos passos após o teste (desenvolvimento exploratório).**
+   - Primeiro, diagnóstico CPU das 21 perdas e 11 ganhos de E+F → E+F+BR e das 150 perdas e 34 ganhos de
+     E → E+F. Ler IDs, tier (98 gold e 952 consensus no total P-BR), painel, gene, AF/estado/qualidade em cada
+     fonte, execução e distância ao limiar. Em HbS e HbC, conferir os scores e limiares: elas já são negativas
+     em E, então sua falha não pode ser atribuída somente à inclusão das frequências.
+   - Em paralelo, inventariar as entradas e a união de variantes elegíveis das células primária e comparável
+     oficiais da Fase 1b, descontando o que os caches já cobrem. Preservar a amostra, os pesos, os estratos e o
+     `trained_run` oficiais; não escolher um subconjunto com base nos scores nem prometer um custo antes dessa
+     contagem. O diagnóstico de viés não vira novo portão obrigatório para toda ideia de adaptação.
+   - Para avaliar E/E+F com `evaluate_regional_bias.py --candidate`, o código não monta RW-2 e não chama
+     `assemble_inputs`. São necessários release/config, `bias-cells` (células, exemplos, anotações e vista), as
+     predições e o extrato CADD lido por `with_sources`. Os insumos adicionais de ABraOM WGS, observações e
+     MANE/ClinGen/ClinVar são usados na rota dos comparadores/RW-2 e da integração, não são pré-requisitos
+     automáticos dessa avaliação dos candidatos usando os artefatos já publicados.
+   - O probe linear com BR não fornece um teto para o ganho de um adapter: consulta direta, forma das features,
+     capacidade e objetivo de adaptação são experimentos diferentes. Estes resultados orientam o orçamento,
+     mas não demonstram que ensinar informação regional ao embedding renderia pouco. A Fase 1b testa um
+     mecanismo específico de viés; não é a única possível fonte de benefício regional.
 
 ## 5. Como ler o resultado
 
