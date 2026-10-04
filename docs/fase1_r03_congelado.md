@@ -316,6 +316,17 @@ E+F+BR não entra nas células, porque é circular ali.
      capacidade e objetivo de adaptação são experimentos diferentes. Estes resultados orientam o orçamento,
      mas não demonstram que ensinar informação regional ao embedding renderia pouco. A Fase 1b testa um
      mecanismo específico de viés; não é a única possível fonte de benefício regional.
+   - **Implementação (04/10).** [runbook](runbooks/diagnostico_e_inventario_1b.sh), só CPU:
+     - `scripts/fase1_diagnostico.py` reproduz as perdas e ganhos do passo 4 (recusa se não baterem) e lê cada
+       P-BR perdida ou ganha. Para cada uma, registra o `fpr_exigido`: o falso-positivo de validation que a
+       chamada exigiria em cada braço.
+     - O mecanismo é descritivo. Uma perda é de ponto de operação se o braço novo ainda chamaria a variante no
+       falso-positivo de validation da base; senão, é de ordenação.
+     - A recontagem em especificidade equivalente refaz, na validation, o limiar do braço novo para a
+       especificidade da base. Toda perda de ordenação continua perdida nela; as de ponto de operação, não.
+     - `scripts/fase1b_inventario.py` conta as linhas que o próprio `evaluate_regional_bias.py` usaria, pelas
+       funções dele (`scoring_rows`, `definition_frames`), por definição e célula. Desconta os caches do passo 2,
+       dá o complemento a extrair e confere os pedidos `regional` do manifesto. Não extrai nem pontua.
 
 ## 5. Como ler o resultado
 
