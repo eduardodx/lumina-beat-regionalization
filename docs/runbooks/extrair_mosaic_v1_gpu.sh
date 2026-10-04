@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Fase 1, passo 2: leitura do M0 (R03 congelado) no release novo. Executar no SageMaker dentro de tmux/screen:
-#   bash docs/runbooks/extrair_mosaic_v1_gpu.sh
+# Fase 1, passo 2: leitura do M0 (R03 congelado) no release novo. O notebook nao tem tmux: rodar desacoplado do
+# terminal, para sobreviver se a aba fechar, e acompanhar pelo arquivo de saida:
+#   nohup setsid bash docs/runbooks/extrair_mosaic_v1_gpu.sh > ~/artifacts/mosaic_v1/passo2_saida.out 2>&1 < /dev/null &
+#   tail -f ~/artifacts/mosaic_v1/passo2_saida.out
 # Primeiro confere os caches antigos numa amostra (minutos). So se passar, extrai o complemento (~2 h).
 # Usa o python3 do conda (torch e Mamba-3), como a extracao da campanha; nao usa o .venv do Mosaic.
 set -euo pipefail
