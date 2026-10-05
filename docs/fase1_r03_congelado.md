@@ -376,7 +376,20 @@ respectivamente. O E+F+BR não entra nas células, porque é circular ali.
          sem execução. Nenhuma execução pedida difere do `trained_run`.
        - **Tamanhos no S3:** `bias-cells` tem 524 MB (já baixado); o CADD tem 165 MB (ainda não baixado).
 
-   **BR v2 (04/10, preparado, ainda não rodado).** Primeiro experimento da proposta, em CPU, sem nova extração.
+   **BR v2 (04/10, rodado).** Primeiro experimento da proposta, em CPU, sem nova extração. Resultado e leitura em
+   [fase1_br2_resultado.md](fase1_br2_resultado.md).
+   - **Leitura declarada: inconclusivo.**
+     - Perdas de P-BR: 12 no limiar MCC (o BR perde 21; o apoio exigia até 10) e 10 na especificidade equivalente
+       (o BR perde 16).
+     - Recuperadas: 12 das 21, quase todas com uma ou duas cópias no ABraOM.
+     - Δ AUROC brasileiro: igual ou acima do BR.
+     - Núcleo, painéis e críticas: iguais.
+     - Interação brasileira: nenhuma.
+     - Segurança: continua falhando. A regra tolera no máximo uma perda.
+   - **Leitura posterior:** a forma de ler o ABraOM explica as perdas de uma ou duas cópias, não as de frequência
+     brasileira sustentada. O resíduo está na cabeça; o alvo regional explícito no adapter fica sem indicação por ora.
+
+   Preparação:
    - **Especificação:** em [fase1_br2_especificacao.md](fase1_br2_especificacao.md), escrita antes de rodar, com as
      features, a hipótese de cada uma e a leitura declarada.
    - **Treino:** `scripts/fase1_br2_treinar.py` treina só o braço E+F+BR2, com as linhas, a receita e o contrato do
