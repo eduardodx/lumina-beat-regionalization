@@ -393,8 +393,13 @@ respectivamente. O E+F+BR não entra nas células, porque é circular ali.
        A causa não foi isolada, porque várias features mudaram juntas.
      - As 9 mantidas não estão explicadas.
      - A recuperação é no consensus: no gold, o BR2 reconhece 66 das 98, contra 69 em E+F.
-     - Próximos passos em CPU: o caso a caso e uma cabeça com interação entre sinal funcional e informação regional
-       confiável.
+     - Caso a caso feito em 06/10:
+       - E sozinho chama as 12 perdas do BR2 (fpr exigido mediano de 0,018 e 0,001).
+       - O excesso brasileiro sustentado não é o padrão.
+       - Todas as 12 estão em genes de doença recessiva (pela literatura).
+     - Próximo, em CPU: uma cabeça com interação entre o sinal funcional e a informação regional. O rascunho da
+       especificação, para revisão, está em
+       [fase1_cabeca_interacao_especificacao.md](fase1_cabeca_interacao_especificacao.md).
      - Nenhum adapter longo agora, e a margem de segurança não muda.
 
    Preparação:

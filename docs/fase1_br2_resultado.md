@@ -158,16 +158,61 @@ Leitura de desenvolvimento, não demonstração.
    - Argumento, não medido aqui: a diferença de frequência entre populações vem em boa parte da história
      demográfica (deriva, efeito fundador), que a sequência local não prevê.
 
+## Caso a caso (06/10, posterior ao teste)
+
+Rodado com `af8ebc4` em `~/artifacts/mosaic_v1/casos_br2_20261006_171607_665/`. Os grupos reproduzem os do
+`br2.json`, e o limite inferior bate com o `af_lower_bound` do Mosaic. É descritivo.
+
+| grupo | n | gold | E positiva | mediana do fpr exigido de E | AC 1–2 | AC ≥ 3 | PASS | LI 95% > AF do gnomAD | LI 95% > fafmax |
+|---|---|---|---|---|---|---|---|---|---|
+| mantidas | 9 | 2 | 9 | 0,018 | 3 | 6 | 8 | 7 | 4 |
+| novas | 3 | 2 | 3 | 0,001 | 2 | 1 | 3 | 0 | 0 |
+| recuperadas | 12 | 1 | 9 | 0,087 | 9 | 3 | 11 | 8 | 5 |
+| ganhas pelo BR2 | 11 | 1 | 7 | 0,100 | 11 | 0 | 9 | 4 | 2 |
+
+- **Nas 12 perdas do BR2, o sinal funcional aponta para patogenicidade.**
+  - E sozinho chama todas, com fpr exigido mediano de 0,018 nas mantidas e 0,001 nas novas.
+  - Em E+F elas já ficavam perto do limiar, com fpr exigido entre 0,042 e 0,066. A frequência global as rebaixa, e
+    o bloco regional completa.
+  - É a condição da pergunta da cabeça com interação.
+- **As recuperadas dependem menos do sinal funcional.**
+  - Mediana de 0,087.
+  - E não chama 3 delas (ABCG5, MPL p.Trp435Cys, SPG7 p.Gly672Arg); E+F as chamava pela raridade no gnomAD.
+  - 9 das 12 têm uma ou duas cópias.
+- **Excesso brasileiro sustentado não é o padrão das perdas.**
+  - Só 4 das 9 mantidas têm o limite inferior acima da fafmax do gnomAD.
+  - Nenhuma das 3 novas tem o limite inferior acima da AF do gnomAD.
+  - Exemplos: ALDOB p.Ala150Pro tem 0,55% no ABraOM e 0,44% no gnomAD. ACADVL p.Val283Ala tem uma cópia no ABraOM,
+    contra 0,16% no gnomAD.
+- **Qualidade.** Duas chamadas do ABraOM não passaram no filtro:
+  - CYP21A2 p.Gln319Ter: mantida, 15 cópias, VQSR 99,90–100, num locus com pseudogene;
+  - CDH1 p.Cys28Ter: recuperada, 5 cópias.
+
+  No BR2, as faixas de AC e a AF não dependem de PASS; só o excesso sustentado depende. Por isso a CYP21A2 conta
+  como "≥ 10 cópias".
+- **Observação fora do plano: herança.**
+  - As 12 perdas do BR2 estão em genes de doença de herança recessiva: DYSF, PAH, ALDOB (2), CYP21A2, GCDH, MVK,
+    POLR1C, WNT10A, ACADVL, USH2A e G6PC1. A herança vem da literatura; o release não a tem.
+  - Várias são alelos recorrentes conhecidos: ALDOB p.Ala150Pro e p.Ala175Asp, PAH p.Arg261Gln, GCDH p.Arg402Trp e
+    CYP21A2 p.Gln319Ter.
+  - Entre as 24 variantes das três primeiras linhas, a única em gene de herança dominante é CDH1, cuja chamada não
+    passou no filtro.
+  - Num alelo recessivo, aparecer em pessoas saudáveis é esperado (portadores). Isso não indica benignidade enquanto
+    a frequência estiver abaixo do teto plausível para a doença.
+  - Nos genes com regra de frequência do CSpec, as frequências observadas ficam abaixo dos limiares de benignidade:
+    - DYSF e PAH ficam muito abaixo;
+    - ACADVL e USH2A têm fafmax de 0,19% e 0,18%, abaixo do BS1 (0,35% e 0,30%). A regra mede pela popmax, que a
+      tabela não mostra.
+  - É uma explicação compatível, não demonstrada pelo modelo.
+
 ## Próximos passos
 
 Todos em CPU.
 
-1. **Caso a caso.** As 9 mantidas, as 3 novas e as 12 recuperadas, com atenção às gold. Script:
-   `scripts/fase1_br2_casos.py`, que lê os passos 3 e 4 e o BR v2; runbook em
-   [br2_casos_mosaic_v1.sh](runbooks/br2_casos_mosaic_v1.sh). Ao lado de cada variante põe:
-   - o escore e a chamada de E sozinho, para ver se o sinal funcional aponta para patogenicidade nas perdas;
-   - o limite inferior do ABraOM, ao lado da AF e da FAF95 do gnomAD.
-2. **Cabeça com interação.** Especificada depois do caso a caso e antes de rodar.
+1. **Caso a caso: feito em 06/10** (seção acima). Script: `scripts/fase1_br2_casos.py`; runbook:
+   [br2_casos_mosaic_v1.sh](runbooks/br2_casos_mosaic_v1.sh).
+2. **Cabeça com interação.** O rascunho da especificação, para revisão antes de implementar e de rodar, está em
+   [fase1_cabeca_interacao_especificacao.md](fase1_cabeca_interacao_especificacao.md).
    - Pergunta: a frequência brasileira pode ajudar a reconhecer benignas sem rebaixar automaticamente uma variante
      cujo sinal funcional aponta para patogenicidade?
    - O braço sem ABraOM recebe a mesma família de cabeça.
