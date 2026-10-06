@@ -84,70 +84,122 @@ Pastas no notebook:
 | critério de apoio | resultado | cumpre |
 |---|---|---|
 | perdas no limiar MCC ≤ 10 de 21 | 12 | não |
-| perdas na especificidade equivalente ≤ metade das do BR (8 de 16) | 10 | não |
+| perdas na especificidade equivalente (ver a ambiguidade abaixo) | 10 | depende da leitura |
 | Δ AUROC nos recortes brasileiros não abaixo do BR | igual no clínico; acima no populacional e no benefício | sim |
 | recuperadas concentradas em AC 1–2 | 9 de 12 no MCC; 6 de 7 na especificidade equivalente | sim |
+
+- **Ambiguidade da especificação.** Fica registrada aqui, sem reescrever a especificação. O texto diz: "no máximo
+  metade das P-BR perdidas por E+F → E+F+BR (até 10 de 21), no limiar MCC e na especificidade equivalente".
+  - Para a especificidade equivalente, cabem duas leituras: o número entre parênteses (até 10) ou metade das perdas
+    do BR naquela leitura (8 de 16).
+  - Com 10 perdas, o BR2 cumpre a primeira e não a segunda.
+  - A primeira versão deste relatório aplicou só a segunda, sem dizer que havia escolha.
+- **O veredito não depende dessa escolha:** no limiar MCC são 12 perdas, acima de 10.
 
 O critério contra (14 ou mais perdas, ou perdas nas mesmas variantes) também não se cumpre: são 12 perdas, e 12 das
 21 do BR foram recuperadas. **Pela regra declarada, o resultado é inconclusivo.**
 
 ## Leitura posterior
 
-Esta seção não foi declarada antes de rodar. Serve de orientação de desenvolvimento.
+Esta seção não foi declarada antes de rodar. Serve de orientação de desenvolvimento. Foi revisada em 06/10; as
+correções estão na última seção.
 
-- **A hipótese explica parte das perdas.** As recuperadas são quase todas de uma ou duas cópias, 8 delas com AC = 2.
-- **Não explica o restante.**
-  - Das 9 mantidas, 6 têm 3 ou mais cópias; das 12 perdas do BR2, 7 têm AF no ABraOM ≥ 5× a do gnomAD.
-  - E+F chamava todas elas. O bloco regional as rebaixa com uma frequência brasileira bem sustentada.
-  - Isso não se corrige pela forma da feature. A cabeça linear converte frequência regional em benignidade do mesmo
-    jeito para todo gene e para qualquer força da evidência funcional.
-- **A forma de ler não explica o ganho pequeno.**
+- **Compatível com a hipótese em parte das perdas, sem isolar a causa.**
+  - 9 das 12 recuperadas têm uma ou duas cópias no ABraOM, 8 delas com AC = 2.
+  - O BR2 muda várias features ao mesmo tempo, e o classificador foi reajustado. Não se sabe qual mudança produziu a
+    recuperação.
+  - Ainda há perdas nessas faixas: 3 das 9 mantidas e 2 das 3 novas têm uma ou duas cópias.
+- **As 9 mantidas não estão explicadas.**
+  - **Cópias não bastam.** 6 delas têm 3 ou mais cópias, mas isso não é frequência bem sustentada. Com AN = 2.342, o
+    limite inferior unilateral de 95% fica assim:
+
+    | cópias | estimativa pontual | limite inferior de 95% |
+    |---|---|---|
+    | 3 | 0,00128 | 0,00035 |
+    | 10 | 0,00427 | 0,00232 |
+
+  - **A razão sobre o gnomAD também não basta.** A faixa "≥ 5× o gnomAD" é quase automática para variantes raras. A
+    menor AF não nula do ABraOM é 1/2.342 ≈ 0,00043. Uma variante com AF no gnomAD abaixo de 0,000085, vista uma
+    vez no ABraOM, já cai nela.
+    - Essa faixa não indica enriquecimento brasileiro real.
+    - O mesmo vale para a leitura do passo 4: 15 das 21 perdas do BR estavam nela.
+  - **O que não se pode afirmar:** que sejam patogênicas mais frequentes no Brasil, ou fundadoras. É preciso ver caso
+    a caso: AC/AN, qualidade, incerteza, gene e revisão do ClinVar.
+  - **O que E+F mostra:** E+F chamar essas variantes mostra que a configuração anterior as classificava. Não
+    identifica por que o novo ajuste as perdeu.
+- **Esta forma de ler o ABraOM não aumentou o ganho.**
   - O BR2 não aumenta o ganho do BR no núcleo.
   - Nenhum dos dois blocos tem interação brasileira acima dos controles.
-  - O ganho mensurável continua concentrado no noncoding.
-- **Segurança.**
-  - Com margem 0,01 e n = 580 grupos de gene, a regra tolera no máximo uma perda: o limite superior é 0,0082 com 1
-    perda e 0,0108 com 2.
-  - Nenhum reajuste testado chega perto.
-  - Não sabemos quantas perdas um reajuste sem informação nenhuma já causaria.
+  - O ganho mensurável continua no noncoding.
+- **A recuperação é no consensus.** No gold, o BR2 reconhece 66 das 98, contra 69 em E+F e 67 com o BR. Isso impede
+  chamar o resultado de melhora de segurança.
+- **Segurança.** Com margem 0,01 e n = 580 grupos de gene, a regra tolera no máximo uma perda: o limite superior é
+  0,0082 com 1 perda e 0,0108 com 2. A margem não muda.
 
 ## Consequência para a arquitetura
 
-1. **Interpretação da informação regional:** manter o princípio do BR2 como referência: estados, suporte amostral e
-   qualidade.
-   - É o mesmo princípio da verdade regional do Mosaic (`mosaic.regional_truth`): limite inferior de
-     Clopper–Pearson, PASS, AN ≥ 80%, classe CEGH `vSR`, teto BA1 do CSpec por gene e listas de exceção.
+Leitura de desenvolvimento, não demonstração.
+
+1. **Interpretação da informação regional.** O BR2 passa a ser o bloco ABraOM de referência nos próximos testes:
+   perde menos P-BR que o BR, sem piorar os outros recortes.
+   - O princípio dele (estados, suporte amostral, qualidade) é o da verdade regional do Mosaic
+     (`mosaic.regional_truth`): limite inferior de Clopper–Pearson, PASS, AN ≥ 80%, classe CEGH `vSR`, teto BA1 do
+     CSpec por gene e listas de exceção.
    - Usado como feature, esse princípio tem fonte comum com as células da Fase 1b, que precisam dessa ressalva.
-2. **Cabeça:** é onde está o resíduo. O próximo teste em CPU, especificado antes de rodar, deixaria a penalidade
-   regional depender da evidência funcional.
-   - Um caminho é a interação com o escore de E fora da amostra, pela partição interna do S+F.
-   - Se o release tiver algum atributo de gene, o contexto do gene entra também.
-   - E+F, E+F+BR e E+F+BR2 recebem a mesma família de cabeça.
-3. **Representação:** não é o gargalo destas perdas, porque E+F chamava as 9 mantidas. HbS e HbC já são negativas em
-   E. É um problema da leitura funcional desse mecanismo somado ao da frequência, não algo específico da
-   regionalização.
-4. **Alvo regional explícito no adapter:** sem indicação por ora.
+2. **Cabeça: hipótese a testar.** A cabeça linear aplica a frequência regional do mesmo jeito para qualquer força da
+   evidência funcional. O teste em CPU é uma cabeça com interação entre o sinal funcional e a informação regional
+   confiável. O braço sem ABraOM recebe a mesma família de cabeça.
+3. **Representação: não demonstrado nem descartado.** As duas saídas populacionais nativas acompanham pouco a
+   frequência do gnomAD e não distinguem presença no ABraOM. Isso não prova ausência de informação no embedding
+   inteiro. HbS e HbC já são negativas em E.
+4. **Adapter: nenhum adapter longo agora.**
    - Nenhuma versão do bloco mostra interação brasileira.
    - A campanha anterior de adapter deu Δ AUROC −0,0013 no clínico.
-   - As cabeças nativas acompanham pouco a frequência do gnomAD e nada a presença no ABraOM.
    - Argumento, não medido aqui: a diferença de frequência entre populações vem em boa parte da história
-     demográfica (deriva, efeito fundador), que a sequência local não prevê. Um adapter treinado para prever
-     frequência regional tenderia a reproduzir o mesmo rebaixamento dentro da representação, sem a transparência
-     de uma feature.
+     demográfica (deriva, efeito fundador), que a sequência local não prevê.
 
-## Próximos passos possíveis
+## Próximos passos
 
-Todos em CPU; nenhum foi rodado.
+Todos em CPU.
 
-- **Controle nulo:** E+F mais o bloco BR2 embaralhado entre variantes, com 3 sementes. Mede quantas perdas e ganhos
-  de P-BR um reajuste sem informação causa. É necessário para ler 12 contra 21 e para saber se a regra de segurança
-  é atingível por qualquer cabeça reajustada.
-- **Caso a caso:** as 9 mantidas, as 3 novas e as 12 recuperadas. Para cada uma: gene, consequência, AC/AN, gnomAD,
-  tier e escores de E, E+F e E+F+BR2.
-- **Cabeça com interação:** a do item 2, com especificação escrita antes de rodar.
+1. **Caso a caso.** As 9 mantidas, as 3 novas e as 12 recuperadas, com atenção às gold. Script:
+   `scripts/fase1_br2_casos.py`, que lê os passos 3 e 4 e o BR v2; runbook em
+   [br2_casos_mosaic_v1.sh](runbooks/br2_casos_mosaic_v1.sh). Ao lado de cada variante põe:
+   - o escore e a chamada de E sozinho, para ver se o sinal funcional aponta para patogenicidade nas perdas;
+   - o limite inferior do ABraOM, ao lado da AF e da FAF95 do gnomAD.
+2. **Cabeça com interação.** Especificada depois do caso a caso e antes de rodar.
+   - Pergunta: a frequência brasileira pode ajudar a reconhecer benignas sem rebaixar automaticamente uma variante
+     cujo sinal funcional aponta para patogenicidade?
+   - O braço sem ABraOM recebe a mesma família de cabeça.
+   - Receita escolhida na validation, purgas mantidas, perdas e ganhos relatados separados.
+3. **Controle embaralhado: no máximo análise auxiliar.**
+   - Não estima um piso universal.
+   - Não é pré-requisito para comparar as predições atuais.
+   - Não justifica mudar a margem.
 
-Decisões que ficam com o Eduardo:
-- a regra de segurança, que tolera no máximo uma perda, frente ao piso de reajuste;
-- a Fase 1b `main`, cerca de 2,1 h de GPU.
-  - É onde o benefício regional é medido: nas células de viés, com variantes comuns no Brasil e raras no gnomAD.
-  - Na Fase 1, esse lado aparece pouco: são 20 falso-positivos no recorte de benefício.
+Ficam com o Eduardo:
+- **A Fase 1b `main`,** cerca de 2,1 h de GPU.
+  - Mede o mecanismo específico de falso-positivos regionais: variantes comuns no Brasil e raras no gnomAD.
+  - Na Fase 1 esse lado aparece pouco: são 20 falso-positivos no recorte de benefício.
+- **Qualquer adapter.**
+
+Nenhum dos dois bloqueia o trabalho em CPU.
+
+## Revisão de 06/10
+
+Uma revisão externa dos commits `6a32dc7` e `11149a2` corrigiu a primeira versão da leitura posterior. Os números e
+o veredito não mudaram.
+
+Correções aceitas:
+- **Causa das perdas recuperadas.** Antes: "a hipótese explica parte das perdas". Agora: compatível com a hipótese,
+  sem isolar a causa.
+- **As 9 mantidas.** Antes: "frequência brasileira bem sustentada" e "patogênicas realmente mais frequentes". Agora:
+  não estabelecido.
+- **Feature e representação.** Antes: "nenhuma forma de feature corrige" e "a representação não é o gargalo". Agora:
+  não demonstrado.
+- **Controle embaralhado.** Antes: "necessário" e "mostra o piso de perdas". Agora: no máximo análise auxiliar, sem
+  piso universal e sem relação com a margem.
+- **Leitura declarada.** A ambiguidade na especificidade equivalente agora está explícita.
+
+Acréscimo desta revisão: a faixa "≥ 5× o gnomAD" é quase automática para variantes raras e não indica
+enriquecimento.

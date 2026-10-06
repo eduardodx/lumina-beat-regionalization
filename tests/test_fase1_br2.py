@@ -1,4 +1,5 @@
-"""Fase 1, BR v2: conferencia do ABraOM, bloco BR2, layout de cabecas_172 e ponta a ponta (treino e leituras).
+"""Fase 1, BR v2: conferencia do ABraOM, bloco BR2, layout de cabecas_172 e ponta a ponta (treino, leituras e caso a
+caso).
 
 Sem scipy e sem o pacote `mosaic` (Windows), o limite inferior de Clopper-Pearson vem de uma copia por bissecao e as
 checagens do Mosaic sao as copias dos testes dos passos 3 e 4. No .venv do Mosaic, as funcoes reais.
@@ -16,6 +17,7 @@ import pandas as pd
 
 RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
+from scripts import fase1_br2_casos as casos  # noqa: E402
 from scripts import fase1_br2_ler as ler  # noqa: E402
 from scripts import fase1_br2_treinar as treinar  # noqa: E402
 from scripts import fase1_bracos as bracos  # noqa: E402
@@ -140,6 +142,30 @@ class LayoutTests(unittest.TestCase):
         self.assertEqual(r["observed_pred"]["auroc_achada_no_gnomad"], 1.0)
 
 
+class CasosTests(unittest.TestCase):
+    def test_limite_inferior_bate_com_a_copia_do_mosaic(self):
+        for ac, an in ((1, 2342), (2, 2342), (3, 2342), (10, 2342), (50, 1000)):
+            with self.subTest(ac=ac, an=an):
+                esperado = float(limite_inferior_copiado([ac], [an])[0])
+                self.assertTrue(math.isclose(casos.limite_inferior(ac, an), esperado, rel_tol=1e-9))
+        self.assertAlmostEqual(casos.limite_inferior(3, 2342), 0.00035, places=5)
+        self.assertEqual(casos.limite_inferior(0, 2342), 0.0)
+        self.assertTrue(math.isnan(casos.limite_inferior(np.nan, np.nan)))
+        self.assertTrue(math.isnan(casos.limite_inferior(1, 0)))
+
+    def test_faixas_e_grupos(self):
+        self.assertEqual([casos.faixa_de_ac(a) for a in (np.nan, 0, 1, 2, 3, 9, 10, 500)],
+                         ["sem copias", "sem copias", "ac1", "ac2", "ac3a9", "ac3a9", "ac10mais", "ac10mais"])
+        indice = pd.Index(["a", "b", "c", "d", "e"])
+
+        def serie(valores):
+            return pd.Series(valores, index=indice)
+        g = casos.grupos({"E+F": serie([True, True, True, False, True]),
+                          "E+F+BR": serie([False, False, True, False, True]),
+                          treinar.BRACO: serie([False, True, False, True, True])})
+        self.assertEqual(g, {"mantida": ["a"], "nova": ["c"], "recuperada": ["b"], "ganha_br2": ["d"]})
+
+
 class PontaAPontaTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -203,6 +229,37 @@ class PontaAPontaTests(unittest.TestCase):
         self.assertIn("falhou", self.r["cabecas_nativas"], "caches sinteticos tem cabecas zeradas: o layout reprova")
         self.assertTrue((self.destino / "br2.md").exists())
         self.assertEqual(self.ler(self.destino), 2, "nunca grava por cima")
+
+    def casos(self, destino, leituras_br2=None):
+        with patch.object(bracos, "REFERENCIA_DO_BENCHMARK", self.ref):
+            return casos.main(["--entrega", str(self.c.c3.entrega), "--bracos", str(self.c.bracos),
+                               "--leituras", str(self.leituras), "--br2", str(self.br2),
+                               "--leituras-br2", str(leituras_br2 or self.destino), "--out-dir", str(destino)])
+
+    def test_caso_a_caso_reproduz_os_grupos_das_leituras(self):
+        destino = Path(self.temp.name) / "casos"
+        self.assertEqual(self.casos(destino), 0)
+        d = json.loads((destino / "casos.json").read_text(encoding="utf-8"))
+        rec = self.r["recuperacao"]["limiar_mcc_original"]
+        self.assertEqual((d["grupos"]["recuperada"], d["grupos"]["mantida"], d["grupos"]["nova"]),
+                         (rec["recuperadas_pelo_br2"], rec["mantidas"], rec["novas_no_br2"]))
+        self.assertEqual(d["grupos"]["ganha_br2"], self.r["p_br"]["pares"][ler.NOVO]["ganhas"])
+        t = pd.read_csv(destino / "casos.csv")
+        self.assertEqual(len(t), sum(d["grupos"].values()))
+        for p in casos.SLUG.values():
+            self.assertIn(f"fpr_exigido_{p}", t.columns)
+        m = t[t["grupo"] == "mantida"]
+        self.assertTrue((m["positiva_e_f"] & ~m["positiva_e_f_br"] & ~m["positiva_e_f_br2"]).all())
+        self.assertTrue((destino / "casos.md").exists())
+        self.assertEqual(self.casos(destino), 2, "nunca grava por cima")
+
+    def test_caso_a_caso_recusa_grupos_que_nao_batem(self):
+        adulterado = Path(self.temp.name) / "leituras_br2_adulteradas"
+        adulterado.mkdir()
+        r = json.loads((self.destino / "br2.json").read_text(encoding="utf-8"))
+        r["p_br"]["pares"][ler.NOVO]["ids_perdidas"] = r["p_br"]["pares"][ler.NOVO]["ids_perdidas"] + ["v9999"]
+        (adulterado / "br2.json").write_text(json.dumps(r), encoding="utf-8")
+        self.assertEqual(self.casos(Path(self.temp.name) / "casos_errado", adulterado), 2)
 
     def test_braco_novo_sem_especificacao_nao_roda(self):
         with patch.object(treinar, "ESPECIFICACAO", Path(self.temp.name) / "nao_existe.md"):

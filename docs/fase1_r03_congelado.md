@@ -352,6 +352,8 @@ respectivamente. O E+F+BR não entra nas células, porque é circular ali.
        - Em E+F → E+F+BR, 16 das 21 perdas são de ordenação.
        - Entre as 21: 18 têm AF < 0,1% no gnomAD, 15 têm AF no ABraOM ≥ 5× a do gnomAD e 12 têm AF < 0,1% no
          ABraOM (1 ou 2 alelos, com AN completo).
+       - Nota de 06/10: para variantes raras, a razão ≥ 5× é quase automática e não indica enriquecimento. A
+         menor AF não nula do ABraOM é 1/2.342; ver [fase1_br2_resultado.md](fase1_br2_resultado.md).
        - Na especificidade de E+F, o saldo é de −5 (16 perdidas, 11 ganhas).
        - Em F → F+BR o efeito é maior: 92 perdas de ordenação, 102 com AF < 0,1% no ABraOM e 106 com razão ≥ 5×.
        - O perfil é compatível com o bloco BR tratar a presença numa amostra de 1.171 pessoas como sinal de
@@ -386,8 +388,14 @@ respectivamente. O E+F+BR não entra nas células, porque é circular ali.
      - Núcleo, painéis e críticas: iguais.
      - Interação brasileira: nenhuma.
      - Segurança: continua falhando. A regra tolera no máximo uma perda.
-   - **Leitura posterior:** a forma de ler o ABraOM explica as perdas de uma ou duas cópias, não as de frequência
-     brasileira sustentada. O resíduo está na cabeça; o alvo regional explícito no adapter fica sem indicação por ora.
+   - **Leitura posterior, revisada em 06/10:**
+     - O resultado é compatível com a hipótese em parte das perdas: 9 das 12 recuperadas têm uma ou duas cópias.
+       A causa não foi isolada, porque várias features mudaram juntas.
+     - As 9 mantidas não estão explicadas.
+     - A recuperação é no consensus: no gold, o BR2 reconhece 66 das 98, contra 69 em E+F.
+     - Próximos passos em CPU: o caso a caso e uma cabeça com interação entre sinal funcional e informação regional
+       confiável.
+     - Nenhum adapter longo agora, e a margem de segurança não muda.
 
    Preparação:
    - **Especificação:** em [fase1_br2_especificacao.md](fase1_br2_especificacao.md), escrita antes de rodar, com as
