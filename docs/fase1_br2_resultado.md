@@ -161,49 +161,58 @@ Leitura de desenvolvimento, não demonstração.
 ## Caso a caso (06/10, posterior ao teste)
 
 Rodado com `af8ebc4` em `~/artifacts/mosaic_v1/casos_br2_20261006_171607_665/`. Os grupos reproduzem os do
-`br2.json`, e o limite inferior bate com o `af_lower_bound` do Mosaic. É descritivo.
+`br2.json`, e o limite inferior bate com o `af_lower_bound` do Mosaic. É descritivo. A leitura foi revisada em 06/10
+pela revisão externa.
 
-| grupo | n | gold | E positiva | mediana do fpr exigido de E | AC 1–2 | AC ≥ 3 | PASS | LI 95% > AF do gnomAD | LI 95% > fafmax |
-|---|---|---|---|---|---|---|---|---|---|
-| mantidas | 9 | 2 | 9 | 0,018 | 3 | 6 | 8 | 7 | 4 |
-| novas | 3 | 2 | 3 | 0,001 | 2 | 1 | 3 | 0 | 0 |
-| recuperadas | 12 | 1 | 9 | 0,087 | 9 | 3 | 11 | 8 | 5 |
-| ganhas pelo BR2 | 11 | 1 | 7 | 0,100 | 11 | 0 | 9 | 4 | 2 |
+| grupo | n | gold | E positiva | mediana do fpr exigido de E | AC 1–2 | AC ≥ 3 | PASS |
+|---|---|---|---|---|---|---|---|
+| mantidas | 9 | 2 | 9 | 0,018 | 3 | 6 | 8 |
+| novas | 3 | 2 | 3 | 0,001 | 2 | 1 | 3 |
+| recuperadas | 12 | 1 | 9 | 0,087 | 9 | 3 | 11 |
+| ganhas pelo BR2 | 11 | 1 | 7 | 0,100 | 11 | 0 | 9 |
 
-- **Nas 12 perdas do BR2, o sinal funcional aponta para patogenicidade.**
-  - E sozinho chama todas, com fpr exigido mediano de 0,018 nas mantidas e 0,001 nas novas.
-  - Em E+F elas já ficavam perto do limiar, com fpr exigido entre 0,042 e 0,066. A frequência global as rebaixa, e
-    o bloco regional completa.
-  - É a condição da pergunta da cabeça com interação.
-- **As recuperadas dependem menos do sinal funcional.**
-  - Mediana de 0,087.
-  - E não chama 3 delas (ABCG5, MPL p.Trp435Cys, SPG7 p.Gly672Arg); E+F as chamava pela raridade no gnomAD.
+E é o classificador só com o embedding: uma previsão aprendida, não evidência funcional experimental. E negativo quer
+dizer só que esse classificador, nesse limiar, não chamou a variante.
+
+- **As 12 perdas do BR2 são reconhecidas pelo classificador só com o embedding.** Elas deixam de ser reconhecidas nas
+  configurações que incluem frequência.
+  - E chama todas, com fpr exigido mediano de 0,018 nas mantidas e 0,001 nas novas.
+  - Em E+F elas ficavam perto do limiar, com fpr exigido entre 0,042 e 0,066.
+  - E+F e E+F+BR2 foram reajustados separadamente e têm limiares próprios, então a tabela não isola o efeito da
+    frequência. Isso motiva testar uma combinação mais flexível, mas não prova a causa.
+- **Nas recuperadas, o escore de E é mais baixo:** mediana de 0,087.
+  - E não chama 3 delas (ABCG5, MPL p.Trp435Cys, SPG7 p.Gly672Arg), que E+F chamava.
   - 9 das 12 têm uma ou duas cópias.
-- **Excesso brasileiro sustentado não é o padrão das perdas.**
-  - Só 4 das 9 mantidas têm o limite inferior acima da fafmax do gnomAD.
-  - Nenhuma das 3 novas tem o limite inferior acima da AF do gnomAD.
-  - Exemplos: ALDOB p.Ala150Pro tem 0,55% no ABraOM e 0,44% no gnomAD. ACADVL p.Val283Ala tem uma cópia no ABraOM,
-    contra 0,16% no gnomAD.
+- **Frequência comparada ao gnomAD: só descritivo.**
+  - Comparar o limite inferior do ABraOM com a AF ou a fafmax do gnomAD não testa diferença: não demonstra nem exclui
+    enriquecimento.
+  - A primeira versão do script contava valor ausente no gnomAD como zero, o que punha a variante "acima". Nas 24 da
+    tabela de variantes, isso só afeta MPL p.Trp435Cys, que não tem fafmax. As contagens das ganhas pelo BR2
+    precisam ser refeitas com a ausência separada.
+  - Dois exemplos sem ambiguidade: ALDOB p.Ala150Pro tem 0,55% no ABraOM e 0,44% no gnomAD; ACADVL p.Val283Ala tem
+    uma cópia no ABraOM, contra 0,16% no gnomAD.
 - **Qualidade.** Duas chamadas do ABraOM não passaram no filtro:
   - CYP21A2 p.Gln319Ter: mantida, 15 cópias, VQSR 99,90–100, num locus com pseudogene;
   - CDH1 p.Cys28Ter: recuperada, 5 cópias.
 
   No BR2, as faixas de AC e a AF não dependem de PASS; só o excesso sustentado depende. Por isso a CYP21A2 conta
-  como "≥ 10 cópias".
-- **Observação fora do plano: herança.**
-  - As 12 perdas do BR2 estão em genes de doença de herança recessiva: DYSF, PAH, ALDOB (2), CYP21A2, GCDH, MVK,
+  como "≥ 10 cópias". É uma limitação da receita declarada, não uma divergência da implementação. Fica para uma
+  ablação separada.
+- **Hipótese fora do plano: herança.**
+  - As 12 perdas do BR2 estão em genes com doença recessiva descrita: DYSF, PAH, ALDOB (2), CYP21A2, GCDH, MVK,
     POLR1C, WNT10A, ACADVL, USH2A e G6PC1. A herança vem da literatura; o release não a tem.
   - Várias são alelos recorrentes conhecidos: ALDOB p.Ala150Pro e p.Ala175Asp, PAH p.Arg261Gln, GCDH p.Arg402Trp e
     CYP21A2 p.Gln319Ter.
-  - Entre as 24 variantes das três primeiras linhas, a única em gene de herança dominante é CDH1, cuja chamada não
-    passou no filtro.
-  - Num alelo recessivo, aparecer em pessoas saudáveis é esperado (portadores). Isso não indica benignidade enquanto
-    a frequência estiver abaixo do teto plausível para a doença.
-  - Nos genes com regra de frequência do CSpec, as frequências observadas ficam abaixo dos limiares de benignidade:
-    - DYSF e PAH ficam muito abaixo;
-    - ACADVL e USH2A têm fafmax de 0,19% e 0,18%, abaixo do BS1 (0,35% e 0,30%). A regra mede pela popmax, que a
-      tabela não mostra.
-  - É uma explicação compatível, não demonstrada pelo modelo.
+  - Isso não basta para concluir que sejam alelos recessivos em portadores saudáveis. A herança precisa ser
+    associada à doença e à variante, e alguns desses genes têm manifestações em heterozigotos (por exemplo WNT10A).
+  - Regras de frequência do CSpec:
+    - **DYSF:** a regra usa a FAF95 do grupo máximo, que é a fafmax. A da variante é 0,0000043, muito abaixo do BS1
+      (0,001).
+    - **PAH:** a regra é ambígua e não especifica a métrica. As frequências observadas, entre 0,02% e 0,13%, ficam
+      muito abaixo do BA1 de 1,5%.
+    - **ACADVL e USH2A:** a regra usa a popmax, que a primeira versão da tabela não mostrava. Fica não concluído; a
+      versão corrigida do script mostra a popmax.
+  - É uma hipótese relevante, não uma explicação fechada.
 
 ## Próximos passos
 
@@ -211,12 +220,12 @@ Todos em CPU.
 
 1. **Caso a caso: feito em 06/10** (seção acima). Script: `scripts/fase1_br2_casos.py`; runbook:
    [br2_casos_mosaic_v1.sh](runbooks/br2_casos_mosaic_v1.sh).
-2. **Cabeça com interação.** O rascunho da especificação, para revisão antes de implementar e de rodar, está em
-   [fase1_cabeca_interacao_especificacao.md](fase1_cabeca_interacao_especificacao.md).
-   - Pergunta: a frequência brasileira pode ajudar a reconhecer benignas sem rebaixar automaticamente uma variante
-     cujo sinal funcional aponta para patogenicidade?
-   - O braço sem ABraOM recebe a mesma família de cabeça.
-   - Receita escolhida na validation, purgas mantidas, perdas e ganhos relatados separados.
+   - A versão corrigida mostra a popmax e separa a ausência no gnomAD de zero.
+   - Rodá-la de novo leva minutos e fecha dois pontos: a popmax de ACADVL e USH2A, e as contagens das ganhas.
+2. **Cabeça com interação.** A especificação foi revisada com os três ajustes da revisão e está congelada:
+   [fase1_cabeca_interacao_especificacao.md](fase1_cabeca_interacao_especificacao.md). Código e runbook:
+   - `scripts/fase1_interacao_treinar.py` e `scripts/fase1_interacao_ler.py`;
+   - [interacao_mosaic_v1.sh](runbooks/interacao_mosaic_v1.sh).
 3. **Controle embaralhado: no máximo análise auxiliar.**
    - Não estima um piso universal.
    - Não é pré-requisito para comparar as predições atuais.
@@ -248,3 +257,14 @@ Correções aceitas:
 
 Acréscimo desta revisão: a faixa "≥ 5× o gnomAD" é quase automática para variantes raras e não indica
 enriquecimento.
+
+Uma segunda revisão, do caso a caso (`ca7ceeb`), corrigiu a leitura dele. Correções aceitas:
+- **E sozinho.** E é uma previsão aprendida a partir do embedding, não evidência funcional experimental. E negativo
+  não quer dizer que falte sinal ao embedding. E chamar as 12 perdas motiva o teste da cabeça com interação, mas não
+  prova que a frequência causou as perdas.
+- **fafmax e popmax.** A fafmax não é a `popmax_af` que as regras do CSpec de ACADVL e USH2A usam, então essa
+  conclusão ficou em aberto.
+- **Comparações com o gnomAD.** O limite inferior acima da fafmax não demonstra enriquecimento, e ausência não vira
+  zero.
+- **Herança.** A herança precisa ser associada à doença e à variante, não ao gene. O padrão recessivo é uma hipótese
+  relevante, não uma explicação.

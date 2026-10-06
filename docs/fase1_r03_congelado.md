@@ -393,13 +393,15 @@ respectivamente. O E+F+BR não entra nas células, porque é circular ali.
        A causa não foi isolada, porque várias features mudaram juntas.
      - As 9 mantidas não estão explicadas.
      - A recuperação é no consensus: no gold, o BR2 reconhece 66 das 98, contra 69 em E+F.
-     - Caso a caso feito em 06/10:
-       - E sozinho chama as 12 perdas do BR2 (fpr exigido mediano de 0,018 e 0,001).
-       - O excesso brasileiro sustentado não é o padrão.
-       - Todas as 12 estão em genes de doença recessiva (pela literatura).
-     - Próximo, em CPU: uma cabeça com interação entre o sinal funcional e a informação regional. O rascunho da
-       especificação, para revisão, está em
-       [fase1_cabeca_interacao_especificacao.md](fase1_cabeca_interacao_especificacao.md).
+     - Caso a caso feito em 06/10 e lido de novo pela segunda revisão:
+       - o classificador só com o embedding (E) chama as 12 perdas do BR2. É uma previsão aprendida, e isso motiva o
+         teste sem provar a causa;
+       - as comparações com o gnomAD são só descritivas;
+       - os 12 genes têm doença recessiva descrita. É uma hipótese: a herança tem de ser associada à doença e à
+         variante.
+     - Próximo, em CPU: uma cabeça com interação entre o escore de E e a frequência. A especificação foi revisada e
+       congelada em [fase1_cabeca_interacao_especificacao.md](fase1_cabeca_interacao_especificacao.md); runbook em
+       [interacao_mosaic_v1.sh](runbooks/interacao_mosaic_v1.sh).
      - Nenhum adapter longo agora, e a margem de segurança não muda.
 
    Preparação:

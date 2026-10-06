@@ -11,9 +11,11 @@ Os conjuntos tem de reproduzir os do br2.json. Para cada variante acrescenta:
 - o SINAL FUNCIONAL: score, chamada e fpr exigido de E sozinho (passo 3, limiar do passo 4). E a pergunta da cabeca
   com interacao: o sinal funcional aponta para patogenicidade nas perdas?
 - o SUPORTE do ABraOM: AC/AN, FILTER, fracao de AN e o limite inferior unilateral de 95% de Clopper-Pearson de AC/AN
-  (o criterio de `mosaic.regional_truth.af_lower_bound`), ao lado da AF, da FAF95 e da fafmax do gnomAD;
+  (o criterio de `mosaic.regional_truth.af_lower_bound`), ao lado da AF, da popmax e da fafmax do gnomAD. A comparacao
+  do limite inferior com o gnomAD e descritiva (nao testa diferenca) e separa valor ausente de frequencia observada;
 - em E+F, E+F+BR e E+F+BR2: score, limiar, margem, chamada e fpr exigido.
-Nada aqui diz que uma variante e fundadora ou mais frequente no Brasil: e a tabela para olhar caso a caso.
+E e o classificador so com o embedding: uma previsao aprendida, nao evidencia funcional experimental. Nada aqui diz que
+uma variante e fundadora ou mais frequente no Brasil: e a tabela para olhar caso a caso.
 
 USO (notebook, no .venv do Mosaic; leva poucos minutos)
     PYTHONPATH="$PWD" uv run --project ~/mosaic-v1-2026-09-30 --frozen python scripts/fase1_br2_casos.py \\
@@ -98,6 +100,13 @@ def _coluna(frame: pd.DataFrame, nome: str) -> pd.Series:
     return frame[nome] if nome in frame else pd.Series(np.nan, index=frame.index)
 
 
+def comparar(limite: np.ndarray, referencia: pd.Series) -> list[str]:
+    """`acima`, `nao_acima` ou `sem_valor`: um valor ausente no gnomAD (ou sem limite) nao vira zero."""
+    ref = pd.to_numeric(referencia, errors="coerce").to_numpy(dtype=float)
+    return ["sem_valor" if not (np.isfinite(li) and np.isfinite(r)) else "acima" if li > r else "nao_acima"
+            for li, r in zip(limite, ref)]
+
+
 def tabela(pbr: pd.DataFrame, g: dict[str, list[str]], chamadas: dict[str, pd.DataFrame],
            benignas: dict[str, dict[int, np.ndarray]]) -> pd.DataFrame:
     """Uma linha por variante dos grupos, com o sinal funcional, o suporte do ABraOM e as chamadas dos quatro bracos."""
@@ -108,6 +117,7 @@ def tabela(pbr: pd.DataFrame, g: dict[str, list[str]], chamadas: dict[str, pd.Da
     ac, an = _coluna(linhas, "abraom_ac"), _coluna(linhas, "abraom_an")
     li = np.array([limite_inferior(a, n) for a, n in zip(ac, an)], dtype=float)
     af_g = pd.to_numeric(_coluna(linhas, "gnomad_v4_af"), errors="coerce")
+    popmax = pd.to_numeric(_coluna(linhas, "gnomad_v4_popmax_af"), errors="coerce")
     fafmax = pd.to_numeric(_coluna(linhas, "gnomad_v4_fafmax_faf95"), errors="coerce")
     saida = pd.DataFrame({
         "grupo": [grupo for grupo, _ in ordem], "variant_id": ids, "run": _coluna(linhas, "run").to_numpy(),
@@ -124,12 +134,12 @@ def tabela(pbr: pd.DataFrame, g: dict[str, list[str]], chamadas: dict[str, pd.Da
         "abraom_af": _coluna(linhas, "abraom_af").to_numpy(), "abraom_li95": li,
         "faixa_de_ac": [faixa_de_ac(a) for a in ac],
         "gnomad_status": _coluna(linhas, "gnomad_status").to_numpy(), "gnomad_af": af_g.to_numpy(),
+        "gnomad_popmax_af": popmax.to_numpy(),
         "gnomad_faf95": pd.to_numeric(_coluna(linhas, "gnomad_v4_faf95"), errors="coerce").to_numpy(),
         "gnomad_fafmax": fafmax.to_numpy(),
         "gnomad_af_amr": pd.to_numeric(_coluna(linhas, "gnomad_v4_af_amr"), errors="coerce").to_numpy(),
         "gnomad_filter": _coluna(linhas, "gnomad_v4_filter").to_numpy(),
-        "li95_acima_da_af_gnomad": li > af_g.fillna(0).to_numpy(),
-        "li95_acima_da_fafmax": li > fafmax.fillna(0).to_numpy(),
+        "li95_vs_af_gnomad": comparar(li, af_g), "li95_vs_fafmax": comparar(li, fafmax),
         "phylop_241way": _coluna(linhas, "phylop_241way").to_numpy()})
     for braco in BRACOS:
         c = chamadas[braco].reindex(ids)
@@ -159,8 +169,8 @@ def resumo(t: pd.DataFrame) -> dict[str, Any]:
             "por_painel": diag._contagem(g["primary_panel"]), "faixa_de_ac": diag._contagem(g["faixa_de_ac"]),
             "abraom_pass": int((g["abraom_filter"] == "PASS").sum()),
             "abraom_an_suficiente": int(g["abraom_an_suficiente"].sum()),
-            "li95_acima_da_af_gnomad": int(g["li95_acima_da_af_gnomad"].sum()),
-            "li95_acima_da_fafmax": int(g["li95_acima_da_fafmax"].sum()),
+            "li95_vs_af_gnomad": diag._contagem(g["li95_vs_af_gnomad"]),
+            "li95_vs_fafmax": diag._contagem(g["li95_vs_fafmax"]),
             "gnomad_status": diag._contagem(g["gnomad_status"]),
             "e_positiva": int(g["positiva_e"].sum()),
             "mediana_fpr_exigido_e": _mediana(g["fpr_exigido_e"]),
@@ -184,6 +194,13 @@ def _texto(*valores: Any) -> str:
     return next((str(v) for v in valores if isinstance(v, str) and v), "—")
 
 
+def _comparacao(contagem: dict[str, int]) -> str:
+    """`acima/com valor`, e os sem valor a parte."""
+    acima, com_valor = contagem.get("acima", 0), contagem.get("acima", 0) + contagem.get("nao_acima", 0)
+    sem = contagem.get("sem_valor", 0)
+    return f"{acima}/{com_valor}" + (f" ({sem} sem valor)" if sem else "")
+
+
 def _chamada(linha: pd.Series, p: str) -> str:
     return f"{_f(linha[f'fpr_exigido_{p}'])} ({'+' if linha[f'positiva_{p}'] else '−'})"
 
@@ -193,9 +210,11 @@ def relatorio(d: dict[str, Any], t: pd.DataFrame) -> str:
     L = ["# BR v2: P-BR perdidas e recuperadas, caso a caso (posterior ao teste)", "",
          "Desenvolvimento exploratório; não altera resultados nem regras. Grupos no limiar MCC original: **mantida** = "
          "perdida por E+F+BR e por E+F+BR2; **nova** = só por E+F+BR2; **recuperada** = só por E+F+BR. Em cada braço, "
-         "`fpr exigido (chamada)`: o falso-positivo de validation que a chamada exigiria. **E** é o sinal funcional "
-         "sozinho, sem frequência. LI 95% = limite inferior unilateral de Clopper-Pearson de AC/AN do ABraOM. Nas "
-         "comparações com o gnomAD, AF ou fafmax ausente conta como 0.", "",
+         "`fpr exigido (chamada)`: o falso-positivo de validation que a chamada exigiria. **E** é o classificador só "
+         "com o embedding: previsão aprendida, não evidência funcional experimental. LI 95% = limite inferior "
+         "unilateral de Clopper-Pearson de AC/AN do ABraOM. A comparação do LI 95% com o gnomAD é descritiva: não "
+         "testa diferença nem demonstra enriquecimento; valor ausente no gnomAD fica separado (`sem valor`), não vira "
+         "zero.", "",
          "## Resumo por grupo", "",
          "| grupo | n | gold | E positiva | AC 1–2 | AC ≥ 3 | PASS | AN ≥ 80% | LI 95% > AF gnomAD | LI 95% > fafmax "
          "| mediana fpr exigido E | mediana margem E+F |",
@@ -206,10 +225,11 @@ def relatorio(d: dict[str, Any], t: pd.DataFrame) -> str:
         poucas = faixas.get("ac1", 0) + faixas.get("ac2", 0)
         muitas = faixas.get("ac3a9", 0) + faixas.get("ac10mais", 0)
         L.append(f"| {grupo} | {g['n']} | {g['gold']} | {g['e_positiva']} | {poucas} | {muitas} | {g['abraom_pass']} | "
-                 f"{g['abraom_an_suficiente']} | {g['li95_acima_da_af_gnomad']} | {g['li95_acima_da_fafmax']} | "
+                 f"{g['abraom_an_suficiente']} | {_comparacao(g['li95_vs_af_gnomad'])} | "
+                 f"{_comparacao(g['li95_vs_fafmax'])} | "
                  f"{_f(g['mediana_fpr_exigido_e'])} | {_f(g['mediana_margem_e_f'])} |")
     L += ["", "## Variantes (gold primeiro em cada grupo)", "",
-          "| grupo | tier | gene | variante | painel | AC/AN | FILTER | AF ABraOM [LI 95%] | gnomAD AF · fafmax | "
+          "| grupo | tier | gene | variante | painel | AC/AN | FILTER | AF ABraOM [LI 95%] | gnomAD AF · popmax · fafmax | "
           "E | E+F | E+F+BR | E+F+BR2 |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     vistas = t[t["grupo"].isin(NA_TABELA)].assign(
         _ordem_grupo=lambda x: x["grupo"].map({g: i for i, g in enumerate(NA_TABELA)}),
@@ -219,7 +239,7 @@ def relatorio(d: dict[str, Any], t: pd.DataFrame) -> str:
         L.append(f"| {linha['grupo']} | {linha['label_tier']} | {_texto(linha['gene'])} | "
                  f"{_texto(linha['aa_change'], linha['consequence'])} | {linha['primary_panel']} | "
                  f"{acan} | {_texto(linha['abraom_filter'])} | {_af(linha['abraom_af'])} [{_af(linha['abraom_li95'])}] | "
-                 f"{_af(linha['gnomad_af'])} · {_af(linha['gnomad_fafmax'])} | "
+                 f"{_af(linha['gnomad_af'])} · {_af(linha['gnomad_popmax_af'])} · {_af(linha['gnomad_fafmax'])} | "
                  + " | ".join(_chamada(linha, SLUG[b]) for b in BRACOS) + " |")
     L += ["", f"Limite inferior conferido com o `af_lower_bound` do Mosaic: {d['limite_inferior_conferido_com_mosaic']}.",
           "Não se conclui aqui que uma variante seja fundadora ou mais frequente no Brasil."]

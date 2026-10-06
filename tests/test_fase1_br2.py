@@ -153,6 +153,13 @@ class CasosTests(unittest.TestCase):
         self.assertTrue(math.isnan(casos.limite_inferior(np.nan, np.nan)))
         self.assertTrue(math.isnan(casos.limite_inferior(1, 0)))
 
+    def test_comparacao_separa_ausente_de_zero(self):
+        li = np.array([1e-3, 1e-3, 1e-3, np.nan, 1e-3])
+        referencia = pd.Series([5e-4, 2e-3, np.nan, 1e-4, 0.0])
+        self.assertEqual(casos.comparar(li, referencia), ["acima", "nao_acima", "sem_valor", "sem_valor", "acima"])
+        self.assertEqual(casos._comparacao({"acima": 3, "nao_acima": 5, "sem_valor": 1}), "3/8 (1 sem valor)")
+        self.assertEqual(casos._comparacao({"nao_acima": 2}), "0/2")
+
     def test_faixas_e_grupos(self):
         self.assertEqual([casos.faixa_de_ac(a) for a in (np.nan, 0, 1, 2, 3, 9, 10, 500)],
                          ["sem copias", "sem copias", "ac1", "ac2", "ac3a9", "ac3a9", "ac10mais", "ac10mais"])
